@@ -27,20 +27,7 @@ from wingman_day1.domain.scale import (
 )
 from wingman_day1.domain.servers import run_status
 from wingman_day1.infrastructure.http import JSON, required_text
-
-
-def _text(raw: Mapping[str, JSON], key: str) -> str | None:
-    value = raw.get(key)
-    return value if isinstance(value, str) and value else None
-
-
-def _int(raw: Mapping[str, JSON], key: str) -> int | None:
-    value = raw.get(key)
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def _object(value: JSON) -> dict[str, JSON]:
-    return value if isinstance(value, dict) else {}
+from wingman_day1.infrastructure.workflows.parse import integer, mapping, text
 
 
 def _objects(value: JSON) -> list[dict[str, JSON]]:
@@ -55,75 +42,75 @@ def scale_run(raw: JSON) -> ScaleRun:
     """One run of update-nodepool; its child is read separately (``with_child``)."""
     if not isinstance(raw, dict):
         raise TypeError("the run is not an object")
-    progress = _object(raw.get("progress"))
+    progress = mapping(raw.get("progress"))
     result = raw.get("result")
     return ScaleRun(
         workflow_id=required_text(raw, "workflow_id"),
         status=run_status(required_text(raw, "status")),
-        phase=_text(progress, "phase"),
-        direction=_text(progress, "direction") or _text(_object(result), "direction"),
-        child=ScaleChild(child) if (child := _text(progress, "child_workflow_id")) else None,
+        phase=text(progress, "phase"),
+        direction=text(progress, "direction") or text(mapping(result), "direction"),
+        child=ScaleChild(child) if (child := text(progress, "child_workflow_id")) else None,
         result=scale_result(result) if isinstance(result, dict) else None,
-        error=_text(raw, "error"),
+        error=text(raw, "error"),
     )
 
 
 def child_run(workflow_id: str, raw: JSON) -> ScaleChild:
     """The scale-up-nodepool or scale-down-nodepool run, as far as it reads."""
-    found = _object(raw)
-    status = _text(found, "status")
+    found = mapping(raw)
+    status = text(found, "status")
     return ScaleChild(
         workflow_id=workflow_id,
         status=run_status(status) if status else None,
-        phase=_text(_object(found.get("progress")), "phase"),
-        error=_text(found, "error"),
+        phase=text(mapping(found.get("progress")), "phase"),
+        error=text(found, "error"),
     )
 
 
 def scale_result(raw: Mapping[str, JSON]) -> ScaleResult:
     """``UpdateNodePoolResult``, with its child's result in ``scale`` flattened in."""
-    scale = _object(raw.get("scale"))
+    scale = mapping(raw.get("scale"))
     return ScaleResult(
-        direction=_text(raw, "direction") or "none",
-        infra_env_kind=_text(raw, "infra_env_kind"),
-        nodepool=_text(raw, "nodepool"),
-        day1_path=_text(raw, "day1_path"),
-        total_before=_int(raw, "total_before"),
-        total_after=_int(raw, "total_after"),
+        direction=text(raw, "direction") or "none",
+        infra_env_kind=text(raw, "infra_env_kind"),
+        nodepool=text(raw, "nodepool"),
+        day1_path=text(raw, "day1_path"),
+        total_before=integer(raw, "total_before"),
+        total_after=integer(raw, "total_after"),
         nodepools=tuple(
             NodePoolChange(
                 name=str(item["name"]),
-                infra_env=_text(item, "infra_env"),
-                before=_int(item, "before"),
-                after=_int(item, "after"),
-                scale_down_policy=_text(item, "scale_down_policy"),
+                infra_env=text(item, "infra_env"),
+                before=integer(item, "before"),
+                after=integer(item, "after"),
+                scale_down_policy=text(item, "scale_down_policy"),
             )
             for item in _objects(raw.get("nodepools"))
-            if _text(item, "name")
+            if text(item, "name")
         ),
-        child_workflow_id=_text(raw, "child_workflow_id"),
-        revision=_text(scale, "revision"),
+        child_workflow_id=text(raw, "child_workflow_id"),
+        revision=text(scale, "revision"),
         committed=scale["committed"] if isinstance(scale.get("committed"), bool) else None,
         live=tuple(
             LiveReplicas(
                 name=str(item["name"]),
-                replicas=_int(item, "replicas"),
-                ready_replicas=_int(item, "ready_replicas"),
+                replicas=integer(item, "replicas"),
+                ready_replicas=integer(item, "ready_replicas"),
             )
             for item in _objects(scale.get("nodepools"))
-            if _text(item, "name")
+            if text(item, "name")
         ),
         chosen=tuple(
             ChosenServer(
                 nodepool=str(item["nodepool"]),
                 machine=str(item["machine"]),
-                node=_text(item, "node"),
-                policy=_text(item, "policy") or "",
-                reason=_text(item, "reason") or "",
-                server=_text(item, "server"),
+                node=text(item, "node"),
+                policy=text(item, "policy") or "",
+                reason=text(item, "reason") or "",
+                server=text(item, "server"),
             )
             for item in _objects(scale.get("chosen"))
-            if _text(item, "nodepool") and _text(item, "machine")
+            if text(item, "nodepool") and text(item, "machine")
         ),
         deleting=_texts(scale.get("deleting")),
         ignored=_texts(raw.get("ignored")),

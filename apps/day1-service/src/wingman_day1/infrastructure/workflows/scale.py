@@ -36,31 +36,35 @@ from __future__ import annotations
 
 import dataclasses
 import time
+from functools import partial
 from typing import Final
-from urllib.parse import quote
 
 import httpx
 
 from wingman_core.observability.metrics import Dependency, WingmanMetrics
 from wingman_day1.domain.errors import (
-    AmbiguousStartError,
     ScaleAlreadyRunningError,
     ScaleRefusedError,
-    WorkflowRefusedError,
     WorkflowsError,
     WorkflowsUnavailableError,
 )
 from wingman_day1.domain.scale import ScaleChild, ScaleRequest, ScaleRun
-from wingman_day1.infrastructure.http import JSON, NOT_SENT, json_client, required_text
+from wingman_day1.infrastructure.http import JSON, json_client
 from wingman_day1.infrastructure.observed import Observer, Timer, WorkflowsOperation
-from wingman_day1.infrastructure.workflows.provision import orchestrator_problems
+from wingman_day1.infrastructure.workflows.orchestrator import (
+    Start,
+    get_run,
+    parsed,
+    post_start,
+    problems,
+    start_refused,
+    started_id,
+    words,
+)
 from wingman_day1.infrastructure.workflows.scale_parse import child_run, scale_run
-from wingman_day1.infrastructure.workflows.uninstall import RUNS_PATH, orchestrator_detail
 
 SCALE_PATH: Final = "/workflows/server-lifecycle/update-nodepool"
 LOOK_FIRST: Final = "Look at the cluster's scale run before trying again."
-MAX_WORDS: Final = 2000
-"""A 409 is shown in the orchestrator's own words: kept whole, up to this."""
 NO_ROUTE: Final = {"detail": "Not Found"}
 """FastAPI's whole 404 body for a path it has no route for, unlike any answer of a route."""
 _CLOSED_WITH_RESULT: Final = "completed"
@@ -82,10 +86,7 @@ class HttpScaleWorkflow:
         """Call the orchestrator at ``base_url``; ``verify`` is ``True``/``False`` or a CA path."""
         self._observer = Observer(Dependency.WORKFLOWS, metrics, timer=timer)
         self._client = json_client(
-            base_url=base_url,
-            verify=verify,
-            timeout_seconds=timeout_seconds,
-            transport=transport,
+            base_url=base_url, verify=verify, timeout_seconds=timeout_seconds, transport=transport
         )
 
     async def aclose(self) -> None:
@@ -114,21 +115,11 @@ class HttpScaleWorkflow:
 
     async def _start(self, request: ScaleRequest) -> ScaleRun:
         cluster = request.cluster
-        try:
-            response = await self._client.post(SCALE_PATH, json=_start_body(request))
-        except NOT_SENT as exc:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator could not be reached to scale {cluster} "
-                f"({type(exc).__name__}); nothing was started"
-            ) from exc
-        except httpx.TransportError as exc:
-            raise AmbiguousStartError(
-                f"the scale of {cluster} was sent but no answer came back "
-                f"({type(exc).__name__}): it may have started. {LOOK_FIRST}"
-            ) from exc
-        status, detail = response.status_code, orchestrator_detail(response)
+        start = Start("scale", cluster, LOOK_FIRST)
+        response = await post_start(self._client, SCALE_PATH, start, json=_start_body(request))
+        status = response.status_code
         if status == 202:
-            return _started(response, cluster)
+            return ScaleRun(workflow_id=started_id(response, start), status="running")
         if status == 404 and _no_route(response):
             raise WorkflowsUnavailableError(
                 f"update-nodepool is not deployed on this orchestrator yet (it has no POST "
@@ -137,61 +128,31 @@ class HttpScaleWorkflow:
             )
         if status == 409:
             raise ScaleAlreadyRunningError(
-                _words(response) or f"{cluster} already has a scale or an upgrade running"
+                words(response) or f"{cluster} already has a scale or an upgrade running"
             )
         if status == 422:
             raise ScaleRefusedError(
                 f"the orchestrator refused the scale of {cluster}; nothing was started",
-                orchestrator_problems(response),
+                problems(response),
             )
-        if status == 504:
-            raise AmbiguousStartError(
-                f"a gateway timed out waiting for the orchestrator to start the scale of "
-                f"{cluster}: it may have started. {LOOK_FIRST}"
-            )
-        if 400 <= status < 500:
-            raise WorkflowRefusedError(
-                f"the orchestrator refused the scale of {cluster} ({status}){detail}"
-            )
-        raise WorkflowsUnavailableError(
-            f"the orchestrator answered {status} to the scale of {cluster}{detail}"
-        )
+        raise start_refused(response, start)
 
     async def _get(self, workflow_id: str) -> ScaleRun | None:
-        raw = await self._read(workflow_id)
-        if raw is None:
+        response = await get_run(self._client, workflow_id)
+        if response is None:
             return None
-        try:
-            return scale_run(raw)
-        except (ValueError, KeyError, TypeError) as exc:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator returned malformed run {workflow_id}"
-            ) from exc
+        return parsed(response, scale_run, malformed=_malformed(workflow_id))
 
     async def _child(self, workflow_id: str) -> ScaleChild | None:
-        raw = await self._read(workflow_id)
-        return None if raw is None else child_run(workflow_id, raw)
-
-    async def _read(self, workflow_id: str) -> JSON | None:
-        what = f"reading run {workflow_id}"
-        try:
-            response = await self._client.get(f"{RUNS_PATH}/{quote(workflow_id, safe='')}")
-        except httpx.TransportError as exc:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator is unreachable {what}: {type(exc).__name__}"
-            ) from exc
-        if response.status_code == 404:
+        # The child is read leniently: only an answer that is not JSON is malformed
+        response = await get_run(self._client, workflow_id)
+        if response is None:
             return None
-        if response.status_code != 200:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator answered {response.status_code} {what}"
-            )
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator returned malformed run {workflow_id}"
-            ) from exc
+        return parsed(response, partial(child_run, workflow_id), malformed=_malformed(workflow_id))
+
+
+def _malformed(workflow_id: str) -> str:
+    return f"the orchestrator returned malformed run {workflow_id}"
 
 
 def _start_body(request: ScaleRequest) -> dict[str, JSON]:
@@ -209,29 +170,9 @@ def _start_body(request: ScaleRequest) -> dict[str, JSON]:
     return body
 
 
-def _started(response: httpx.Response, cluster: str) -> ScaleRun:
-    try:
-        workflow_id = required_text(response.json(), "workflow_id")
-    except (ValueError, KeyError, TypeError) as exc:
-        raise AmbiguousStartError(
-            f"the orchestrator accepted the scale of {cluster} (202) but its answer could not "
-            f"be read. {LOOK_FIRST}"
-        ) from exc
-    return ScaleRun(workflow_id=workflow_id, status="running")
-
-
 def _no_route(response: httpx.Response) -> bool:
     """Whether a 404 is FastAPI's for a path it has no route for: the workflow is not there."""
     try:
         return response.json() == NO_ROUTE
     except ValueError:
         return False
-
-
-def _words(response: httpx.Response) -> str:
-    """The orchestrator's ``detail``, whole: why a run cannot start now, in its words."""
-    try:
-        detail = response.json().get("detail")
-    except (ValueError, AttributeError):
-        return ""
-    return detail.strip()[:MAX_WORDS] if isinstance(detail, str) else ""

@@ -11,7 +11,6 @@ which the adapter turns into ``WorkflowsUnavailableError``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Final
 
 from wingman_day1.domain.servers import run_status
@@ -27,23 +26,10 @@ from wingman_day1.domain.upgrades import (
     UpgradeTargets,
 )
 from wingman_day1.infrastructure.http import JSON, required_text
+from wingman_day1.infrastructure.workflows.parse import integer, mapping, text
 
 MAX_LOG: Final = 50
 """The workflow keeps its last 20 lines; more than this is not shown."""
-
-
-def _text(raw: Mapping[str, JSON], key: str) -> str | None:
-    value = raw.get(key)
-    return value if isinstance(value, str) and value else None
-
-
-def _int(raw: Mapping[str, JSON], key: str) -> int | None:
-    value = raw.get(key)
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def _object(value: JSON) -> dict[str, JSON]:
-    return value if isinstance(value, dict) else {}
 
 
 def _texts(value: JSON) -> tuple[str, ...]:
@@ -70,12 +56,12 @@ def upgrade_targets(raw: JSON) -> UpgradeTargets:
         raise TypeError("the targets are not an object")
     return UpgradeTargets(
         cluster=required_text(raw, "cluster"),
-        mce=_text(raw, "mce_cluster") or "",
-        mce_version=_text(raw, "mce_version") or "",
-        control_plane_version=_text(raw, "control_plane_version"),
+        mce=text(raw, "mce_cluster") or "",
+        mce_version=text(raw, "mce_version") or "",
+        control_plane_version=text(raw, "control_plane_version"),
         supported_minors=_texts(raw.get("supported_minors")),
-        ladder_revision=_text(raw, "ladder_revision") or "",
-        verified_against_graph=_text(raw, "verified_against_graph"),
+        ladder_revision=text(raw, "ladder_revision") or "",
+        verified_against_graph=text(raw, "verified_against_graph"),
         targets=tuple(
             t for t in (_target(item) for item in _list(raw.get("targets"))) if t is not None
         ),
@@ -91,28 +77,28 @@ def _list(value: JSON) -> list[JSON]:
 
 
 def _target(raw: JSON) -> UpgradeTarget | None:
-    if not isinstance(raw, dict) or not _text(raw, "version"):
+    if not isinstance(raw, dict) or not text(raw, "version"):
         return None
     return UpgradeTarget(
         version=str(raw["version"]),
-        minor=_text(raw, "minor") or "",
-        steps=_int(raw, "steps") or 0,
-        control_plane_steps=_int(raw, "control_plane_steps") or 0,
+        minor=text(raw, "minor") or "",
+        steps=integer(raw, "steps") or 0,
+        control_plane_steps=integer(raw, "control_plane_steps") or 0,
         newest_in_minor=raw.get("newest_in_minor") is True,
         must=raw.get("must") is True,
     )
 
 
 def _target_pool(raw: JSON) -> TargetNodePool | None:
-    if not isinstance(raw, dict) or not _text(raw, "name"):
+    if not isinstance(raw, dict) or not text(raw, "name"):
         return None
     max_unavailable = raw.get("max_unavailable")
     return TargetNodePool(
         name=str(raw["name"]),
-        workertag=_text(raw, "workertag"),
-        upgrade_type=_text(raw, "upgrade_type"),
-        zone=_text(raw, "zone"),
-        replicas=_int(raw, "replicas"),
+        workertag=text(raw, "workertag"),
+        upgrade_type=text(raw, "upgrade_type"),
+        zone=text(raw, "zone"),
+        replicas=integer(raw, "replicas"),
         max_unavailable=(
             str(max_unavailable)
             if isinstance(max_unavailable, str | int) and not isinstance(max_unavailable, bool)
@@ -136,21 +122,21 @@ def upgrade_run(raw: JSON) -> UpgradeRun:
     workflow_id, status = raw["workflow_id"], raw["status"]
     if not (isinstance(workflow_id, str) and workflow_id and isinstance(status, str)):
         raise ValueError("the run has no workflow_id or status")
-    progress, result = _object(raw.get("progress")), _object(raw.get("result"))
+    progress, result = mapping(raw.get("progress")), mapping(raw.get("result"))
     source = progress or result
     decisions = progress.get("decisions")
     return UpgradeRun(
         workflow_id=workflow_id,
         status=run_status(status),
-        phase=_text(progress, "phase"),
-        waiting_for=_text(progress, "waiting_for"),
-        mce=_text(source, "mce_cluster"),
+        phase=text(progress, "phase"),
+        waiting_for=text(progress, "waiting_for"),
+        mce=text(source, "mce_cluster"),
         plan=_plan(source.get("plan")),
-        profile=_text(progress, "profile"),
-        current_step=_int(progress, "current_step"),
-        current_nodepool=_text(progress, "current_nodepool"),
+        profile=text(progress, "profile"),
+        current_step=integer(progress, "current_step"),
+        current_nodepool=text(progress, "current_nodepool"),
         nodepools_done=_texts(progress.get("nodepools_done")),
-        control_plane_version=_text(source, "control_plane_version"),
+        control_plane_version=text(source, "control_plane_version"),
         nodepool_versions=_text_map(source.get("nodepool_versions")),
         max_unavailable=_text_map(progress.get("max_unavailable")),
         paused=progress.get("paused") is True,
@@ -158,36 +144,36 @@ def upgrade_run(raw: JSON) -> UpgradeRun:
             a for a in (_pending(item) for item in _list(progress.get("pending_actions"))) if a
         ),
         last_verdict=_verdict(progress.get("last_verdict")),
-        verified_against_graph=_text(progress, "verified_against_graph"),
+        verified_against_graph=text(progress, "verified_against_graph"),
         log=tuple(line for line in (_log_line(item) for item in _list(source.get("log"))) if line)[
             -MAX_LOG:
         ],
-        outcome=_text(result, "outcome"),
-        steps_completed=_int(result, "steps_completed"),
-        error=_text(raw, "error"),
+        outcome=text(result, "outcome"),
+        steps_completed=integer(result, "steps_completed"),
+        error=text(raw, "error"),
         decisions=_texts(decisions) if isinstance(decisions, list) else None,
     )
 
 
 def _plan(raw: JSON) -> UpgradePlan | None:
-    if not isinstance(raw, dict) or not _text(raw, "control_plane") or not _text(raw, "target"):
+    if not isinstance(raw, dict) or not text(raw, "control_plane") or not text(raw, "target"):
         return None
     return UpgradePlan(
         control_plane=str(raw["control_plane"]),
         target=str(raw["target"]),
-        max_worker_skew=_int(raw, "max_worker_skew"),
+        max_worker_skew=integer(raw, "max_worker_skew"),
         nodepools=_text_map(raw.get("nodepools")),
         steps=tuple(s for s in (_step(item) for item in _list(raw.get("steps"))) if s),
     )
 
 
 def _step(raw: JSON) -> PlanStep | None:
-    if not isinstance(raw, dict) or not _text(raw, "kind") or not _text(raw, "version"):
+    if not isinstance(raw, dict) or not text(raw, "kind") or not text(raw, "version"):
         return None
     return PlanStep(
         kind=str(raw["kind"]),
         version=str(raw["version"]),
-        reason=_text(raw, "reason") or "",
+        reason=text(raw, "reason") or "",
         nodepools=_texts(raw.get("nodepools")),
     )
 
@@ -195,39 +181,39 @@ def _step(raw: JSON) -> PlanStep | None:
 def _pending(raw: JSON) -> PendingAction | None:
     if not isinstance(raw, dict):
         return None
-    action = _object(raw.get("action"))
-    action_id = _text(action, "action_id")
+    action = mapping(raw.get("action"))
+    action_id = text(action, "action_id")
     if action_id is None:
         return None
     return PendingAction(
         action_id=action_id,
-        kind=_text(action, "kind") or "",
-        target=_text(action, "target") or "",
+        kind=text(action, "kind") or "",
+        target=text(action, "target") or "",
         args=_text_map(action.get("args")),
-        rationale=_text(action, "rationale") or "",
-        decision=_text(raw, "decision") or "pending",
-        decided_by=_text(raw, "decided_by"),
+        rationale=text(action, "rationale") or "",
+        decision=text(raw, "decision") or "pending",
+        decided_by=text(raw, "decided_by"),
         executed=raw.get("executed") is True,
-        result=_text(raw, "result"),
+        result=text(raw, "result"),
     )
 
 
 def _verdict(raw: JSON) -> AgentVerdict | None:
-    if not isinstance(raw, dict) or not _text(raw, "diagnosis"):
+    if not isinstance(raw, dict) or not text(raw, "diagnosis"):
         return None
     return AgentVerdict(
         diagnosis=str(raw["diagnosis"]),
-        confidence=_text(raw, "confidence") or "",
-        verdict=_text(raw, "verdict") or "",
+        confidence=text(raw, "confidence") or "",
+        verdict=text(raw, "verdict") or "",
     )
 
 
 def _log_line(raw: JSON) -> LogLine | None:
-    if not isinstance(raw, dict) or not _text(raw, "event"):
+    if not isinstance(raw, dict) or not text(raw, "event"):
         return None
     return LogLine(
-        at=_text(raw, "at") or "",
+        at=text(raw, "at") or "",
         event=str(raw["event"]),
-        by=_text(raw, "by"),
-        detail=_text(raw, "detail") or "",
+        by=text(raw, "by"),
+        detail=text(raw, "detail") or "",
     )

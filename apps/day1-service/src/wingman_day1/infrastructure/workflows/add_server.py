@@ -22,28 +22,18 @@ and reads them:
 A start is a write and is never retried (ADR-0006): sent twice, a pool draw
 installs twice. Refused before it was sent (no connection), it is
 ``WorkflowsUnavailableError``; sent and unanswered, ``AmbiguousStartError``:
-some runs may exist.
+some runs may exist. Its JSON is read in ``add_server_parse.py``.
 """
 
 from __future__ import annotations
 
-import json
 import time
-from collections.abc import Mapping
-from datetime import datetime
 from typing import Final
-from urllib.parse import quote
 
 import httpx
 
 from wingman_core.observability.metrics import Dependency, WingmanMetrics
-from wingman_day1.domain.add_server import (
-    AddServerRequest,
-    AddServerRun,
-    AddServerStart,
-    ListedRun,
-    StartedRun,
-)
+from wingman_day1.domain.add_server import AddServerRequest, AddServerRun, AddServerStart, ListedRun
 from wingman_day1.domain.errors import (
     AddServerAlreadyRunningError,
     AddServerRefusedError,
@@ -51,18 +41,22 @@ from wingman_day1.domain.errors import (
     WorkflowRefusedError,
     WorkflowsUnavailableError,
 )
-from wingman_day1.domain.servers import run_status
-from wingman_day1.infrastructure.http import JSON, NOT_SENT, json_client
+from wingman_day1.infrastructure.http import NOT_SENT, json_client
 from wingman_day1.infrastructure.observed import Observer, Timer, WorkflowsOperation
-from wingman_day1.infrastructure.workflows.provision import orchestrator_problems
-from wingman_day1.infrastructure.workflows.uninstall import RUNS_PATH, orchestrator_detail
+from wingman_day1.infrastructure.workflows.add_server_parse import add_server_run, started
+from wingman_day1.infrastructure.workflows.orchestrator import (
+    detail,
+    get_run,
+    list_runs,
+    parsed,
+    problems,
+)
+from wingman_day1.infrastructure.workflows.parse import listed_runs
 
 START_PATH: Final = "/workflows/server-lifecycle/add-server-to-mce"
 WORKFLOW_TYPE: Final = "AddServerToMceWorkflow"
 """The Temporal class name the run list filters on."""
-RUNS_LIMIT: Final = 200
 CHECK_FIRST: Final = "Look at the pool's add-server runs before asking again."
-MAX_ERROR: Final = 500
 
 
 class HttpAddServerWorkflow:
@@ -101,46 +95,19 @@ class HttpAddServerWorkflow:
         return await self._observer.call(WorkflowsOperation.START_ADD_SERVER, self._start(request))
 
     async def _runs(self) -> list[ListedRun]:
-        params = {"workflow_type": WORKFLOW_TYPE, "limit": RUNS_LIMIT}
-        response = await self._read(RUNS_PATH, what="listing add-server runs", params=params)
-        if response.status_code != 200:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator answered {response.status_code} listing add-server runs"
-            )
-        try:
-            return listed_runs(response.json())
-        except (ValueError, KeyError, TypeError) as exc:
-            raise WorkflowsUnavailableError(
-                "the orchestrator returned a malformed run list"
-            ) from exc
+        response = await list_runs(self._client, WORKFLOW_TYPE, what="listing add-server runs")
+        malformed = "the orchestrator returned a malformed run list"
+        return parsed(response, listed_runs, malformed=malformed)
 
     async def _run(self, workflow_id: str) -> AddServerRun | None:
-        what = f"reading run {workflow_id}"
-        response = await self._read(f"{RUNS_PATH}/{quote(workflow_id, safe='')}", what=what)
-        if response.status_code == 404:
+        response = await get_run(self._client, workflow_id)
+        if response is None:
             return None
-        if response.status_code != 200:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator answered {response.status_code} {what}"
-            )
-        try:
-            return add_server_run(response.json())
-        except (ValueError, KeyError, TypeError) as exc:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator returned a malformed run {workflow_id}"
-            ) from exc
-
-    async def _read(
-        self, path: str, *, what: str, params: Mapping[str, str | int] | None = None
-    ) -> httpx.Response:
-        try:
-            return await self._client.get(path, params=params)
-        except httpx.TransportError as exc:
-            raise WorkflowsUnavailableError(
-                f"the orchestrator is unreachable {what}: {type(exc).__name__}"
-            ) from exc
+        malformed = f"the orchestrator returned a malformed run {workflow_id}"
+        return parsed(response, add_server_run, malformed=malformed)
 
     async def _start(self, request: AddServerRequest) -> AddServerStart:
+        # A pool draw is several runs, so its answers say "some may have started"
         what = f"adding {request.size} server(s) to {request.infra_env} on {request.mce}"
         try:
             response = await self._client.post(START_PATH, json=start_body(request))
@@ -158,7 +125,7 @@ class HttpAddServerWorkflow:
 
 
 def _answer(response: httpx.Response, what: str) -> AddServerStart:
-    status = response.status_code
+    status, why = response.status_code, detail(response)
     if status == 202:
         try:
             return started(response.json())
@@ -167,21 +134,18 @@ def _answer(response: httpx.Response, what: str) -> AddServerStart:
                 f"the orchestrator accepted {what} (202) but its answer could not be read. "
                 f"{CHECK_FIRST}"
             ) from exc
-    detail = orchestrator_detail(response)
     if status == 409:
-        raise AddServerAlreadyRunningError(f"the orchestrator refused {what}{detail}")
+        raise AddServerAlreadyRunningError(f"the orchestrator refused {what}{why}")
     if status == 422:
-        raise AddServerRefusedError(
-            f"the orchestrator refused {what}", orchestrator_problems(response)
-        )
+        raise AddServerRefusedError(f"the orchestrator refused {what}", problems(response))
     if status == 504:
         raise AmbiguousStartError(
             f"a gateway timed out waiting for the orchestrator on {what}: some may have "
             f"started. {CHECK_FIRST}"
         )
     if 400 <= status < 500:
-        raise WorkflowRefusedError(f"the orchestrator refused {what} ({status}){detail}")
-    raise WorkflowsUnavailableError(f"the orchestrator answered {status} to {what}{detail}")
+        raise WorkflowRefusedError(f"the orchestrator refused {what} ({status}){why}")
+    raise WorkflowsUnavailableError(f"the orchestrator answered {status} to {what}{why}")
 
 
 def start_body(request: AddServerRequest) -> dict[str, object]:
@@ -196,124 +160,3 @@ def start_body(request: AddServerRequest) -> dict[str, object]:
         if request.allow_unhealthy:
             body["allow_unhealthy"] = True
     return body
-
-
-def _text(raw: Mapping[str, JSON], key: str) -> str | None:
-    value = raw.get(key)
-    return value if isinstance(value, str) and value else None
-
-
-def _int(raw: Mapping[str, JSON], key: str) -> int | None:
-    value = raw.get(key)
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def _object(raw: Mapping[str, JSON], key: str) -> Mapping[str, JSON]:
-    value = raw.get(key)
-    return value if isinstance(value, dict) else {}
-
-
-def _time(raw: Mapping[str, JSON], key: str) -> datetime | None:
-    value = _text(raw, key)
-    if value is None:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def _error(raw: Mapping[str, JSON]) -> str | None:
-    """The run's error: its text, or its structure (candidates by reason) as compact JSON."""
-    error = raw.get("error")
-    if error is None or error == "":
-        return None
-    text = error if isinstance(error, str) else json.dumps(error, separators=(",", ":"))
-    return text[:MAX_ERROR]
-
-
-def _waived(*sources: Mapping[str, JSON]) -> tuple[str, ...]:
-    """The run's ``allowed_unhealthy`` as ``check: observed``: its progress's, else its result's."""
-    for source in sources:
-        items = source.get("allowed_unhealthy")
-        if isinstance(items, list) and items:
-            found = (item for item in items if isinstance(item, dict))
-            return tuple(
-                f"{_text(item, 'check') or 'health'}: {_text(item, 'observed') or '?'}"[:MAX_ERROR]
-                for item in found
-            )
-    return ()
-
-
-def started(raw: JSON) -> AddServerStart:
-    """A 202's body: the per-run answer, or a lone run's ``{workflow_id, run_id}``."""
-    if not isinstance(raw, dict):
-        raise TypeError("the answer is not an object")
-    if "results" not in raw:
-        workflow_id = _text(raw, "workflow_id")
-        if workflow_id is None:
-            raise ValueError("the answer has neither results nor a workflow_id")
-        return AddServerStart(1, 0, 0, (StartedRun(workflow_id, "started"),))
-    results = raw["results"]
-    if not isinstance(results, list):
-        raise TypeError("results is not a list")
-    runs: list[StartedRun] = []
-    for item in results:
-        if not isinstance(item, dict):
-            raise TypeError("a result is not an object")
-        workflow_id, status = _text(item, "workflow_id"), _text(item, "status")
-        if workflow_id is None or status is None:
-            raise ValueError("a result has no workflow_id or status")
-        runs.append(
-            StartedRun(
-                workflow_id,
-                status,
-                server_name=_text(item, "server_name"),
-                slot=_int(item, "slot"),
-                error=_text(item, "error"),
-            )
-        )
-    begun, running, failed = (_int(raw, key) for key in ("started", "already_running", "failed"))
-    if begun is None or running is None or failed is None:
-        raise ValueError("the answer has no counts")
-    return AddServerStart(begun, running, failed, runs=tuple(runs))
-
-
-def listed_runs(raw: JSON) -> list[ListedRun]:
-    """``GET /workflows/runs``: workflow id, status, start and close, newest first."""
-    if not isinstance(raw, list):
-        raise TypeError("the run list is not a list")
-    runs: list[ListedRun] = []
-    for item in raw:
-        if not isinstance(item, dict):
-            raise TypeError("a run is not an object")
-        workflow_id, status = _text(item, "workflow_id"), _text(item, "status")
-        if workflow_id is None or status is None:
-            raise ValueError("a run has no workflow_id or status")
-        runs.append(
-            ListedRun(
-                workflow_id,
-                run_status(status),
-                started_at=_time(item, "start_time"),
-                closed_at=_time(item, "close_time"),
-            )
-        )
-    return runs
-
-
-def add_server_run(raw: JSON) -> AddServerRun:
-    """``GET /workflows/runs/{id}`` for an add-server run; malformed raises Type/Key/ValueError."""
-    if not isinstance(raw, dict):
-        raise TypeError("the run is not an object")
-    workflow_id, status = _text(raw, "workflow_id"), _text(raw, "status")
-    if workflow_id is None or status is None:
-        raise ValueError("the run has no workflow_id or status")
-    progress, result = _object(raw, "progress"), _object(raw, "result")
-    return AddServerRun(
-        workflow_id=workflow_id,
-        status=run_status(status),
-        phase=_text(progress, "phase"),
-        server_name=_text(progress, "server_name") or _text(result, "server_name"),
-        error=_error(raw),
-        waived=_waived(progress, result),
-    )
