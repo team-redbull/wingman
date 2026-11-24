@@ -18,7 +18,7 @@ from wingman_day1.application.scale import ScaleService
 from wingman_day1.application.specs import SpecCatalog
 from wingman_day1.domain.cluster_file import load_values
 from wingman_day1.domain.scale import file_nodepools
-from wingman_day1.infrastructure.scale_workflow import HttpScaleWorkflow
+from wingman_day1.infrastructure.workflows.scale import HttpScaleWorkflow
 from wingman_day1.ports import ScaleWorkflow
 from wingman_day1.settings import Day1Settings
 
@@ -32,7 +32,7 @@ def scale_workflow(
     if not settings.scale_nodepools:
         return None
     if settings.day1_fake_fleet:
-        from wingman_day1.infrastructure.fake_scale import FakeScaleWorkflow
+        from wingman_day1.infrastructure.fakes.scale import FakeScaleWorkflow
 
         return FakeScaleWorkflow(clock=clock)
     workflow = HttpScaleWorkflow(
@@ -58,7 +58,7 @@ def scale_service(
     if not settings.scale_nodepools or workflow is None:
         return None
     if settings.day1_fake_fleet:
-        from wingman_day1.infrastructure.fake_scale import FakePool, FakeScaleWorkflow
+        from wingman_day1.infrastructure.fakes.scale import FakePool, FakeScaleWorkflow
 
         if isinstance(workflow, FakeScaleWorkflow):
 

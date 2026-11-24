@@ -22,11 +22,11 @@ from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
 from wingman_day1.api.deps import Day1Context
 from wingman_day1.domain.replicas_ownership import REPLICAS_BY_SCALE
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_identity import FakeIdentityProvider
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
-from wingman_day1.infrastructure.fake_scale import FakeScaleWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.identity import FakeIdentityProvider
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.scale import FakeScaleWorkflow
 
 Auth = Callable[[User], dict[str, str]]
 

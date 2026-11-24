@@ -13,8 +13,8 @@ from wingman_day1.application.status import StatusService
 from wingman_day1.domain.errors import HubNotConfiguredError, HubUnavailableError
 from wingman_day1.domain.infra_env_pools import InfraEnvObservation
 from wingman_day1.domain.status import Condition, HostedClusterObservation, NodePoolObservation
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
 
 MCE = "ocp4-prod-mce-site1-a"
 HERZI = "ocp4-prod-herzi-site1"

@@ -1,0 +1,106 @@
+"""The upgrade fake's fixture, ``dev/fleet-fixtures/upgrade.yaml`` (ADR-0055).
+
+Targets by cluster, in the orchestrator's own shape and read with the real
+parser (``default`` for a cluster not listed), the steps a fake run walks
+(phases and texts as data, never a list in code), and the demo's runs,
+started when day1 starts so the fleet's list has something to show.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final
+
+import yaml
+
+from wingman_day1.domain.upgrades import UpgradeDecision, UpgradeTargets
+from wingman_day1.infrastructure.workflows.upgrade_parse import upgrade_targets
+
+UPGRADE_FILE: Final = Path("dev/fleet-fixtures/upgrade.yaml")
+SECTIONS: Final = ("before", "control_plane", "each_nodepool", "after")
+"""``control_plane`` runs once, ``each_nodepool`` once per NodePool of the plan."""
+
+
+@dataclass(frozen=True, slots=True)
+class ScriptStep:
+    """One step of the fixture's run: its phase, its text, and what moves it on."""
+
+    phase: str
+    waiting_for: str = ""
+    seconds: float = 0.0
+    waits_for: UpgradeDecision | None = None
+    moves: str | None = None
+    """``control-plane`` or ``nodepool``: that version is the target's once the step is over."""
+
+
+@dataclass(frozen=True, slots=True)
+class UpgradeScript:
+    """The fixture: targets by cluster (``default`` for the rest) and the run's steps."""
+
+    targets: Mapping[str, UpgradeTargets]
+    steps: Mapping[str, tuple[ScriptStep, ...]]
+    demo: tuple[DemoRun, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DemoRun:
+    """A run the demo starts toward ``target``, then sends ``decisions`` as it waits for each."""
+
+    cluster: str
+    target: str
+    by: str
+    decisions: tuple[UpgradeDecision, ...] = ()
+
+
+def default_upgrade_file() -> Path:
+    """``dev/fleet-fixtures/upgrade.yaml`` of this checkout."""
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / UPGRADE_FILE
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"{UPGRADE_FILE} not found above this file")
+
+
+def load_upgrade_script(path: Path) -> UpgradeScript:
+    """The fixture's targets (the orchestrator's shape) and run steps."""
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("targets"), dict):
+        raise TypeError(f"{path}: expected a mapping with 'targets' and 'run'")
+    targets = {
+        str(name): upgrade_targets({"cluster": str(name), **body})
+        for name, body in raw["targets"].items()
+    }
+    run = raw.get("run")
+    if not isinstance(run, dict) or set(run) - set(SECTIONS):
+        raise TypeError(f"{path}: 'run' has the sections {', '.join(SECTIONS)}")
+    steps = {name: tuple(_script_step(item) for item in run.get(name) or ()) for name in SECTIONS}
+    demo = tuple(_demo_run(item) for item in raw.get("demo") or ())
+    return UpgradeScript(targets=targets, steps=steps, demo=demo)
+
+
+def _demo_run(raw: object) -> DemoRun:
+    if not isinstance(raw, dict) or not all(
+        isinstance(raw.get(k), str) for k in ("cluster", "target")
+    ):
+        raise TypeError(f"a demo run needs a cluster and a target: {raw!r}")
+    return DemoRun(
+        cluster=raw["cluster"],
+        target=raw["target"],
+        by=str(raw.get("by") or "demo"),
+        decisions=tuple(UpgradeDecision(str(d)) for d in raw.get("decisions") or ()),
+    )
+
+
+def _script_step(raw: object) -> ScriptStep:
+    if not isinstance(raw, dict) or not isinstance(raw.get("phase"), str):
+        raise TypeError(f"a run step needs a phase: {raw!r}")
+    waits, moves = raw.get("waits_for"), raw.get("moves")
+    return ScriptStep(
+        phase=raw["phase"],
+        waiting_for=str(raw.get("waiting_for") or ""),
+        seconds=float(raw.get("seconds") or 0),
+        waits_for=UpgradeDecision(str(waits)) if waits else None,
+        moves=str(moves) if moves else None,
+    )

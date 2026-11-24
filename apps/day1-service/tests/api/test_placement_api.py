@@ -28,10 +28,10 @@ from wingman_day1.domain.errors import HubDeniedError
 from wingman_day1.domain.machines import BMH_LABEL, INFRA_ENV_LABEL, AgentObservation
 from wingman_day1.domain.mce_capacity import NodeObservation
 from wingman_day1.domain.servers import ServerRow
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FREE_AGENT, FakeHubApi
-from wingman_day1.infrastructure.fake_identity import FakeIdentityProvider
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FREE_AGENT, FakeHubApi
+from wingman_day1.infrastructure.fakes.identity import FakeIdentityProvider
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 from wingman_day1.integrations.server_scan.infrastructure.fake import FakeServerInventory
 
 Auth = Callable[[User], dict[str, str]]

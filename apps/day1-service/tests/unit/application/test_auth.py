@@ -15,7 +15,7 @@ from wingman_day1.domain.errors import (
     LoginRefusedError,
     ResourceNotFoundError,
 )
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
 
 
 async def test_with_dev_login_on_there_is_no_oauth_redirect(context: Day1Context) -> None:

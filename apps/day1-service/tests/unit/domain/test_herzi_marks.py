@@ -15,7 +15,7 @@ from wingman_day1.domain.herzi_marks import (
     HerziMarks,
     herzi_marks,
 )
-from wingman_day1.infrastructure.hub_objects import infra_env_from
+from wingman_day1.infrastructure.hub.parse import infra_env_from
 
 FAILED = "2026-11-23T10:00:00.123456789Z"
 """Go's RFC 3339 with nanoseconds, as herzi's state encodes a time."""

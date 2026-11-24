@@ -14,7 +14,7 @@ from wingman_day1.application.clusters import CreateCluster
 from wingman_day1.application.drift import DriftState
 from wingman_day1.domain.addons import AddonDriftReason, InstalledAddon
 from wingman_day1.domain.paths import ClusterRef
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
 
 NEW = "ocp4-prod-falcon-site1"
 REF = ClusterRef("site1", "ocp4-prod-mce-site1-a", NEW)

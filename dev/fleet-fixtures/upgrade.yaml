@@ -1,5 +1,5 @@
 # The upgrade-cluster workflow's fake for DAY1_FAKE_FLEET=true (development
-# only, ADR-0055; wingman_day1.infrastructure.fake_upgrade).
+# only, ADR-0055; wingman_day1.infrastructure.fakes.upgrade).
 #
 # `targets`: what GET /workflows/cluster-upgrade/upgrade-targets answers, in
 # the orchestrator's own shape, read with the real adapter's parser. A cluster

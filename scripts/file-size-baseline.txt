@@ -8,7 +8,7 @@
 # Regenerate the lines with `python3 scripts/check-file-size.py --list`.
 #
 # Recorded 2026-11-13 from the code-organisation audit (21 Python and 19
-# TypeScript source files, and one test); 2026-11-24: 14 Python and 8
+# TypeScript source files, and one test); 2026-11-24: 13 Python and 8
 # TypeScript source files, and one test.
 
   720  apps/day1-service/src/wingman_day1/application/rollouts.py
@@ -16,7 +16,6 @@
   651  apps/day1-service/src/wingman_day1/domain/node_pools.py
   521  apps/day1-service/src/wingman_day1/domain/quick_links.py
   551  apps/day1-service/src/wingman_day1/domain/template.py
-  536  apps/day1-service/src/wingman_day1/infrastructure/fake_mce.py
   519  apps/day1-service/src/wingman_day1/main.py
   852  apps/day2-service/src/wingman_day2/application/authoring.py
   895  apps/day2-service/src/wingman_day2/application/changes.py

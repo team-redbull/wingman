@@ -28,7 +28,7 @@ from wingman_day1.application.rollouts import RolloutState, RolloutStatus
 from wingman_day1.domain.errors import AlreadyInUseError, InvalidSpecError
 from wingman_day1.domain.paths import ClusterRef
 from wingman_day1.domain.rollout import RolloutTrigger
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
 
 MCE = "ocp4-prod-mce-site1-a"
 LARK = ClusterRef("site1", MCE, "ocp4-prod-lark-site1")

@@ -19,9 +19,9 @@ from wingman_core.ports.clock import Clock
 from wingman_day1.application.clusters import ClusterService
 from wingman_day1.application.inventory import InventoryService
 from wingman_day1.application.sites import SiteCatalog
-from wingman_day1.infrastructure.add_server_workflow import HttpAddServerWorkflow
-from wingman_day1.infrastructure.cached_hub import CachedHubApi
-from wingman_day1.infrastructure.cached_workflows import CachedAddServerWorkflow
+from wingman_day1.infrastructure.hub.cached import CachedHubApi
+from wingman_day1.infrastructure.workflows.add_server import HttpAddServerWorkflow
+from wingman_day1.infrastructure.workflows.cached import CachedAddServerWorkflow
 from wingman_day1.integrations.server_scan.ports import ServerInventory
 from wingman_day1.ports import AddServerWorkflow, HubApi
 from wingman_day1.settings import Day1Settings
@@ -87,7 +87,7 @@ def add_server_workflow(
     and adds the demo's servers to it (``dev/fleet-fixtures/inventory.yaml``).
     """
     if settings.day1_fake_fleet:
-        from wingman_day1.infrastructure.fake_inventory_demo import fake_add_server
+        from wingman_day1.infrastructure.fakes.inventory_demo import fake_add_server
         from wingman_day1.integrations.server_scan.infrastructure.fake import (
             FakeServerInventory,
         )

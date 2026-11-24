@@ -15,8 +15,8 @@ from wingman_day1.api.deps import Day1Context
 from wingman_day1.application.scale import ScaleTarget
 from wingman_day1.compose_scale import Close, scale_service, scale_workflow
 from wingman_day1.domain.paths import ClusterRef
-from wingman_day1.infrastructure.fake_scale import FakeScaleWorkflow
-from wingman_day1.infrastructure.scale_workflow import HttpScaleWorkflow
+from wingman_day1.infrastructure.fakes.scale import FakeScaleWorkflow
+from wingman_day1.infrastructure.workflows.scale import HttpScaleWorkflow
 from wingman_day1.settings import Day1Settings
 
 WORKFLOWS = "http://workflows-orchestrator-api.redbull-workflows.svc:8080"

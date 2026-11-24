@@ -79,8 +79,8 @@ wingman/
 │   │   ├── src/wingman_day1/
 │   │   │   ├── domain/            # Pure rules: names, paths, the template, cluster files
 │   │   │   ├── application/       # Use cases, over ports only
-│   │   │   ├── infrastructure/    # Adapters (the GitLab-backed repositories, day2, MCE hubs,
-│   │   │   │                      #   OpenShift OAuth, the workflows orchestrator) and their fakes
+│   │   │   ├── infrastructure/    # Adapters: the GitLab-backed repositories, OpenShift OAuth,
+│   │   │   │                      #   one sub-package per system (workflows/, hub/, day2/), fakes/
 │   │   │   ├── api/               # deps.py, errors.py, v1/ (the FastAPI routers)
 │   │   │   ├── ports/             # day1's own ports
 │   │   │   ├── integrations/      # One package per external system, the same layers inside:

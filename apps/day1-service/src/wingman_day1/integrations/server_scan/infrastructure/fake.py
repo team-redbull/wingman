@@ -2,7 +2,7 @@
 
 Tests seed it directly; ``DAY1_FAKE_FLEET=true`` (development only) seeds it
 from ``dev/fleet-fixtures/servers.yaml``, written in server-scan's own row
-shape and read by the HTTP adapter's parser (day1's ``fake_fleet.load_fleet``).
+shape and read by the HTTP adapter's parser (day1's ``fakes.fleet.load_fleet``).
 It raises the same domain errors as the real adapter. The fake workflows
 change its rows as they move a server (``replace``).
 """

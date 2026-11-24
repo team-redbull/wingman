@@ -4,7 +4,7 @@
 of main at 3.58.0). Step 1 is done (3.58.1); the others are planned, one or
 more refactor PRs each, in this order.
 
-ADR-0056 says where code goes and keeps files and functions small; 23 files
+ADR-0056 says where code goes and keeps files and functions small; 22 files
 are still in `scripts/file-size-baseline.txt`. The review found the larger
 risk elsewhere: one rule written five times, with two meanings (step 1
 found seven copies in all, and a third, deliberate meaning in day2). So the
@@ -27,7 +27,7 @@ How every step is done:
 | Step | What | Status |
 |---|---|---|
 | 1 | One version helper in core and one in the web | **Done** 2026-11-24 (3.58.1) |
-| 2 | The create page into `components/`; one home per external system in day1; day2's three biggest services split | Planned |
+| 2 | The create page into `components/`; one home per external system in day1; day2's three biggest services split | day1's part **done** 2026-11-24; the rest planned |
 | 3 | The other big pages into `components/`; the composition root into `composition/` | Planned |
 | 4 | Typed `day2Api` calls and a `useCatalog` hook; the files near their limit split; ports by area | Planned |
 | 5 | The web's `types/` and `lib/` layout; one `useListState` hook | Planned |
@@ -77,15 +77,43 @@ to the platform. ADR-0023 and ADR-0034 are amended.
   tests; the route file only reads params and renders it (ADR-0056 web
   rules 1, 3 and 4).
 - Alongside, in day1: one home per external system, `infrastructure/<system>/`
-  (ADR-0056 Python rule 3). The orchestrator's clients
-  (`workflows_api.py`, the provision, upgrade, scale and add-server
-  workflows, their payloads, `cached_workflows.py`), the hub's (`hub_api.py`,
-  `hub_objects.py`, `cached_hub.py`, `mce_access.py`) and day2's
-  (`day2_client.py`, `cached_day2.py`) each become a sub-package of
-  `adapter.py`, `parse.py` and `cached.py`; the fakes go to
-  `infrastructure/fakes/`.
+  (ADR-0056 Python rule 3). **Done** 2026-11-24, below.
 - day2's `application/changes.py` (895), `authoring.py` (852) and
   `plan_writer.py` (776) split by use case (ADR-0056 Python rule 2).
+
+#### day1's infrastructure, one home per system (done 2026-11-24)
+
+The move was mechanical (`git mv`, so each file's history follows), and a
+commit apart then made the moved code clearer. Every module under
+`apps/day1-service/src/wingman_day1/infrastructure/` now:
+
+| Was | Now |
+|---|---|
+| `workflows_api.py` | `workflows/uninstall.py` (the uninstall workflow) |
+| `provision_workflow.py`, `upgrade_workflow.py`, `scale_workflow.py`, `add_server_workflow.py` | `workflows/provision.py`, `upgrade.py`, `scale.py`, `add_server.py` |
+| `upgrade_payloads.py`, `scale_payloads.py`; add-server's readers | `workflows/upgrade_parse.py`, `scale_parse.py`, `add_server_parse.py` |
+| `cached_workflows.py` | `workflows/cached.py` |
+| copied into each workflow adapter | `workflows/orchestrator.py` (a start's answers, the run read and list, the orchestrator's words) and `workflows/parse.py` (the lenient readers, the run list) |
+| `hub_api.py`, `hub_objects.py`, `cached_hub.py`, `mce_access.py` | `hub/adapter.py`, `parse.py`, `cached.py`, `access.py` |
+| `day2_client.py` (its readers too), `cached_day2.py` | `day2/adapter.py` and `parse.py`, `day2/cached.py` |
+| `fake_<name>.py` (all 12) | `fakes/<name>.py`; `fake_mce.py` (536 lines, in the baseline) is `fakes/mce.py` and `fakes/mce_objects.py` |
+
+Their tests moved the same way, to `tests/unit/infrastructure/<system>/`
+(`test_hub_api.py` is `hub/test_adapter.py`, `test_workflows_api.py`
+`workflows/test_uninstall.py`, `test_fake_mce.py` `fakes/test_mce.py`); the
+ADRs' Verification sections keep the names they were verified under.
+
+- **The orchestrator's** sub-package is a module per workflow, not one
+  `adapter.py`: five adapters behind five ports, with their readers, would be
+  one file of over 1,500 lines, and a sub-package each a folder of two files.
+- **A layers contract** in `[tool.importlinter]` keeps the systems' three
+  sub-packages from importing each other, and the real adapters from
+  importing `fakes/`, which may reuse a system's parser.
+- **Behaviour stayed**: origin/main's adapters and the new ones gave the
+  same result, or the same error type and message, for 3,843 scripted
+  answers (each workflow and day2 call against every status, body and
+  transport error), and the fake MCE holds the same objects for the
+  fixture under both cluster-name conventions.
 
 ### 3. The other big pages, the composition root
 

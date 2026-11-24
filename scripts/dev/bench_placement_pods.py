@@ -31,7 +31,7 @@ from typing import Any
 
 import httpx
 
-from wingman_day1.infrastructure.hub_api import PAGE_SIZE, HttpHubApi
+from wingman_day1.infrastructure.hub.adapter import PAGE_SIZE, HttpHubApi
 
 MCE = "ocp4-prod-mce-site1-a"
 

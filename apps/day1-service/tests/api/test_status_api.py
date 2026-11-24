@@ -13,8 +13,8 @@ from fastapi import FastAPI
 from starlette.types import Message
 
 from wingman_core.domain.users import User
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
 
 Auth = Callable[[User], dict[str, str]]
 MCE = "ocp4-prod-mce-site1-a"

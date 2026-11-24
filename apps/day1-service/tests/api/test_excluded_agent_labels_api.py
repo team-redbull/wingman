@@ -25,9 +25,9 @@ from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
 from wingman_core.testing.fixtures import default_fixture_root
 from wingman_day1.domain.excluded_agent_labels import GUIDE
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_identity import FakeIdentityProvider
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.identity import FakeIdentityProvider
 
 Auth = Callable[[User], dict[str, str]]
 USED = "redbull.io/used"

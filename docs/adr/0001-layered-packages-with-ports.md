@@ -100,9 +100,12 @@ were one system's, or that the Nodes tab's code was not.
   `observed.py` (every adapter's), `api/conditional.py` (HTTP's conditional
   GET), `api/deps.py` (the routes' one context, ADR-0056), `settings.py`, and
   `infrastructure/fake_fleet.py` (the fake orchestrator's uninstall and the
-  fleet fixture's loader, which seed server-scan's fake). The workflows
-  orchestrator's adapters and the MCE hubs are not moved here; a move of
-  theirs follows the same rule.
+  fleet fixture's loader, which seed server-scan's fake; `infrastructure/fakes/fleet.py`
+  since 2026-11-24). The workflows orchestrator's adapters and the MCE hubs
+  are not moved here; a move of theirs follows the same rule. (They have no
+  Wingman area of their own, so since 2026-11-24 they are day1 sub-packages,
+  `infrastructure/workflows/` and `infrastructure/hub/`, as ADR-0056's
+  Python rule 3 says; `docs/ideas/code-organisation.md` step 2.)
 - **The contracts** (`[tool.importlinter]`): an integration's layers keep
   this ADR's rules inside it (five forbidden contracts over
   `wingman_day1.integrations.*`); day1's own domain may import an

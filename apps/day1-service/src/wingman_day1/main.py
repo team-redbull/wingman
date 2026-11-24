@@ -72,11 +72,11 @@ from wingman_day1.compose_platforms import platforms
 from wingman_day1.compose_quick_links import quick_links_service
 from wingman_day1.compose_scale import scale_service, scale_workflow
 from wingman_day1.domain.names import HostedClusterNaming
-from wingman_day1.infrastructure.cached_day2 import CachedDay2Addons
-from wingman_day1.infrastructure.cached_hub import CachedHubApi
-from wingman_day1.infrastructure.day2_client import HttpDay2Addons, HttpDay2Installs
-from wingman_day1.infrastructure.hub_api import HttpHubApi
-from wingman_day1.infrastructure.mce_access import load_mce_access
+from wingman_day1.infrastructure.day2.adapter import HttpDay2Addons, HttpDay2Installs
+from wingman_day1.infrastructure.day2.cached import CachedDay2Addons
+from wingman_day1.infrastructure.hub.access import load_mce_access
+from wingman_day1.infrastructure.hub.adapter import HttpHubApi
+from wingman_day1.infrastructure.hub.cached import CachedHubApi
 from wingman_day1.infrastructure.merge_requests import (
     GitClusterProvisioner,
     GitRolloutMergeRequests,

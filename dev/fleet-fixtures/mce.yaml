@@ -3,7 +3,7 @@
 # Each cluster here becomes a HostedCluster with its NodePools, MachineSets,
 # Machines, AgentMachines and Agents, built in the Kubernetes shape the MCE
 # serves and read with the real adapter's parsers
-# (wingman_day1.infrastructure.fake_mce). Servers are the made-up ones in
+# (wingman_day1.infrastructure.fakes.mce). Servers are the made-up ones in
 # servers.yaml: an Agent's agent-install.openshift.io/bmh label is its
 # server's name, lowercased as a Kubernetes name is.
 #

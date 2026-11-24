@@ -34,7 +34,7 @@ flowchart LR
 
 day1 calls day2 over HTTP (`DAY2_SERVICE_URL`) for a cluster's installed
 add-ons (drift) and for a flavor rollout's install MRs (ADR-0016, ADR-0044),
-with a short-lived session token of its own (`infrastructure/day2_client.py`).
+with a short-lived session token of its own (`infrastructure/day2/adapter.py`).
 day2 calls nothing but GitLab. Health (`/health/live`, `/health/ready`) and
 `/metrics` are on each service's own port, which nginx does not route, so they
 are reachable inside the cluster only (ADR-0010, ADR-0054). The chart
@@ -69,7 +69,9 @@ Only day1 talks to anything but GitLab. Each system it calls has a port, an
 adapter and a fake (ADR-0001). server-scan and segments-manager are a package
 each under
 `apps/day1-service/src/wingman_day1/integrations/` (ADR-0001's 2026-11-17
-amendment); the other adapters are in `wingman_day1/infrastructure/`. All are
+amendment); the other adapters are in `wingman_day1/infrastructure/`, a
+sub-package per system that has more than one module (`workflows/`, `hub/`,
+`day2/`), with every fake in `infrastructure/fakes/` (ADR-0056). All are
 built in the composition root (`main.py`, `platform_adapters.py`,
 `compose_*.py`, each integration's `compose.py`). Wingman needs GitLab,
 OpenShift OAuth and the workflows orchestrator, where every create starts
@@ -80,11 +82,11 @@ default.
 |---|---|---|---|
 | GitLab | core's `GitLabHttpAdapter` behind `GitLabPort` (ADR-0002); the in-memory fake `InMemoryGitLab`, held to GitLab by the contract suite (ADR-0005) | `GITLAB_URL`, `GITLAB_TOKEN` (required) | Reads every repo; every change is a merge request (below). No other code reaches GitLab. |
 | Argo CD | none | none | Nothing: Argo CD reads the merged files and applies them. Each MCE's ApplicationSet makes one Application per cluster file in `hostedClusters/`, rendered by the hostedclusters-setup chart; day2's ApplicationSets find the team repos' folders. Quick Links only links to each Argo CD (ADR-0052). |
-| MCE hubs (Kubernetes API) | `hub_api.py` (ADR-0019; its objects parsed in `hub_objects.py`), a token per hub from `MCE_TOKENS_FILE`, an address by `MCE_API_DOMAIN` or per hub (ADR-0045) | `CLUSTER_STATUS_ENABLED` | Read only: HostedClusters, NodePools and InfraEnvs (live status), each cluster's Machines and Agents (the Nodes tab, ADR-0038), the hub's nodes and pods (MCE placement, ADR-0050). |
+| MCE hubs (Kubernetes API) | `infrastructure/hub/`: `adapter.py` (ADR-0019; its objects parsed in `parse.py`), a token per hub from `MCE_TOKENS_FILE`, an address by `MCE_API_DOMAIN` or per hub (ADR-0045) | `CLUSTER_STATUS_ENABLED` | Read only: HostedClusters, NodePools and InfraEnvs (live status), each cluster's Machines and Agents (the Nodes tab, ADR-0038), the hub's nodes and pods (MCE placement, ADR-0050). |
 | OpenShift OAuth | `openshift_oauth.py` | the OpenShift OAuth settings, or dev login | Login only (below). |
 | server-scan | `integrations/server_scan/` (`HttpServerInventory` in `infrastructure/adapter.py`) | `SERVER_SCAN_URL`, with `SERVER_SCAN_TOKEN` | Read only, with the viewer token: its servers on the Nodes tab (ADR-0038), placement's spare servers (ADR-0050) and Inventory Management's pools (ADR-0057); a node's server links to its page in server-scan's own UI, and the Infrastructure workspace's sidebar to that UI (ADR-0067). Never `/servers/available` or a reservation: those are the workflows'. The version Wingman matches and how to sync: [integrations/server-scan.md](integrations/server-scan.md). |
 | segments-manager | `integrations/segments_manager/` (`HttpSegmentLedger` in `infrastructure/adapter.py`) | `SEGMENTS_MANAGER_URL` | Read only, one open GET: a cluster's EPG checked against its file (ADR-0039); the cluster page and the Infrastructure workspace's sidebar link to its own UI. The commit Wingman matches and how to sync: [integrations/segments-manager.md](integrations/segments-manager.md). |
-| workflows orchestrator | one adapter per workflow: `workflows_api.py`, `provision_workflow.py`, `upgrade_workflow.py`, `add_server_workflow.py`, `scale_workflow.py` | `WORKFLOWS_API_URL` (required), plus each workflow's own switch (next table) | Starts a run and shows it in the workflow's words; never re-implements its procedure, checks or phases. The orchestrator has no auth (accepted); day1 lets only admins start a run and logs who did. |
+| workflows orchestrator | `infrastructure/workflows/`, one adapter per workflow: `uninstall.py`, `provision.py`, `upgrade.py`, `add_server.py`, `scale.py` | `WORKFLOWS_API_URL` (required), plus each workflow's own switch (next table) | Starts a run and shows it in the workflow's words; never re-implements its procedure, checks or phases. The orchestrator has no auth (accepted); day1 lets only admins start a run and logs who did. |
 | cluster-navigator | none | none | Not wired. Its data on the cluster page is planned (`docs/ideas/single-pane.md`, workstream 5). |
 | herzi | none | none | No adapter: its add-server runs are in the orchestrator's run list, which Inventory Management shows (ADR-0057). |
 
@@ -146,7 +148,7 @@ Every package has the same layers, and each may import only the ones before it
 | domain | `domain/`: Git and MR types, `mr_conventions`, users, errors | `domain/`: the rules (names, paths, the cluster file, placement...) | any other layer; httpx, FastAPI, settings, metrics |
 | ports | `ports/`: `GitLabPort`, the clock | `ports.py` (day1: `ports/`): the service's own protocols | application, infrastructure, the API; httpx, FastAPI |
 | application | `application/`: approvals | `application/`: the use cases, over ports only | infrastructure, observability, the API, settings; httpx, FastAPI |
-| infrastructure, observability | the GitLab adapter and fake, `TtlCache`, `RepoSnapshots`, session tokens; metrics, logs | `infrastructure/`: adapters, their fakes, the cached repositories | the application, the API; FastAPI |
+| infrastructure, observability | the GitLab adapter and fake, `TtlCache`, `RepoSnapshots`, session tokens; metrics, logs | `infrastructure/`: adapters (day1: a sub-package per system), their fakes (day1: `fakes/`), the cached repositories | the application, the API; FastAPI |
 | web | `web/`: the app factory, auth, RFC 9457 errors (ADR-0004) | `api/`: the FastAPI routers and their dependencies | an adapter or httpx: the API gets them from the composition root |
 
 day1's external systems that Wingman ported code from are packages under

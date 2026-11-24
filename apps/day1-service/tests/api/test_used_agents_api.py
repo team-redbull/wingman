@@ -30,8 +30,8 @@ from wingman_day1.domain.machines import (
 from wingman_day1.domain.mce_capacity import NodeObservation
 from wingman_day1.domain.servers import ServerRow
 from wingman_day1.domain.used_agents import HERZI_LABEL
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FREE_AGENT, FakeHubApi
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FREE_AGENT, FakeHubApi
 from wingman_day1.integrations.server_scan.infrastructure.fake import FakeServerInventory
 
 Auth = Callable[[User], dict[str, str]]

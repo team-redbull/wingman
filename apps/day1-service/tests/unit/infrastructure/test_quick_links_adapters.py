@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from wingman_day1.domain.quick_links import LinksFileUnreadableError
-from wingman_day1.infrastructure.fake_quick_links import default_demo_links_file
+from wingman_day1.infrastructure.fakes.quick_links import default_demo_links_file
 from wingman_day1.infrastructure.links_file import FileLinksSource
 
 
