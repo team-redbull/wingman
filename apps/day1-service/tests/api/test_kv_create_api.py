@@ -18,9 +18,9 @@ from wingman_core.domain.git import FileChange, RepoPath
 from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
 from wingman_day1.domain.errors import ProvisionRefusedError
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 
 Auth = Callable[[User], dict[str, str]]
 SEED = "ocp4-prod-seed-site1-az1-a"

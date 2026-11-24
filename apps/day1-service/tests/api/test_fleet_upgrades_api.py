@@ -22,11 +22,11 @@ from wingman_core.domain.git import FileChange, RepoPath
 from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
 from wingman_day1.domain.upgrades import UpgradeDecision, UpgradeRequest
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_identity import FakeIdentityProvider
-from wingman_day1.infrastructure.fake_upgrade import FakeUpgradeWorkflow
-from wingman_day1.infrastructure.fake_upgrade_script import (
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.identity import FakeIdentityProvider
+from wingman_day1.infrastructure.fakes.upgrade import FakeUpgradeWorkflow
+from wingman_day1.infrastructure.fakes.upgrade_script import (
     default_upgrade_file,
     load_upgrade_script,
 )

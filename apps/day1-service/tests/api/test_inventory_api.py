@@ -19,16 +19,16 @@ from wingman_day1.domain.errors import (
     WorkflowsUnavailableError,
 )
 from wingman_day1.domain.names import HostedClusterNaming
-from wingman_day1.infrastructure.fake_add_server import FakeAddServerWorkflow
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_fleet import load_fleet
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_inventory_demo import (
+from wingman_day1.infrastructure.fakes.add_server import FakeAddServerWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.fleet import load_fleet
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.inventory_demo import (
     default_inventory_file,
     load_agent_labels,
     load_inventory_demo,
 )
-from wingman_day1.infrastructure.fake_mce import default_mce_file, load_fake_mce
+from wingman_day1.infrastructure.fakes.mce import default_mce_file, load_fake_mce
 from wingman_day1.integrations.server_scan.infrastructure.fake import (
     FakeServerInventory,
     default_fleet_file,

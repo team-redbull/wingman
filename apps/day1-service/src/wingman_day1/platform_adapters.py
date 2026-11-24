@@ -6,7 +6,7 @@ ADR-0042, ADR-0055) and server-scan, real or none; or, with ``DAY1_FAKE_FLEET``
 never none: without the orchestrator (development and tests only, which
 ``check_runtime`` enforces) the in-memory provision-cluster stands in. server-scan's
 HTTP adapter is built by its integration's ``compose``, its fake is the
-integration's ``infrastructure/fake.py`` seeded by ``infrastructure/fake_fleet.py``;
+integration's ``infrastructure/fake.py`` seeded by ``infrastructure/fakes/fleet.py``;
 segments-manager's adapter is its integration's ``compose`` too.
 ``main.build_adapters`` calls these; nothing else does.
 """
@@ -23,10 +23,10 @@ from wingman_core.ports.clock import Clock
 from wingman_day1.application.clusters import ClusterService
 from wingman_day1.application.upgrades import UpgradeService
 from wingman_day1.domain.names import HostedClusterNaming
-from wingman_day1.infrastructure.cached_workflows import CachedUpgradeWorkflow
-from wingman_day1.infrastructure.provision_workflow import HttpProvisionWorkflow
-from wingman_day1.infrastructure.upgrade_workflow import HttpUpgradeWorkflow
-from wingman_day1.infrastructure.workflows_api import HttpUninstallWorkflow
+from wingman_day1.infrastructure.workflows.cached import CachedUpgradeWorkflow
+from wingman_day1.infrastructure.workflows.provision import HttpProvisionWorkflow
+from wingman_day1.infrastructure.workflows.uninstall import HttpUninstallWorkflow
+from wingman_day1.infrastructure.workflows.upgrade import HttpUpgradeWorkflow
 from wingman_day1.integrations.server_scan.compose import http_inventory
 from wingman_day1.integrations.server_scan.ports import ServerInventory
 from wingman_day1.ports import HubApi, ProvisionWorkflow, UninstallWorkflow, UpgradeWorkflow
@@ -48,7 +48,7 @@ def provision_workflow(
     only), the in-memory one.
     """
     if settings.day1_fake_fleet or not settings.workflows_api_url:
-        from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+        from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 
         if not settings.day1_fake_fleet:
             logger.warning(
@@ -75,8 +75,8 @@ def fleet_adapters(
     status and InfraEnvs.
     """
     if settings.day1_fake_fleet:
-        from wingman_day1.infrastructure.fake_fleet import FakeUninstallWorkflow, load_fleet
-        from wingman_day1.infrastructure.fake_mce import default_mce_file, load_fake_mce
+        from wingman_day1.infrastructure.fakes.fleet import FakeUninstallWorkflow, load_fleet
+        from wingman_day1.infrastructure.fakes.mce import default_mce_file, load_fake_mce
         from wingman_day1.integrations.server_scan.infrastructure.fake import (
             FakeServerInventory,
             default_fleet_file,
@@ -110,8 +110,8 @@ def upgrade_workflow(
     if not settings.day1_upgrades:
         return None
     if settings.day1_fake_fleet:
-        from wingman_day1.infrastructure.fake_upgrade import demo_upgrades
-        from wingman_day1.infrastructure.fake_upgrade_script import (
+        from wingman_day1.infrastructure.fakes.upgrade import demo_upgrades
+        from wingman_day1.infrastructure.fakes.upgrade_script import (
             default_upgrade_file,
             load_upgrade_script,
         )

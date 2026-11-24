@@ -14,7 +14,7 @@ from pydantic import SecretStr
 from wingman_core.observability.metrics import WingmanMetrics
 from wingman_day1.domain.auth import Identity
 from wingman_day1.domain.errors import IdentityError, IdentityUnavailableError
-from wingman_day1.infrastructure.fake_identity import FakeIdentityProvider
+from wingman_day1.infrastructure.fakes.identity import FakeIdentityProvider
 from wingman_day1.infrastructure.openshift_oauth import OpenShiftOAuth
 
 SECRET = "client-secret-never-shown-0001"

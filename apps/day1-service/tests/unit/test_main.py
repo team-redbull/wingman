@@ -17,19 +17,19 @@ from wingman_core.observability.instrumented_gitlab import InstrumentedGitLab
 from wingman_core.observability.metrics import WingmanMetrics
 from wingman_core.settings import AuthSettings, Environment, GitBackend, RuntimeSettings
 from wingman_core.testing.fixtures import default_fixture_root, load_fixture_projects
-from wingman_day1.infrastructure.add_server_workflow import HttpAddServerWorkflow
-from wingman_day1.infrastructure.fake_add_server import FakeAddServerWorkflow
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_fleet import FakeUninstallWorkflow
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
-from wingman_day1.infrastructure.fake_upgrade import FakeUpgradeWorkflow
-from wingman_day1.infrastructure.hub_api import HttpHubApi
+from wingman_day1.infrastructure.fakes.add_server import FakeAddServerWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.fleet import FakeUninstallWorkflow
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.upgrade import FakeUpgradeWorkflow
+from wingman_day1.infrastructure.hub.adapter import HttpHubApi
 from wingman_day1.infrastructure.openshift_oauth import OpenShiftOAuth
-from wingman_day1.infrastructure.provision_workflow import HttpProvisionWorkflow
-from wingman_day1.infrastructure.scale_workflow import HttpScaleWorkflow
-from wingman_day1.infrastructure.upgrade_workflow import HttpUpgradeWorkflow
-from wingman_day1.infrastructure.workflows_api import HttpUninstallWorkflow
+from wingman_day1.infrastructure.workflows.add_server import HttpAddServerWorkflow
+from wingman_day1.infrastructure.workflows.provision import HttpProvisionWorkflow
+from wingman_day1.infrastructure.workflows.scale import HttpScaleWorkflow
+from wingman_day1.infrastructure.workflows.uninstall import HttpUninstallWorkflow
+from wingman_day1.infrastructure.workflows.upgrade import HttpUpgradeWorkflow
 from wingman_day1.integrations.segments_manager.infrastructure.adapter import HttpSegmentLedger
 from wingman_day1.integrations.segments_manager.infrastructure.fake import FakeSegmentLedger
 from wingman_day1.integrations.server_scan.infrastructure.adapter import HttpServerInventory

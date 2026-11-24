@@ -25,7 +25,7 @@ from wingman_day1.domain.errors import (
     StaleError,
 )
 from wingman_day1.domain.paths import ClusterRef
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 
 NEW = "ocp4-prod-falcon-site1"
 NEW_PATH = f"sites/site1/mces/ocp4-prod-mce-site1-a/hostedClusters/{NEW}.yaml"

@@ -204,6 +204,15 @@ forbidden_modules = [
     "wingman_day1.integrations.*.compose", "wingman_core.web", "fastapi", "starlette",
 ]
 
+# One home per external system (ADR-0056 Python rule 3): each sub-package is one system's
+# adapters, parsers and cache, and shares only infrastructure's own modules (http, observed,
+# cache_keys). The fakes may reuse a system's parser; a real adapter never reaches a fake.
+[[tool.importlinter.contracts]]
+name = "day1's infrastructure is one sub-package per system, with the fakes above them"
+type = "layers"
+containers = ["wingman_day1.infrastructure"]
+layers = ["fakes", "workflows | hub | day2"]
+
 [[tool.importlinter.contracts]]
 name = "day1 API reaches adapters only through the composition root"
 type = "forbidden"

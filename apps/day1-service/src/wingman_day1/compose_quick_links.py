@@ -18,7 +18,7 @@ from wingman_day1.settings import Day1Settings
 def links_file(settings: Day1Settings) -> FileLinksSource:
     """The links file; with the fake fleet and no file there, the demo's (ADR-0052)."""
     if settings.day1_fake_fleet and not settings.quick_links_file.exists():
-        from wingman_day1.infrastructure.fake_quick_links import default_demo_links_file
+        from wingman_day1.infrastructure.fakes.quick_links import default_demo_links_file
 
         return FileLinksSource(default_demo_links_file())
     return FileLinksSource(settings.quick_links_file)

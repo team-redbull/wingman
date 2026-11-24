@@ -25,7 +25,7 @@ from wingman_day1.domain.changes import ClusterChange, ProvisionResult
 from wingman_day1.domain.cluster_file import read_provenance
 from wingman_day1.domain.errors import InvalidInputError, ResourceNotFoundError, StaleError
 from wingman_day1.domain.paths import ClusterRef
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
 from wingman_day1.infrastructure.merge_requests import GitClusterProvisioner, MergeRequestWriter
 from wingman_day1.infrastructure.repositories import CachedRepository
 from wingman_day1.ports import ClusterProvisioner

@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
 
 OAUTH = {
     "dev_auth_enabled": False,

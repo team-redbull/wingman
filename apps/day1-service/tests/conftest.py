@@ -30,10 +30,10 @@ from wingman_day1.domain.addons import InstalledAddon
 from wingman_day1.domain.auth import Identity
 from wingman_day1.domain.mce_capacity import NodeObservation
 from wingman_day1.domain.status import Condition, HostedClusterObservation, NodePoolObservation
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_identity import FakeIdentityProvider
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.identity import FakeIdentityProvider
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 from wingman_day1.integrations.segments_manager.ports import SegmentLedger
 from wingman_day1.integrations.server_scan.ports import ServerInventory
 from wingman_day1.main import Adapters, create_app

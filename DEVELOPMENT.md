@@ -34,7 +34,7 @@ the direction (domain → ports → application → infrastructure → api):
 | `domain/` | Pure rules and types: no I/O, no FastAPI |
 | `ports.py` (day1: `ports/`) | The service's own ports (protocols); GitLab is core's `GitLabPort` (ADR-0002) |
 | `application/` | Use cases, written against ports only |
-| `infrastructure/` | Adapters for the ports, and their fakes |
+| `infrastructure/` | Adapters for the ports, and their fakes; in day1 a system with more than one module is a sub-package (`workflows/`, `hub/`, `day2/`: `adapter.py`, `parse.py`, `cached.py`) and every fake is in `fakes/` (ADR-0056) |
 | `api/` | FastAPI routers (`api/v1/`), the dependencies that hand them the use cases, error mapping |
 | `settings.py` | Every environment variable the service reads (ADR-0009) |
 | `main.py` | The composition root: the only place adapters are built and wired |

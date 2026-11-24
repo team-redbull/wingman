@@ -14,8 +14,8 @@ from wingman_day1.application.clusters import ClusterService
 from wingman_day1.application.nodes import NodeService
 from wingman_day1.application.status import StatusService
 from wingman_day1.domain.names import HostedClusterNaming
-from wingman_day1.infrastructure.cached_hub import CachedHubApi
-from wingman_day1.infrastructure.cached_workflows import CachedUninstallWorkflow
+from wingman_day1.infrastructure.hub.cached import CachedHubApi
+from wingman_day1.infrastructure.workflows.cached import CachedUninstallWorkflow
 from wingman_day1.integrations.server_scan import compose as server_scan
 from wingman_day1.integrations.server_scan.ports import ServerInventory
 from wingman_day1.ports import UninstallWorkflow

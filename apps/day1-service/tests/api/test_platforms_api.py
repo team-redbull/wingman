@@ -17,8 +17,8 @@ from fastapi import FastAPI
 
 from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_fleet import load_fleet
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.fleet import load_fleet
 from wingman_day1.integrations.segments_manager.infrastructure.fake import (
     default_segments_file,
     load_fake_ledger,

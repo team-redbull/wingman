@@ -16,8 +16,8 @@ import pytest
 from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
 from wingman_core.settings import Environment, GitBackend, RuntimeSettings
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 from wingman_day1.main import Adapters, create_app
 
 Auth = Callable[[User], dict[str, str]]

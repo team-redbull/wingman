@@ -39,9 +39,9 @@ from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
 from wingman_core.settings import AuthSettings, Environment, GitBackend, RuntimeSettings
 from wingman_core.testing.fixtures import default_fixture_root, load_fixture_projects, seed_fake
 from wingman_day1.domain.status import Condition, HostedClusterObservation
-from wingman_day1.infrastructure.fake_day2 import FakeDay2Addons
-from wingman_day1.infrastructure.fake_hub import FakeHubApi
-from wingman_day1.infrastructure.fake_provision import FakeProvisionWorkflow
+from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
+from wingman_day1.infrastructure.fakes.hub import FakeHubApi
+from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 from wingman_day1.main import Adapters, create_app
 from wingman_day1.settings import Day1Settings
 
