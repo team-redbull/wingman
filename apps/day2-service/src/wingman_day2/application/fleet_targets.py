@@ -20,16 +20,16 @@ from collections.abc import Mapping, Sequence
 
 from wingman_core.domain.mr_conventions import Repo, ResourceType, Verb, mr_title
 from wingman_core.domain.users import User
-from wingman_day2.application.plan_writer import (
+from wingman_day2.application.authoring.plan import (
     SCOPE_LABELS,
     SCOPE_NOUNS,
     Action,
     AuthoringPlan,
     AuthoringResult,
-    PlanWriter,
     fleet_apps,
     tweak_path,
 )
+from wingman_day2.application.authoring.writer import PlanWriter
 from wingman_day2.domain import layout
 from wingman_day2.domain.clusters import ALLOWED_ENVS, DefaultsScope
 from wingman_day2.domain.errors import ChangeRefusedError, ChartNotInstalledError
