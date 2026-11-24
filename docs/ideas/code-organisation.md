@@ -1,10 +1,10 @@
 # Code organisation, in five steps
 
 **Status:** decided 2026-11-24 (the user's sequence, from a read-only review
-of main at 3.58.0). Step 1 is done (3.58.1); the others are planned, one or
-more refactor PRs each, in this order.
+of main at 3.58.0). Step 1 is done (3.58.1), and so is step 2's day2 part
+(3.62.2); the rest is planned, one or more refactor PRs each, in this order.
 
-ADR-0056 says where code goes and keeps files and functions small; 23 files
+ADR-0056 says where code goes and keeps files and functions small; 20 files
 are still in `scripts/file-size-baseline.txt`. The review found the larger
 risk elsewhere: one rule written five times, with two meanings (step 1
 found seven copies in all, and a third, deliberate meaning in day2). So the
@@ -27,7 +27,7 @@ How every step is done:
 | Step | What | Status |
 |---|---|---|
 | 1 | One version helper in core and one in the web | **Done** 2026-11-24 (3.58.1) |
-| 2 | The create page into `components/`; one home per external system in day1; day2's three biggest services split | Planned |
+| 2 | The create page into `components/`; one home per external system in day1; day2's three biggest services split | day2's part **done** 2026-11-24 (3.62.2); the rest planned |
 | 3 | The other big pages into `components/`; the composition root into `composition/` | Planned |
 | 4 | Typed `day2Api` calls and a `useCatalog` hook; the files near their limit split; ports by area | Planned |
 | 5 | The web's `types/` and `lib/` layout; one `useListState` hook | Planned |
@@ -86,6 +86,27 @@ to the platform. ADR-0023 and ADR-0034 are amended.
   `infrastructure/fakes/`.
 - day2's `application/changes.py` (895), `authoring.py` (852) and
   `plan_writer.py` (776) split by use case (ADR-0056 Python rule 2).
+  **Done** (3.62.2), with no change in behaviour: day2's suite records the
+  same commits, merge requests and API answers before and after, and the
+  oracle tests pass unchanged. Two packages, each with a module per use
+  case; the package re-exports what the routers and the tests import, and
+  its `service` module is the class the API calls, its use cases as steps:
+  - `application/changes/`: `service` (`ChangeService`, 250 lines),
+    `install`, `mces` (deploy on specific MCEs: the plan per MCE, the
+    opening a few at a time), `update`, `remove`, `plan` (`ChangePlan`,
+    `ChangeResult`, the checks every change passes) and `opening` (the
+    MR, and `open_team_mr`, which authoring opens through too).
+  - `application/authoring/`: `service` (`AuthoringService`, 279),
+    `reads` (the add-on template, a fleet default read), `create`,
+    `team_default`, `fleet_default` (make one, its sync settings, its
+    reach), `adoption` (a cluster's own folder moves into a new default),
+    `plan` (what an authoring MR records: plan_writer's model, its
+    digest), `writer` (`PlanWriter`, which `FleetTargetService` writes
+    through too), `describe` (the MR description) and `chart_repo` (the
+    check of a deploy config's chart repo).
+
+  The two complexity exemptions they held (`install_on_mces`,
+  `_edited_deploy`) are gone; no module is over 350 lines.
 
 ### 3. The other big pages, the composition root
 

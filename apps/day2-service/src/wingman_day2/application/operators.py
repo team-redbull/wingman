@@ -20,8 +20,8 @@ from wingman_core.domain.users import User
 from wingman_day2.application.access import AccessService
 from wingman_day2.application.apps import LoadedLayer, load_deploy, load_layers
 from wingman_day2.application.authoring import AuthoringService
+from wingman_day2.application.authoring.plan import SCOPE_ORDER, fleet_apps, tweak_path
 from wingman_day2.application.catalog import CatalogEntry, CatalogService
-from wingman_day2.application.plan_writer import SCOPE_ORDER, fleet_apps, tweak_path
 from wingman_day2.application.topology import TeamState, Topology, TopologyService
 from wingman_day2.domain import layout
 from wingman_day2.domain.clusters import ALLOWED_ENVS, ClusterKind, ClusterRef, DefaultsScope
