@@ -16,7 +16,8 @@ from wingman_core.observability.metrics import WingmanMetrics
 from wingman_day1.domain.addons import Day2InstallRequest, Day2InstallResult, RequestedAddon
 from wingman_day1.domain.errors import Day2UnavailableError
 from wingman_day1.domain.paths import ClusterRef
-from wingman_day1.infrastructure.day2.adapter import HttpDay2Installs, install_title_charts
+from wingman_day1.infrastructure.day2.adapter import HttpDay2Installs
+from wingman_day1.infrastructure.day2.parse import install_title_charts
 from wingman_day1.infrastructure.fakes.day2 import FakeDay2Addons
 
 TOKEN = "rollout-admin-session-never-shown-0001"

@@ -54,14 +54,15 @@ from wingman_day1.infrastructure.http import JSON, tls_verify
 from wingman_day1.infrastructure.hub.parse import (
     agent_from,
     agent_machine_from,
+    agents_from,
     continue_token,
     hosted_cluster_from,
     infra_env_from,
     list_items,
     machine_from,
     machine_set_from,
-    node_from,
     node_pool_from,
+    nodes_from,
     pods_per_node_from,
 )
 from wingman_day1.infrastructure.observed import HubOperation, Observer, Timer
@@ -147,9 +148,9 @@ class HttpHubApi:
 
     async def machines(self, mce: str, *, namespace: str) -> list[MachineObservation]:
         """See HubApi.machines."""
+        path = f"{_CAPI}/namespaces/{namespace}/machines"
         return await self._observer.call(
-            HubOperation.LIST_MACHINES,
-            self._list(mce, namespace, f"{_CAPI}/namespaces/{namespace}/machines", machine_from),
+            HubOperation.LIST_MACHINES, self._list(mce, namespace, path, machine_from)
         )
 
     async def machine_sets(self, mce: str, *, namespace: str) -> list[MachineSetObservation]:
@@ -176,7 +177,7 @@ class HttpHubApi:
     async def nodes(self, mce: str) -> list[NodeObservation]:
         """See HubApi.nodes: the full Node objects, a page at a time."""
         pages = await self._paged(
-            mce, f"{_CORE}/nodes", HubOperation.LIST_NODES, params={}, accept=None, parse=_nodes
+            mce, f"{_CORE}/nodes", HubOperation.LIST_NODES, params={}, accept=None, parse=nodes_from
         )
         return sorted((node for page in pages for node in page), key=lambda node: node.name)
 
@@ -272,7 +273,7 @@ class HttpHubApi:
             HubOperation.LIST_AGENTS,
             params={"labelSelector": selector},
             accept=None,
-            parse=_agents,
+            parse=agents_from,
         )
         return sorted((agent for page in pages for agent in page), key=lambda a: a.name)
 
@@ -418,11 +419,3 @@ def _object_name(what: str, value: str) -> None:
     """Names go into URL paths; a name that is not a DNS label cannot exist on the hub."""
     if dns_label_problems(value, what=what):
         raise HubObjectNotFoundError(f"{what} {value!r} is not a DNS label, so it cannot exist")
-
-
-def _nodes(raw: JSON) -> list[NodeObservation]:
-    return [node_from(item) for item in list_items(raw)]
-
-
-def _agents(raw: JSON) -> list[AgentObservation]:
-    return [agent_from(item) for item in list_items(raw)]

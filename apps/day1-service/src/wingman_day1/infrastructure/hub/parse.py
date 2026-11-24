@@ -269,6 +269,11 @@ def agent_from(raw: JSON) -> AgentObservation:
     )
 
 
+def agents_from(raw: JSON) -> list[AgentObservation]:
+    """One page of an Agent list."""
+    return [agent_from(item) for item in list_items(raw)]
+
+
 def continue_token(raw: JSON) -> str | None:
     """A list's ``metadata.continue``: the next page's token, ``None`` on the last page."""
     token = _mapping(_mapping(raw).get("metadata")).get("continue")
@@ -308,6 +313,11 @@ def node_from(raw: JSON) -> NodeObservation:
         infra=INFRA_ROLE in labels,
         tainted=any(_mapping(taint).get("effect") in BLOCKING_TAINTS for taint in taints),
     )
+
+
+def nodes_from(raw: JSON) -> list[NodeObservation]:
+    """One page of a Node list."""
+    return [node_from(item) for item in list_items(raw)]
 
 
 def pods_per_node_from(raw: JSON) -> dict[str, int]:
