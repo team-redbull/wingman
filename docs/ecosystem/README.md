@@ -5,6 +5,23 @@ What we learned on 2026-11-07 when we re-read the platform the team built over t
 > **Day1 status on 2026-11-07: there is no Day1 (create-cluster) workflow yet. It is planned and in progress.** Nothing about it exists in code, queues or the orchestrator API. Only the design exists (see [Day1 workflow: planned](#day1-workflow-planned-not-built)).
 >
 > **Since then:** the day1 workflow exists as `provision-cluster`. Wingman's Create could start it behind a setting from 2026-11-12, and since 3.56.0 every create starts it: Wingman opens no create merge request of its own (ADR-0042). Wingman also starts `upgrade-cluster` (2026-11-13, ADR-0055) and other platform workflows, and reads server-scan and segments-manager for its own pages; an admin's top bar links to each one's own UI (2026-11-23). This page stays the 2026-11-07 picture; Wingman as it is today is [`../architecture.md`](../architecture.md).
+>
+> **Since 2026-11-24 Wingman is a team-redbull service like the others** ([Wingman's place in the platform](#wingmans-place-in-the-platform-2026-11-24), ADR-0070): it lives in `team-redbull/wingman`, and redbull-platform's ApplicationSet deploys it.
+
+## Wingman's place in the platform (2026-11-24)
+
+| | Wingman | The other team-redbull services |
+|---|---|---|
+| Code | `team-redbull/wingman` (public, full history from the old repository) | `team-redbull/<service>` |
+| Images | `ghcr.io/team-redbull/wingman-{day1,day2,web}`, public | `ghcr.io/team-redbull/<image>`, public (redbull-platform has no pull secret) |
+| Version | Wingman's own: every merge to `main`, from its commit subjects (ADR-0031) | The shared `ghcr-build-push.yml`'s per-chart `<chart>/vX.Y.Z`, or the project's own (server-scan) |
+| Chart in redbull-platform | `gitops/charts/wingman/`, written by Wingman's `platform` CI job on each release: the chart exactly, with the three images (`ghcr.io/team-redbull/wingman-<name>`) and `Chart.yaml` at the release | `gitops/charts/<service>/`, image keys bumped by CI (server-scan also syncs `templates/` and `files/`) |
+| A cluster's settings | `gitops/overrides/wingman.yaml`, by `valueFiles:` in `gitops/services/wingman/app.yaml`: Wingman's chart is shared by every deployment, so its `values.yaml` stays generic and is overwritten by each release | The chart copy's own `values.yaml` |
+| Secrets | An existing Secret (`secrets.existingSecret`), the OAuthClient made by hand: nothing secret in Git | An existing Secret per service (`server-scan-db`, `cluster-navigator`), Vault and ESO planned (`gitops/SECRETS.md`) |
+| Namespace | `wingman`, from the `namespaces` Helmfile release | The same release (server-scan makes its own) |
+| Deployed by | Argo CD's automated sync, wherever the ApplicationSet runs | The same |
+
+The air-gap runs its own Argo over its own mirror of redbull-platform and still installs Wingman by Helm from a mirrored release (`docs/upgrade/`).
 
 ## TL;DR
 

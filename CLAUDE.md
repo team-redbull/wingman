@@ -21,6 +21,9 @@ into the day1 values repo (`gitops-day1/platform-config`) or a team's day2 repo
 (Next.js 16), `apps/day1-service` and `apps/day2-service` (FastAPI),
 `packages/wingman-core` (the shared core), `deploy/helm/wingman/` (Helm),
 `dev/gitlab-fixtures` (production-shaped repo trees for tests and local GitLab).
+The repo is `team-redbull/wingman` (public; the old `LiadYahav/wingman` is
+not used), the images `ghcr.io/team-redbull/wingman-{day1,day2,web}`, and each
+release's chart goes to redbull-platform, whose Argo CD deploys it (ADR-0070).
 
 ## Standing project conventions — follow without being re-told
 
@@ -182,9 +185,12 @@ Then the step no command covers: re-read the docs your change made wrong.
   `JWT_SECRET_KEY`. `AdminUser` guards writes, `CurrentUser` reads.
 - Every merge to main is a release (ADR-0030, ADR-0031, `docs/ops/images.md`):
   CI computes `X.Y.Z` from the commit subjects, tags `v<X.Y.Z>` and pushes the
-  three images. Deploy `X.Y.Z`, never `latest` or a `sha-` tag; a manual
-  production build is of a release tag and named by its version. Only GitHub
-  can run the publish jobs.
+  three images, then its `platform` job writes the chart into
+  redbull-platform's `gitops/charts/wingman/` (a cluster's settings are that
+  repo's `gitops/overrides/wingman.yaml`, never the copy; no secret in either:
+  `secrets.existingSecret`). Deploy `X.Y.Z`, never `latest` or a `sha-` tag; a
+  manual production build is of a release tag and named by its version. Only
+  GitHub can run the publish jobs.
 
 ## Where to continue right now
 

@@ -44,7 +44,8 @@ counts real calls only, so a token revoked while nobody uses Wingman fires on
 the first request after it.
 
 1. Check the token in the `wingman-secrets` Secret (`GITLAB_TOKEN`, from the
-   Helm value `gitlab.accessToken`): has it expired or been revoked? GitLab shows its expiry under the owning
+   Helm value `gitlab.accessToken`), or in the Secret `secrets.existingSecret`
+   names: has it expired or been revoked? GitLab shows its expiry under the owning
    account's access tokens.
 2. Check the account is still a member of the day1 project and the specs
    project with at least Developer role (it pushes branches and opens merge
@@ -55,8 +56,11 @@ the first request after it.
    Wingman lists means the token itself, or a membership removed in the last
    `DAY2_CACHE_TTL_SECONDS`.
 3. Replace the token (`helm upgrade` with the new `gitlab.accessToken`: a
-   changed Secret restarts both services); the alert clears 10 minutes after
-   the last denied call.
+   changed Secret restarts both services; with `secrets.existingSecret`,
+   change its `GITLAB_TOKEN` key and run
+   `oc rollout restart deploy/wingman-day1 deploy/wingman-day2`, which the
+   chart cannot do for a Secret it does not render); the alert clears 10
+   minutes after the last denied call.
 
 ## WingmanGitLabUnavailable
 

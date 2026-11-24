@@ -255,7 +255,9 @@ decision gets an ADR (template in `docs/adr/README.md`).
 
 ## Deployment
 
-`deploy/helm/wingman/README.md` installs the chart; `docs/ops/images.md` builds and publishes the images.
+`deploy/helm/wingman/README.md` installs the chart; `docs/ops/images.md` builds and publishes the images
+(`ghcr.io/team-redbull/wingman-*`) and says how each release's chart reaches redbull-platform, whose
+Argo CD deploys it with that cluster's override file (ADR-0070).
 Every merge to main is a release, versioned from the commit subjects (ADR-0031). Deploy a
 release by its version, the same for every image, with `image.<component>.tag`
 (`image.day1.tag`, `image.day2.tag`, `image.web.tag`; for example `3.33.0`, never `latest`).
