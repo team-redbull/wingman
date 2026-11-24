@@ -1,39 +1,38 @@
-"""Fleet defaults: make one, adopting the clusters' own folders, and say what it reaches."""
+"""Fleet defaults: make one, edit its sync settings, and say what it reaches (ADR-0053)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from enum import Enum
 from typing import Final, Literal
 
 from wingman_core.domain.git import FileChange, RepoPath
+from wingman_day2.application.authoring.adoption import adopt
 from wingman_day2.application.authoring.plan import (
     SCOPE_LABELS,
     SCOPE_NOUNS,
-    Adoption,
     AuthoringPlan,
     Effect,
     fleet_apps,
-    key_changes,
 )
 from wingman_day2.application.authoring.writer import PlanWriter
 from wingman_day2.domain import layout
-from wingman_day2.domain.clusters import ALLOWED_ENVS, ClusterKind, DefaultsScope
-from wingman_day2.domain.deploy_config import SYNC_POLICY, leaf_application
+from wingman_day2.domain.clusters import ClusterKind, DefaultsScope
+from wingman_day2.domain.deploy_config import SYNC_POLICY, LeafApplication, leaf_application
 from wingman_day2.domain.errors import ChangeRefusedError, ChartAlreadyInstalledError
 from wingman_day2.domain.exclusions import set_excluded
 from wingman_day2.domain.findings import Rule, warning
 from wingman_day2.domain.merge import merge_values
-from wingman_day2.domain.platform import (
-    AppSource,
-    Destination,
-    PlannedApp,
-    TeamPlan,
-    scope_exclusions,
+from wingman_day2.domain.platform import PlannedApp, TeamPlan, scope_exclusions
+from wingman_day2.domain.sync_policy import (
+    AUTOMATED,
+    SYNC_OPTIONS,
+    SyncSettings,
+    policy_override,
+    sync_settings,
 )
-from wingman_day2.domain.sync_policy import SyncSettings, policy_override, sync_settings
-from wingman_day2.domain.yaml_text import dump_yaml
+from wingman_day2.domain.yaml_text import dump_yaml, edit_mapping_text, same_value
 from wingman_day2.domain.yaml_values import dump_values, parse_values
 
 
@@ -123,83 +122,52 @@ async def _drop_stale_entries(
     )
 
 
-async def adopt(
-    writer: PlanWriter, plan: AuthoringPlan, destination: Destination, fleet: RepoPath
-) -> Adoption:
-    """Move ``destination``'s own chart folder into the fleet default; compare before, after.
+async def plan_sync(
+    writer: PlanWriter,
+    plan: AuthoringPlan,
+    path: RepoPath,
+    sync: SyncSettings | None,
+    last_commit_id: str | None,
+) -> None:
+    """Set the fleet layer's sync settings in ``path``; ``None`` goes back to the team default's.
 
-    A non-empty ``values.yaml`` becomes ``values-<name>.yaml`` in ``fleet``,
-    byte for byte: refused when that name is an env (the env layer has that
-    file name) or the file exists already (another destination of that name).
+    The file is edited in place (comments and untouched lines kept), guarded by
+    ``last_commit_id``.
     """
-    ref = destination.ref
-    chart = plan.chart
-    team = plan.state.team
-    base = plan.state.repo.tree
-    own = layout.chart_dir(ref, chart)
-    values_path = own.child(layout.VALUES_FILE)
-    deploy_path = own.child(layout.deploy_config_name(chart))
-    files = base.files_under(own)
-    others = [
-        p for p in files if p not in (values_path, deploy_path) and not p.name.startswith(".")
-    ]
-    if others:
+    file = await writer.read(plan, path) if plan.state.repo.tree.is_file(path) else None
+    old_text = file.content if file else ""
+    doc, problem = parse_values(old_text, path=str(path))
+    if problem is not None:
         raise ChangeRefusedError(
-            f"{own}/ holds {others[0]} besides its values and deploy config; move or delete it "
-            f"by hand first",
-            details={
-                "rule": "adoption-blocked",
-                "cluster": ref.id,
-                "files": [str(p) for p in others],
-            },
+            f"{problem.message} ({path}): fix it by hand first",
+            details={"rule": str(Rule.YAML_INVALID), "path": str(path)},
         )
-    app = PlannedApp(team.name, ref, chart, AppSource.CLUSTER, destination.ocp_version)
-    deploy_before, values_before, _ = await writer.app_state(plan, app, after=False)
-    moved: list[tuple[RepoPath, RepoPath]] = []
-    deleted: list[RepoPath] = []
-    tweak = fleet.child(f"values-{ref.exclusion_key}.yaml")
-    for path in files:
-        file = await writer.read(plan, path)
-        text = file.content if file else ""
-        if path == values_path and text.strip() not in ("", "{}"):
-            _, problem = parse_values(text, path=str(path))
-            blocked = (
-                problem.message
-                if problem is not None
-                else f"{tweak.name} would be the {ref.exclusion_key} env layer"
-                if ref.exclusion_key in ALLOWED_ENVS
-                else f"{tweak} exists already (another destination named {ref.exclusion_key})"
-                if base.is_file(tweak) or plan.pending(tweak) is not None
-                else None
-            )
-            if blocked is not None:
-                raise ChangeRefusedError(
-                    f"{path} cannot move into the default: {blocked}; move it by hand first",
-                    details={"rule": "adoption-blocked", "cluster": ref.id, "path": str(path)},
-                )
-            plan.changes.append(FileChange.create(tweak, text))
-            moved.append((path, tweak))
-        else:
-            deleted.append(path)
-        plan.previous[str(path)] = text
-        plan.changes.append(
-            FileChange.delete(path, last_commit_id=file.last_commit_id if file else None)
-        )
-    gitkeep = None
-    registration = layout.registration_dir(ref)
-    if registration is not None and not plan.tree.is_dir(registration):
-        gitkeep = registration.child(layout.GITKEEP)
-        plan.changes.append(FileChange.create(gitkeep, ""))
-    after_app = PlannedApp(team.name, ref, chart, AppSource.FLEET_DEFAULT, destination.ocp_version)
-    deploy_after, values_after, _ = await writer.app_state(plan, after_app, after=True)
-    changes = [
-        *key_changes("deploy", deploy_before, deploy_after),
-        *key_changes("values", values_before, values_after),
-    ]
-    return Adoption(ref, tuple(moved), tuple(deleted), gitkeep, tuple(changes))
+    policy = await _fleet_policy(writer, plan, doc.get(SYNC_POLICY), sync)
+    new = (
+        {**doc, SYNC_POLICY: policy}
+        if policy
+        else {k: v for k, v in doc.items() if k != SYNC_POLICY}
+    )
+    if not same_value(new, doc):
+        text = edit_mapping_text(old_text, new, path=str(path)) if file else dump_yaml(new)
+        writer.write(plan, path, text, file, last_commit_id)
 
 
-async def reach(
+async def _fleet_policy(
+    writer: PlanWriter, plan: AuthoringPlan, current: object, sync: SyncSettings | None
+) -> dict[str, object]:
+    """The fleet layer's ``syncPolicy`` for ``sync``; for ``None``, ``current`` without them."""
+    if sync is None:
+        policy = dict(current) if isinstance(current, Mapping) else {}
+        policy.pop(AUTOMATED, None)
+        policy.pop(SYNC_OPTIONS, None)
+        return policy
+    team_deploy = layout.operators_dir(plan.chart).child(layout.deploy_config_name(plan.chart))
+    team_doc = await writer.doc(plan, team_deploy, after=False)
+    return policy_override([team_doc], sync.checked(), current)
+
+
+async def fleet_reach(
     writer: PlanWriter,
     plan: AuthoringPlan,
     after: TeamPlan,
@@ -210,23 +178,60 @@ async def reach(
     """Fill ``plan.reach`` with the default's destinations, and say what the merge does."""
     apps = fleet_apps(after, plan.chart, scope)
     plan.reach = [a.ref for a in apps]
-    label = SCOPE_LABELS[scope]
-    project = plan.state.team.project.path_with_namespace
     if not apps:
         plan.notes.append(
-            f"{project} registers no {SCOPE_NOUNS[scope]} yet: the default deploys to each "
-            "one once the team has a folder for it."
+            f"{plan.state.team.project.path_with_namespace} registers no {SCOPE_NOUNS[scope]} "
+            "yet: the default deploys to each one once the team has a folder for it."
         )
         return
-    leaves = []
-    for app in apps:
-        docs = [
-            (str(x.path), await writer.doc(plan, x.path, after=True))
-            for x in app.deploy_config_layers
-        ]
-        merged = merge_values({}, docs).values
-        leaves.append(leaf_application(merged, team=plan.team, chart=plan.chart, ref=app.ref))
-    auto = sum(1 for leaf in leaves if leaf.auto_sync)
+    leaves = [await _leaf(writer, plan, app) for app in apps]
+    plan.notes.append(_merge_note(plan, scope, apps, leaves, new_default=new_default))
+    if plan.excluded:
+        plan.notes.append(
+            f"{layout.exclusions_file(scope)} keeps it off "
+            f"{', '.join(r.name for r in plan.excluded)}."
+        )
+    if plan.adopted:
+        removed = any(i.effect is Effect.REMOVED for i in plan.impact)
+        plan.notes.append(
+            f"{len(plan.adopted)} of them had {plan.chart} in their own folder: those folders "
+            "move into the default in this MR (a non-empty values.yaml becomes "
+            f"defaults/{scope}/{plan.chart}/values-<cluster>.yaml), so their Applications keep "
+            "their names and ArgoCD neither deletes nor re-creates them."
+            + ("" if removed else " Nothing is orphaned.")
+        )
+    if len({sync_settings(leaf.sync_policy) for leaf in leaves}) > 1:
+        plan.findings.append(
+            warning(
+                Rule.SYNC_DIFFERS,
+                f"{plan.chart}'s sync options differ between destinations of "
+                f"{SCOPE_LABELS[scope]}: an OCP-version pin or a cluster's own deploy config sets "
+                "them for some",
+                team=plan.team,
+                chart=plan.chart,
+            )
+        )
+
+
+async def _leaf(writer: PlanWriter, plan: AuthoringPlan, app: PlannedApp) -> LeafApplication:
+    """The leaf Application ``app`` generates after the MR."""
+    docs = [
+        (str(x.path), await writer.doc(plan, x.path, after=True)) for x in app.deploy_config_layers
+    ]
+    merged = merge_values({}, docs).values
+    return leaf_application(merged, team=plan.team, chart=plan.chart, ref=app.ref)
+
+
+def _merge_note(
+    plan: AuthoringPlan,
+    scope: DefaultsScope,
+    apps: Sequence[PlannedApp],
+    leaves: Sequence[LeafApplication],
+    *,
+    new_default: bool,
+) -> str:
+    """What ArgoCD does once the MR is merged: which Application, where, and how it syncs."""
+    project = plan.state.team.project.path_with_namespace
     verb = "generates" if new_default else "updates"
     names = sorted({leaf.name for leaf in leaves})
     leaf_name = names[0] if len(names) == 1 else f"{plan.team}-<cluster>-{plan.chart}-deploy"
@@ -236,39 +241,16 @@ async def reach(
         else f"the {len(apps)} {SCOPE_NOUNS[scope]} {project} registers "
         f"({', '.join(a.ref.name for a in apps)}), on each one's ArgoCD"
     )
-    plan.notes.append(
-        f"After the merge, ArgoCD {verb} {leaf_name} on {where}. "
-        + (
-            "They sync by themselves (auto-sync)."
-            if auto == len(leaves)
-            else "They are manual-sync: nothing deploys until someone syncs each one in "
-            "ArgoCD (Wingman has no ArgoCD access yet)."
-            if auto == 0
-            else f"{auto} of them sync by themselves; the others wait for a manual sync."
+    sync = _sync_sentence(sum(1 for leaf in leaves if leaf.auto_sync), len(leaves))
+    return f"After the merge, ArgoCD {verb} {leaf_name} on {where}. {sync}"
+
+
+def _sync_sentence(auto: int, total: int) -> str:
+    if auto == total:
+        return "They sync by themselves (auto-sync)."
+    if auto == 0:
+        return (
+            "They are manual-sync: nothing deploys until someone syncs each one in ArgoCD "
+            "(Wingman has no ArgoCD access yet)."
         )
-    )
-    if plan.excluded:
-        plan.notes.append(
-            f"{layout.exclusions_file(scope)} keeps it off "
-            f"{', '.join(r.name for r in plan.excluded)}."
-        )
-    removed = [i for i in plan.impact if i.effect is Effect.REMOVED]
-    if plan.adopted:
-        plan.notes.append(
-            f"{len(plan.adopted)} of them had {plan.chart} in their own folder: those folders "
-            "move into the default in this MR (a non-empty values.yaml becomes "
-            f"defaults/{scope}/{plan.chart}/values-<cluster>.yaml), so their Applications keep "
-            "their names and ArgoCD neither deletes nor re-creates them."
-            + ("" if removed else " Nothing is orphaned.")
-        )
-    settings = {sync_settings(leaf.sync_policy) for leaf in leaves}
-    if len(settings) > 1:
-        plan.findings.append(
-            warning(
-                Rule.SYNC_DIFFERS,
-                f"{plan.chart}'s sync options differ between destinations of {label}: an "
-                "OCP-version pin or a cluster's own deploy config sets them for some",
-                team=plan.team,
-                chart=plan.chart,
-            )
-        )
+    return f"{auto} of them sync by themselves; the others wait for a manual sync."

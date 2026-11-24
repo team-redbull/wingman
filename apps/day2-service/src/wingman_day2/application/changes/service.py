@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from collections.abc import Mapping, Sequence
 
-from wingman_core.domain.errors import AmbiguousWriteError, GitError, GitUnavailableError
-from wingman_core.domain.git import FileChange
+from wingman_core.domain.errors import GitError
 from wingman_core.domain.mr_conventions import Verb
 from wingman_core.domain.users import User
 from wingman_core.ports.clock import Clock
@@ -15,7 +12,7 @@ from wingman_core.ports.gitlab import GitLabPort
 from wingman_day2.application.access import AccessService
 from wingman_day2.application.apps import load_deploy
 from wingman_day2.application.changes.install import BulkResult, InstallSpec, plan_install
-from wingman_day2.application.changes.mces import MAX_INSTALL_CONCURRENCY, MceInstall, MceInstalls
+from wingman_day2.application.changes.mces import MceInstalls, mce_ref, open_each, plan_on_mce
 from wingman_day2.application.changes.opening import open_change
 from wingman_day2.application.changes.plan import (
     ChangePlan,
@@ -23,24 +20,19 @@ from wingman_day2.application.changes.plan import (
     check_chart_name,
     installed_app,
     require_writable,
-    sync_note,
     validate,
 )
+from wingman_day2.application.changes.remove import plan_remove, refuse_fleet_default
 from wingman_day2.application.changes.update import plan_pin, plan_values
 from wingman_day2.application.topology import TopologyService
 from wingman_day2.domain import layout
-from wingman_day2.domain.clusters import ClusterKind, ClusterRef
 from wingman_day2.domain.errors import (
     ChangeRefusedError,
     Day2Error,
     UnknownChartError,
     UnknownTeamError,
 )
-from wingman_day2.domain.platform import AppSource
 from wingman_day2.ports import SigsRepository
-
-logger = logging.getLogger(__package__)
-"""The area's logger, ``wingman_day2.application.changes``, whichever module of it logs."""
 
 
 class ChangeService:
@@ -135,7 +127,7 @@ class ChangeService:
             raise failed[0][1]
         return BulkResult(tuple(results), tuple(failed))
 
-    async def install_on_mces(  # noqa: C901 - baseline: plan, check and open per MCE
+    async def install_on_mces(
         self,
         team: str,
         chart: str,
@@ -146,14 +138,7 @@ class ChangeService:
         dry_run: bool = False,
         message: str | None = None,
     ) -> MceInstalls:
-        """Install ``chart`` in each chosen MCE hub's own folder: one MR per MCE.
-
-        Each MCE is planned and checked on its own (an MCE default of the chart
-        is refused, the XOR rule; so is one with the chart in its folder
-        already, or one the platform renders nothing for). The rest are opened
-        a few at a time; a write that fails fails that MCE only, and once
-        GitLab does not answer, no more are started. Nothing is retried.
-        """
+        """Install ``chart`` in each chosen MCE hub's own folder: one MR per MCE (``mces``)."""
         topology = await self._topology.load()
         state = topology.team(team)
         await self._access.require_write(state.team)
@@ -166,82 +151,16 @@ class ChangeService:
         keys = list(dict.fromkeys(clusters))
         if not keys:
             raise ChangeRefusedError("choose at least one MCE", details={"rule": "no-mce"})
-        planned: list[tuple[MceInstall, ChangePlan | None]] = []
-        for key in keys:
-            try:
-                ref = ClusterRef.parse(key)
-            except Day2Error as exc:
-                raise ChangeRefusedError(
-                    f"{key!r} is not an MCE id (mce:<site>:<env>:<mce>)",
-                    details={"rule": "not-an-mce", "cluster": key},
-                ) from exc
-            if ref.kind is not ClusterKind.MCE:
-                raise ChangeRefusedError(
-                    f"{key} is not an MCE: deploy on specific MCEs installs on MCE hubs only",
-                    details={"rule": "not-an-mce", "cluster": key},
-                )
-            try:
-                summary = topology.cluster(ref)
-                require_writable(topology, summary)
-                plan = ChangePlan(state, summary)
-                await plan_install(
-                    self._sigs, plan, InstallSpec(team, chart, values=dict(values or {}))
-                )
-                validate(topology, plan)
-            except Day2Error as exc:
-                planned.append((MceInstall(ref, refused=exc), None))
-                continue
-            notes = (*plan.notes, *(sync_note(leaf) for leaf in plan.leaves))
-            install = MceInstall(ref, tuple(plan.changes), notes, tuple(plan.findings))
-            planned.append((install, plan))
+        spec = InstallSpec(team, chart, values=dict(values or {}))
+        planned = [await plan_on_mce(self._sigs, topology, state, mce_ref(k), spec) for k in keys]
         if dry_run:
-            return MceInstalls(team, chart, tuple(i for i, _ in planned))
-        limit = asyncio.Semaphore(MAX_INSTALL_CONCURRENCY)
-        unanswered: list[str] = []
+            return MceInstalls(team, chart, tuple(install for install, _ in planned))
 
-        async def one(install: MceInstall, plan: ChangePlan | None) -> MceInstall:
-            if plan is None:
-                return install
-            async with limit:
-                if unanswered:
-                    return MceInstall(
-                        install.cluster,
-                        install.changes,
-                        install.notes,
-                        install.findings,
-                        failed=GitUnavailableError(
-                            f"not sent: GitLab did not answer for {unanswered[0]}, so no more "
-                            "merge requests were started; deploy on this MCE again"
-                        ),
-                    )
-                try:
-                    result = await self._open(plan, user, Verb.INSTALL, message)
-                except GitError as exc:
-                    if isinstance(exc, GitUnavailableError | AmbiguousWriteError):
-                        unanswered.append(install.cluster.name)
-                    logger.warning(
-                        "install merge request not opened: user=%s team=%s chart=%s cluster=%s "
-                        "error=%s",
-                        user.username,
-                        team,
-                        chart,
-                        install.cluster.id,
-                        type(exc).__name__,
-                        extra={"event": "mce_install_not_opened"},
-                    )
-                    return MceInstall(
-                        install.cluster,
-                        install.changes,
-                        install.notes,
-                        install.findings,
-                        failed=exc,
-                    )
-            return MceInstall(
-                install.cluster, install.changes, install.notes, install.findings, result=result
-            )
+        async def open_plan(plan: ChangePlan) -> ChangeResult:
+            return await self._open(plan, user, Verb.INSTALL, message)
 
-        done = await asyncio.gather(*(one(i, p) for i, p in planned))
-        return MceInstalls(team, chart, tuple(done))
+        opened = await open_each(planned, open_plan, user=user, team=team, chart=chart)
+        return MceInstalls(team, chart, opened)
 
     # ── update ──────────────────────────────────────────────────────────────
 
@@ -303,47 +222,8 @@ class ChangeService:
         state = topology.team(team)
         await self._access.require_write(state.team)
         app = installed_app(state, summary, chart)
-        if app.source is AppSource.FLEET_DEFAULT:
-            scope = app.ref.defaults_scope
-            raise ChangeRefusedError(
-                f"{chart} reaches {summary.ref.name} as a fleet default of {team} ({app.folder}/): "
-                f"it is on every destination of {scope}, and is not removed from one. Its values "
-                "for this cluster are set here, or on the add-on's page on Addons "
-                f"({team}/{chart}). An add-on wanted on some MCEs only is not a default: it is "
-                "deployed on those MCEs (ADR-0053).",
-                details={
-                    "rule": "fleet-default-remove",
-                    "path": str(app.folder),
-                    "addon": f"/addons/{team}/{chart}",
-                    # 3.12.0's key; that page now redirects to the add-on's.
-                    "operator": f"/teams/{team}/operators/{chart}",
-                },
-            )
-        deploy = await load_deploy(self._sigs, state.team, state.repo.tree, app)
-        plan = ChangePlan(state, summary, charts=[chart], leaves=[deploy.leaf])
-        values_path = app.folder.child(layout.VALUES_FILE)
-        for path in state.repo.tree.files_under(app.folder):
-            file = await self._sigs.read(state.team, path)
-            guard = last_commit_id if (last_commit_id and path == values_path) else None
-            plan.changes.append(
-                FileChange.delete(
-                    path, last_commit_id=guard or (file.last_commit_id if file else None)
-                )
-            )
-        registration = layout.registration_dir(summary.ref)
-        if registration is not None and not plan.tree.is_dir(registration):
-            keep = registration.child(layout.GITKEEP)
-            plan.changes.append(FileChange.create(keep, ""))
-            plan.notes.append(
-                f"{chart} was the last chart folder of {summary.ref.name} in {team}: {keep} keeps "
-                f"the cluster registered, so {team}'s fleet defaults on it stay managed."
-            )
-        plan.notes.append(
-            f"Deleting {app.folder}/ deletes the ArgoCD Application {deploy.leaf.name}, but ArgoCD "
-            f"orphans the workload: {chart} keeps running on {summary.ref.name}. A full teardown "
-            f"needs `argocd app delete {deploy.leaf.name} --cascade` on {deploy.leaf.argo}'s "
-            "ArgoCD after the merge (runbook R8). Wingman has no ArgoCD access yet."
-        )
+        refuse_fleet_default(app, summary)
+        plan = await plan_remove(self._sigs, state, summary, app, last_commit_id)
         validate(topology, plan)
         return await self._open(plan, user, Verb.REMOVE, message, sync_notes=False)
 

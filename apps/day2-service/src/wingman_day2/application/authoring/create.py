@@ -81,8 +81,21 @@ def check_ignore_differences(value: object) -> None:
         )
 
 
-def sync_words(sync: SyncSettings) -> str:
-    """``sync`` in words: ``auto-sync with prune and ...``, or ``manual sync and ...``."""
+def catalog_note(plan: AuthoringPlan, sync: SyncSettings) -> str:
+    """What the merge puts in the team's catalog, and what it changes on clusters, if anything."""
+    project = plan.state.team.project.path_with_namespace
+    return (
+        f"After the merge, {plan.chart} is in {project}'s catalog (operators/{plan.chart}/), "
+        f"with {_sync_words(sync)}. "
+        + (
+            _existing_note(plan)
+            or "Nothing is deployed by the catalog itself: install it on a cluster from "
+            "Wingman, or make it a fleet default."
+        )
+    )
+
+
+def _sync_words(sync: SyncSettings) -> str:
     mode = (
         "auto-sync"
         + (" with prune" if sync.prune else "")
@@ -94,7 +107,7 @@ def sync_words(sync: SyncSettings) -> str:
     return f"{mode} and {options}"
 
 
-def existing_note(plan: AuthoringPlan) -> str | None:
+def _existing_note(plan: AuthoringPlan) -> str | None:
     """The note on destinations that had the chart before and whose deploy config changes."""
     changed = [i for i in plan.impact if i.effect is Effect.CHANGED]
     if not changed:

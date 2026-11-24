@@ -26,8 +26,8 @@ Every write is refused first for a team that has not given Wingman write
 access to its project (ADR-0043).
 
 ``service.ChangeService`` is what the API calls. A use case's rules are in its
-own module (``install``, ``mces``, ``update``); ``plan`` holds what they share
-and ``opening`` opens the MR.
+own module (``install``, ``mces``, ``update``, ``remove``); ``plan`` holds what
+they share and ``opening`` opens the MR.
 """
 
 from wingman_day2.application.changes.install import BulkResult, InstallSpec
