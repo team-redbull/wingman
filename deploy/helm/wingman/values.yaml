@@ -11,6 +11,40 @@
 #   3. auth.*              → your OpenShift OAuth settings
 #   4. tls.caBundle        → your internal CA certificate (PEM)
 #   5. route.host          → your actual OpenShift cluster domain
+#
+# SECRETS
+# ───────
+# By default the chart renders the Secret wingman-secrets from five values
+# (gitlab.accessToken, gitlab.webhookSecret, auth.oauthClientSecret,
+# auth.jwtSecret, devAuth.secret) and the OAuthClient with its secret inline:
+# pass them with --set or a values file kept out of Git.
+# From a Git repository, which must hold no secret (redbull-platform, ADR-0070),
+# set secrets.existingSecret and auth.oauthClient.create: false instead. The
+# chart then renders neither: day1 and day2 read the named Secret, whose keys
+# are the variables themselves, and the render fails while any of the five
+# values is set. Create both once, in Wingman's namespace, BEFORE the first sync:
+#
+#   oauth_secret=$(openssl rand -hex 32)
+#   oc create secret generic wingman-credentials -n wingman \
+#     --from-literal=GITLAB_TOKEN="<the GitLab token>" \
+#     --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+#     --from-literal=OPENSHIFT_OAUTH_CLIENT_SECRET="$oauth_secret"
+#   # Optional keys: GITLAB_WEBHOOK_SECRET (without it day1's GitLab webhook
+#   # answers 404) and DEV_AUTH_SECRET (dev login only, never in production).
+#   oc apply -f - <<EOF
+#   apiVersion: oauth.openshift.io/v1
+#   kind: OAuthClient
+#   metadata:
+#     name: wingman-app                  # auth.oauthClientId
+#   secret: $oauth_secret                # the Secret's OPENSHIFT_OAUTH_CLIENT_SECRET
+#   grantMethod: auto
+#   redirectURIs:
+#     - https://<route.host>/login       # or auth.oauthRedirectUri
+#   EOF
+#
+# day1 and day2 read the Secret at start: after changing it, run
+# oc rollout restart deploy/wingman-day1 deploy/wingman-day2 -n wingman.
+# A new JWT_SECRET_KEY signs everyone out.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Container images ───────────────────────────────────────────────────────────
@@ -177,6 +211,13 @@ auth:
   # OAuthClient name — must match the CR deployed by this chart
   oauthClientId: "wingman-app"
 
+  # The OAuthClient the chart renders with openshiftRoute.enabled and without
+  # devAuth.enabled, its secret inline from oauthClientSecret. false: the chart
+  # renders none, and it is created once by hand (SECRETS at the top), as
+  # secrets.existingSecret needs: the secret is then not in the values.
+  oauthClient:
+    create: true
+
   # SSL verification for OpenShift OAuth/API calls
   # "true" → verify using system CAs, "false" → skip (internal self-signed certs), or CA bundle path
   # (every sslVerify here takes true/false unquoted too: wingman.tlsVerify renders them alike)
@@ -208,6 +249,17 @@ auth:
 devAuth:
   enabled: false
   secret: ""  # generate with: openssl rand -hex 16
+
+# ── Secrets (SECRETS at the top) ──────────────────────────────────────────────
+secrets:
+  # Empty: the chart renders the Secret wingman-secrets from the values above.
+  # A name: the chart renders no Secret and day1 and day2 read this existing
+  # one (keys GITLAB_TOKEN, JWT_SECRET_KEY, OPENSHIFT_OAUTH_CLIENT_SECRET, and
+  # optionally GITLAB_WEBHOOK_SECRET and DEV_AUTH_SECRET); gitlab.accessToken,
+  # gitlab.webhookSecret, auth.oauthClientSecret, auth.jwtSecret and
+  # devAuth.secret must then be empty, and auth.oauthClient.create false
+  # (unless devAuth.enabled or openshiftRoute.enabled false: no OAuthClient).
+  existingSecret: ""
 
 # ── Routing ────────────────────────────────────────────────────────────────────
 route:

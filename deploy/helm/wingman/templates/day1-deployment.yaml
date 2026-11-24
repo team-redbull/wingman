@@ -44,8 +44,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: wingman-config
+            {{- /* The chart's wingman-secrets, or secrets.existingSecret (ADR-0070) */}}
             - secretRef:
-                name: wingman-secrets
+                name: {{ include "wingman.secretName" . }}
           {{- if and .Values.serverScan .Values.serverScan.url .Values.serverScan.tokenSecret .Values.serverScan.tokenSecret.name }}
           env:
             # server-scan's viewer token, from an existing Secret (never from values)
