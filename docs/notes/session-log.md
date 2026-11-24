@@ -4,6 +4,60 @@ Newest first. Each entry is the "Where to continue right now" section of
 `CLAUDE.md` as it stood when the next unit of work started. Together with
 `git log` and the ADRs each entry names, this is the record of the work.
 
+**2026-11-24 — 3.58.0: a viewer reads no infrastructure (ADR-0068).**
+- **The rules, in day1 and day2** (ADR-0068 §1): a list leaves out what is
+  about the infrastructure, one such item is a missing one (404), every
+  field that names it is `null` (`ADMIN_ONLY` in the response models,
+  `wingman_core.web.viewer.for_viewer`), free text has every infrastructure
+  name the service knows as `[hidden]` (`wingman_core.domain.redaction`),
+  a diff is a tenant's file alone, and a viewer's cluster is found by its
+  name (`site`/`mce`, day2's id, are an admin's). Admins are unchanged.
+- **A tenant's page**: its site (it is in the name), never its MCE; its own
+  file, NodePools and InfraEnv names stay; the network card is the file's
+  VLAN and segment (no segments-manager read); a failed live-status read
+  says only that it failed. The name suggestion is an admin's.
+- **day1** (`api/v1/visible.py`: `cluster_ref`, `shown`, `seen_changes`,
+  `seen_diffs`): live status and bulk status by name, `mce` optional;
+  approvals and audit the flavors' and tenants' clusters'; a viewer's
+  commits from each Customer MCE's `hostedClusters/` history.
+  `tests/api/test_viewer_reads_api.py` crawls every viewer route; a new one
+  must join its list.
+- **day2** (`api/v1/visible.py`'s `View`, `domain/visibility.py`'s `Sight`):
+  tenants' hosted clusters only, `id` the bare name, `mce`/`argo`/`gitlab_url`
+  `null`, tenant paths from the cluster on; approvals, audit, lints, fleet
+  defaults and add-on pages about tenants only; the double resolve fixed;
+  `addon-template` an admin's. Its crawl is `tests/api/test_viewer_reads_api.py`.
+- **web**: links and reads by name for a viewer (no `?mce=`, old links
+  too), nothing drawn that is `null`, the Documentation's infrastructure
+  sections an admin's, and the query cache one user's (`lib/query-cache.ts`).
+
+**Next:**
+- Day1's drift reads day2 as a viewer (`system:wingman-day1`): a tenant
+  name two MCEs share is now ambiguous there (its add-ons read as unknown);
+  an admin session would narrow it by `mce`. The team's call.
+- The Documentation's general sections still say what an MCE or the hub is
+  (no deployment's names); rewriting them per audience is left.
+- An approval rollout's counts still count KV clusters; no list names one.
+- The seed names don't match yet: create-vm finds a seed folder only as
+  `ocp4-seed-<site>-<zone>`; the convention says
+  `ocp4-<lc>-seed-<site>-<zone>-<id>` (workflows PR #26:
+  `ocp4-<lc>-seed-<site>-<id>`). Wingman reads all three as seeds; the team
+  picks one before the first seed folder is merged.
+- The readiness review's items 3 to 14 (`docs/ideas/kubevirt-seed-kv-readiness.md`).
+- When herzi's retire-used-servers release runs on every MCE: step 6 of
+  `docs/upgrade/3.54-to-3.55.md`, then each cluster's merge request.
+- The air-gap: `docs/upgrade/3.52-to-3.53.md` on to 3.56's guide, then
+  3.57.x and 3.58.0, generic (viewers lose Inventory Management, then every
+  infrastructure name).
+- cluster-navigator's data on the cluster page and per MCE
+  (`docs/ideas/single-pane.md` workstream 5).
+- Flavors v2's "Left for later"; tuning: a lock per pool.
+- Code organisation (the user's sequence): step 1, the version helper, is
+  done (3.58.1); next is step 2 of `docs/ideas/code-organisation.md`. 23
+  files left in the size baseline.
+- The team's questions: herzi, RBAC, a shared Git store, provision-cluster's
+  24 characters.
+
 **2026-11-24 — 3.55.0: Wingman follows herzi's used Agents and marks.**
 - **herzi** (read 2026-11-23, every branch and PR): `main` `0ef4d2a`
   (v1.2.1) is add-only and blocks the pool of any NodePool with a
