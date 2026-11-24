@@ -92,6 +92,27 @@ ServiceAccount name
 {{- end }}
 
 {{/*
+The Secret day1 and day2 load with envFrom: secrets.existingSecret when set
+(the chart then renders none, ADR-0070), else the chart's own wingman-secrets.
+Values kept from a release before 3.62 have no secrets map: the chart's own.
+*/}}
+{{- define "wingman.existingSecret" -}}
+{{- dig "existingSecret" "" (.Values.secrets | default dict) -}}
+{{- end }}
+
+{{- define "wingman.secretName" -}}
+{{- include "wingman.existingSecret" . | default "wingman-secrets" -}}
+{{- end }}
+
+{{/*
+True when the chart renders the OAuthClient: on OpenShift, without dev login,
+unless auth.oauthClient.create is false (it is then created by hand).
+*/}}
+{{- define "wingman.rendersOAuthClient" -}}
+{{- if and .Values.openshiftRoute.enabled (not .Values.devAuth.enabled) (dig "oauthClient" "create" true .Values.auth) -}}true{{- end }}
+{{- end }}
+
+{{/*
 OAuth redirect URI — use explicit value or derive from route.host
 */}}
 {{- define "wingman.oauthRedirectUri" -}}

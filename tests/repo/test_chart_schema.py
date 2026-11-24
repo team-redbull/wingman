@@ -41,7 +41,8 @@ DEFAULT_FIXTURE = CHART / "ci/default-values.yaml"
 OBJECTS = [
     "",
     *("image", "image.day1", "image.nginx", "gitlab", "day1", "day1.upgrades", "day1.addServers"),
-    *("day2", "auth", "devAuth", "route", "openshiftRoute", "openshiftRoute.tls", "ingress", "tls"),
+    *("day2", "auth", "auth.oauthClient", "devAuth", "secrets", "route", "openshiftRoute"),
+    *("openshiftRoute.tls", "ingress", "tls"),
     *("serviceAccount", "resources", "resources.web", "resources.web.limits", "replicaCount"),
     *("clusterStatus", "serverScan", "serverScan.tokenSecret", "workflows", "segmentsManager"),
     *("quickLinks", "monitoring", "monitoring.serviceMonitor", "monitoring.prometheusRule"),
@@ -56,6 +57,8 @@ WRONG: list[tuple[dict[str, Any], str, str]] = [
     ({"workflows": {"sslVerify": ""}}, "/workflows/sslVerify", "minLength"),
     # tested with `if`: the string "false" is true there
     ({"devAuth": {"enabled": "false"}}, "/devAuth/enabled", "boolean"),
+    ({"auth": {"oauthClient": {"create": "false"}}}, "/auth/oauthClient/create", "boolean"),
+    ({"secrets": {"existingSecret": "Wingman_Credentials"}}, "/secrets/existingSecret", "pattern"),
     ({"environment": "staging"}, "/environment", "one of"),
     (
         {"openshiftRoute": {"tls": {"termination": "none"}}},

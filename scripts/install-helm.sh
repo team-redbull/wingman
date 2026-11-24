@@ -2,7 +2,8 @@
 # Installs the pinned helm (linux-amd64, CI's runners) into /usr/local/bin,
 # verifying the download against the checksum helm publishes, as herzi's CI
 # does. CI's `chart` job needs it for lint and template, the `python` job for
-# day2's oracle test, which renders the platform charts as render_chain.py does.
+# day2's oracle test, which renders the platform charts as render_chain.py does,
+# and the `platform` job to render redbull-platform's copy of the chart (ADR-0070).
 #
 #   scripts/install-helm.sh
 #

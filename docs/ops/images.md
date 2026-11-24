@@ -43,6 +43,34 @@ The build arguments `VERSION` (the release, `X.Y.Z`; `dev` by default) and
 `COMMIT` reach `wingman_build_info` (ADR-0010) and the labels. No file holds
 the version: CI computes it and passes it in.
 
+## The chart in redbull-platform
+
+After `publish`, the `platform` job writes the release's chart into
+team-redbull/redbull-platform, whose ApplicationSet deploys every team-redbull
+service with automated sync, so each release deploys itself wherever that
+ApplicationSet runs (ADR-0070). `scripts/platform_chart.py write` makes
+`gitops/charts/wingman/` `deploy/helm/wingman/` exactly, a removed file
+removed, with six `values.yaml` lines and `Chart.yaml` changed: each Wingman
+image's `repository` (`ghcr.io/<owner>/wingman-<name>`) and `tag` (`X.Y.Z`),
+`version` and `appVersion` (`X.Y.Z`). `image.registry` stays empty: it would
+prefix nginx's Red Hat image too. The job renders the copy with the cluster's
+own `gitops/overrides/wingman.yaml` (`helm lint --strict`, `helm template`, and
+`platform_chart.py images`, which refuses a render that does not pull the three
+images from `ghcr.io/<owner>` at the release, or pulls anything else from
+there), then commits `chore(wingman): release X.Y.Z` and pushes
+to its `main`, rebasing and retrying when another service pushed first. Nothing
+changed (a re-run) is no commit; a copy of a newer release is left as it is.
+
+The job writes with the organisation secret `REDBULL_WRITE_TOKEN`, as every
+team-redbull service's CI does; it never prints it or writes it to disk. When
+the secret does not reach this repository, or redbull-platform has no
+`gitops/services/wingman/app.yaml` and override file, the job fails with one
+error saying so. Nothing needs the job, so the release (tag, images, notes) is
+complete either way: fix the cause and re-run the job. The copy's `values.yaml`
+is Wingman's generic defaults: a cluster's settings, and only them, are the
+hand-kept override file, which no release touches, and it holds no secret
+(`secrets.existingSecret`, the chart README's "From a GitOps repository").
+
 ## Building locally
 
 A development build is named by its commit; it reports version `dev`:

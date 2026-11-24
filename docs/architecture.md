@@ -40,7 +40,10 @@ day2 calls nothing but GitLab. Health (`/health/live`, `/health/ready`) and
 are reachable inside the cluster only (ADR-0010, ADR-0054). The chart
 (`deploy/helm/wingman/`) also renders the OAuth client and the Quick Links
 ConfigMap, mounts the MCE tokens Secret into day1, and, off by default, renders
-a ServiceMonitor, alerts and a Grafana dashboard (`docs/ops/metrics.md`).
+a ServiceMonitor, alerts and a Grafana dashboard (`docs/ops/metrics.md`). It is
+installed by Helm, or deployed by redbull-platform's Argo CD from the copy each
+release writes there, its secrets then in an existing Secret
+(`secrets.existingSecret`) and the OAuth client made by hand (ADR-0070).
 
 ## The systems around Wingman
 

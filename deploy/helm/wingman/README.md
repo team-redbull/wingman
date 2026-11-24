@@ -4,8 +4,8 @@ Helm chart for deploying the Wingman platform on OpenShift (or, for local use, K
 
 ## Prerequisites
 
-- OpenShift 4.12+ (the chart creates a Route and an `OAuthClient`), or Kubernetes 1.24+ with an
-  ingress controller and dev login, for local use only
+- OpenShift 4.12+ (the chart creates a Route and, unless `auth.oauthClient.create` is false, an
+  `OAuthClient`), or Kubernetes 1.24+ with an ingress controller and dev login, for local use only
 - Helm 3.x
 - A GitLab with the day1 project, the specs project and the sigs group of team projects, and a
   service account token for them (see [GitLab token](#gitlab-token))
@@ -68,12 +68,66 @@ helm upgrade --install wingman ./deploy/helm/wingman -n wingman \
 Keep the generated secrets for later upgrades (in a values file outside Git, passed with `-f`):
 a new `auth.jwtSecret` signs everyone out.
 
+### From a GitOps repository (Argo CD)
+
+A Git repository that deploys the chart holds no secret: redbull-platform, whose ApplicationSet
+deploys every release of Wingman by itself, is public (ADR-0070). Two switches keep every secret
+out of the values:
+
+- `secrets.existingSecret: <name>`: the chart renders no Secret, and day1 and day2 load the named
+  one with `envFrom`. Its keys are the variables: `GITLAB_TOKEN`, `JWT_SECRET_KEY`,
+  `OPENSHIFT_OAUTH_CLIENT_SECRET`, and optionally `GITLAB_WEBHOOK_SECRET` (without it day1's GitLab
+  webhook answers 404) and `DEV_AUTH_SECRET` (dev login only). The render fails while
+  `gitlab.accessToken`, `gitlab.webhookSecret`, `auth.oauthClientSecret`, `auth.jwtSecret` or
+  `devAuth.secret` is set, naming it: the Secret holds it, and a value beside it would be ignored.
+- `auth.oauthClient.create: false`: the chart renders no `OAuthClient`, whose secret it would have
+  to write inline. With `secrets.existingSecret` it is required (the render says so) wherever the
+  chart would render one (`openshiftRoute.enabled` without `devAuth.enabled`).
+
+Create both once, in Wingman's namespace, before the first sync (the same commands are at the top
+of `values.yaml`, under SECRETS):
+
+```bash
+oauth_secret=$(openssl rand -hex 32)
+oc create secret generic wingman-credentials -n wingman \
+  --from-literal=GITLAB_TOKEN='<the GitLab token>' \
+  --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+  --from-literal=OPENSHIFT_OAUTH_CLIENT_SECRET="$oauth_secret"
+oc apply -f - <<EOF
+apiVersion: oauth.openshift.io/v1
+kind: OAuthClient
+metadata:
+  name: wingman-app                  # auth.oauthClientId
+secret: $oauth_secret
+grantMethod: auto
+redirectURIs:
+  - https://<route.host>/login       # or auth.oauthRedirectUri
+EOF
+unset oauth_secret
+```
+
+Then the values hold no secret:
+
+```yaml
+secrets:
+  existingSecret: wingman-credentials
+auth:
+  oauthClient:
+    create: false
+```
+
+day1 and day2 read the Secret when they start, and the chart cannot see it change: after changing
+a key, `oc rollout restart deploy/wingman-day1 deploy/wingman-day2 -n wingman`. An `ExternalSecret`
+that writes a Secret of that name with those keys (redbull-platform's `gitops/SECRETS.md`) works
+the same. `ci/existing-secret-values.yaml` renders this mode in CI.
+
 ## Configuration
 
 ### Key Values
 
-Every variable the services read is set from these (`templates/configmap.yaml`, `templates/secret.yaml`,
-and day1's `env` in `templates/day1-deployment.yaml` for the server-scan token);
+Every variable the services read is set from these (`templates/configmap.yaml`, `templates/secret.yaml`
+or the Secret `secrets.existingSecret` names, and day1's `env` in `templates/day1-deployment.yaml`
+for the server-scan token);
 the names are explained in the root README's [Environment Variables](../../../README.md#environment-variables).
 
 | Key | Sets | Default | Description |
@@ -100,6 +154,7 @@ the names are explained in the root README's [Environment Variables](../../../RE
 | `auth.openshiftOAuthHost` | `OPENSHIFT_OAUTH_HOST` | | The OAuth server's host ([Login](#login-openshift-oauth)) |
 | `auth.openshiftApiHost` | `OPENSHIFT_API_HOST` | | The API server, `host:port` |
 | `auth.oauthClientId` | `OPENSHIFT_OAUTH_CLIENT_ID` | `wingman-app` | Also the name of the `OAuthClient` the chart creates |
+| `auth.oauthClient.create` | | `true` | The chart renders the `OAuthClient` (with `openshiftRoute.enabled`, without `devAuth.enabled`). `false`: none, it is created by hand ([From a GitOps repository](#from-a-gitops-repository-argo-cd)); needed with `secrets.existingSecret` |
 | `auth.oauthClientSecret` | `OPENSHIFT_OAUTH_CLIENT_SECRET` (Secret) | `""` | Also the `OAuthClient`'s secret |
 | `auth.oauthRedirectUri` | `OPENSHIFT_OAUTH_REDIRECT_URI` | `""` | Empty: `https://{route.host}/login` |
 | `auth.sslVerify` | `OPENSHIFT_SSL_VERIFY` | `"false"` | `"true"`, `"false"` or a CA bundle path |
@@ -109,6 +164,7 @@ the names are explained in the root README's [Environment Variables](../../../RE
 | `auth.viewerGroups` | `WINGMAN_VIEWER_GROUPS` | `""` | Empty: no viewer role |
 | `devAuth.enabled` | `DEV_AUTH_ENABLED` | `false` | Dev login instead of OpenShift: local use only |
 | `devAuth.secret` | `DEV_AUTH_SECRET` (Secret) | `""` | At least 32 characters |
+| `secrets.existingSecret` | | `""` | An existing Secret day1 and day2 read instead of the chart's `wingman-secrets`, which is then not rendered; its keys are the five variables marked (Secret) here. Every secret value must then be empty, and `auth.oauthClient.create` false where an `OAuthClient` would render ([From a GitOps repository](#from-a-gitops-repository-argo-cd), ADR-0070) |
 | `clusterStatus.enabled` | `CLUSTER_STATUS_ENABLED` | `false` | Live status and the cluster nodes, from the MCE hubs ([Live cluster status](#live-cluster-status-mce-hubs)) |
 | `clusterStatus.mceDomain` | `MCE_API_DOMAIN` | `""` | A hub is `https://api.{mce}.{mceDomain}:6443`, unless the tokens Secret gives it its own `url` (ADR-0045) |
 | `clusterStatus.sslVerify` | `MCE_SSL_VERIFY` | `"false"` | `"true"`, `"false"` or a CA bundle path |
@@ -255,7 +311,9 @@ Users sign in with OpenShift, and their OpenShift groups decide their role (`aut
 `auth.viewerGroups`). With `openshiftRoute.enabled` and without `devAuth.enabled`, the chart
 creates an `OAuthClient` named `auth.oauthClientId` with the secret `auth.oauthClientSecret` and the
 redirect URI `https://{route.host}/login` (or `auth.oauthRedirectUri`); the installing user needs
-the right to create that cluster-scoped resource. Set:
+the right to create that cluster-scoped resource. With `auth.oauthClient.create: false` it creates
+none, and the `OAuthClient` is made once by hand with the same name, secret and redirect URI
+([From a GitOps repository](#from-a-gitops-repository-argo-cd)). Set:
 
 - `auth.openshiftOAuthHost`: `oc get route oauth-openshift -n openshift-authentication -o jsonpath='{.spec.host}'`
 - `auth.openshiftApiHost`: `oc whoami --show-server`, without `https://`

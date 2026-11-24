@@ -9,7 +9,7 @@ Where each document lives, and when to read it.
 | [README.md](../README.md) | First: what Wingman does, its features, every API route and every setting |
 | [architecture.md](architecture.md) | Before your first change: the processes, the systems around Wingman, auth, the layers, how a read and a write travel |
 | [DEVELOPMENT.md](../DEVELOPMENT.md) | To run the stack locally, add an endpoint, run the tests |
-| [deploy/helm/wingman/README.md](../deploy/helm/wingman/README.md) | To install or configure the chart |
+| [deploy/helm/wingman/README.md](../deploy/helm/wingman/README.md) | To install or configure the chart, by Helm or from a GitOps repository with its secrets in an existing Secret |
 | [apps/web/README.md](../apps/web/README.md) | To work on the web app (and [apps/web/AGENTS.md](../apps/web/AGENTS.md): Next.js 16 differs from older docs) |
 | [CLAUDE.md](../CLAUDE.md) | If you are an agent: the standing conventions, the traps and where the work stands |
 
@@ -52,7 +52,7 @@ reading more of one.
 
 | File | What it holds |
 |---|---|
-| [ops/images.md](ops/images.md) | The three images and the nginx image: how they are built, pinned and published; read-only roots |
+| [ops/images.md](ops/images.md) | The three images and the nginx image: how they are built, pinned and published (`ghcr.io/team-redbull`); how each release's chart reaches redbull-platform, whose Argo CD deploys it (ADR-0070); read-only roots |
 | [ops/metrics.md](ops/metrics.md) | The metric catalogue (names and labels are a contract, ADR-0010), the ServiceMonitor, alerts and the Grafana dashboard |
 | [ops/runbook.md](ops/runbook.md) | One section per alert: what it means and what to do |
 | [ops/performance.md](ops/performance.md) | Where a page's time goes, and the commands to measure it in a deployment |

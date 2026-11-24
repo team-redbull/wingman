@@ -189,6 +189,16 @@
         "oauthClientId": {
           "type": "string"
         },
+        "oauthClient": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "description": "Render the OAuthClient (with openshiftRoute.enabled and without devAuth.enabled); false: it is created by hand, as secrets.existingSecret needs (ADR-0070).",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
         "sslVerify": {
           "$ref": "#/definitions/tlsVerify"
         },
@@ -223,6 +233,16 @@
         },
         "secret": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "description": "An existing Secret day1 and day2 read (GITLAB_TOKEN, JWT_SECRET_KEY, OPENSHIFT_OAUTH_CLIENT_SECRET, and optionally GITLAB_WEBHOOK_SECRET and DEV_AUTH_SECRET); the chart then renders none. Empty: the chart renders wingman-secrets from the values (ADR-0070).",
+          "$ref": "#/definitions/k8sName"
         }
       },
       "additionalProperties": false
