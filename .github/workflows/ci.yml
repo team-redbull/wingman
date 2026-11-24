@@ -11,7 +11,8 @@
 # Every job states its own permissions; the workflow default is none.
 # Pull requests build every image without pushing. Every push to main is a
 # release, its version computed from the Conventional Commit subjects since
-# the last v* tag (ADR-0031; tag, publish and notes as ADR-0030 built them).
+# the last v* tag (ADR-0031; tag, publish and notes as ADR-0030 built them),
+# and its chart goes to redbull-platform, whose Argo CD deploys it (ADR-0070).
 name: CI
 
 on:
@@ -552,3 +553,124 @@ jobs:
             echo "release create failed (attempt $attempt), retrying in 30s"
             sleep 30
           done
+
+  # ── main only: deploy through redbull-platform (ADR-0070) ─────────────────
+  # redbull-platform's ApplicationSet deploys every team-redbull service from
+  # its own copy of the service's chart, with automated sync: this job writes
+  # the release's chart there (deploy/helm/wingman as is, the three images
+  # ghcr.io/<owner>/wingman-<name> at the release and Chart.yaml at it too;
+  # image.registry stays empty, it would prefix nginx; the cluster's settings stay in its
+  # hand-kept gitops/overrides/wingman.yaml), so each release deploys itself
+  # wherever that ApplicationSet runs. After `publish`, so Argo finds the
+  # images, and nothing needs it: a failure here (no token, a render the
+  # cluster's values refuse) leaves the release whole, and re-running this job
+  # finishes it. A re-run writes the same bytes and commits nothing.
+  platform:
+    name: Deploy through redbull-platform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [release-plan, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # this repository; redbull-platform is written with REDBULL_WRITE_TOKEN
+    steps:
+      # The organisation secret every team-redbull service's CI writes
+      # redbull-platform with (the default token reaches this repository
+      # only). An organisation secret reaches only the repositories its
+      # access lists; without it the expression is empty.
+      - name: Check the redbull-platform token
+        env:
+          REDBULL_WRITE_TOKEN: ${{ secrets.REDBULL_WRITE_TOKEN }}
+        run: |
+          if [[ -z "$REDBULL_WRITE_TOKEN" ]]; then
+            echo "::error::secrets.REDBULL_WRITE_TOKEN is not available to $GITHUB_REPOSITORY: add $GITHUB_REPOSITORY to the team-redbull organisation secret's repository access, then re-run this job. The release (tag, images, notes) is complete; only its deployment through redbull-platform waits."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: wingman
+          persist-credentials: false
+
+      # The token reads it here and pushes below; it is never written to disk.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: team-redbull/redbull-platform
+          ref: main
+          token: ${{ secrets.REDBULL_WRITE_TOKEN }}
+          path: platform
+          persist-credentials: false
+
+      - name: Install helm (pinned, checksum-verified)
+        run: wingman/scripts/install-helm.sh
+
+      - name: Check redbull-platform deploys Wingman
+        run: |
+          for file in gitops/services/wingman/app.yaml gitops/overrides/wingman.yaml; do
+            if [[ ! -f "platform/$file" ]]; then
+              echo "::error::team-redbull/redbull-platform has no $file: merge its Wingman service first (docs/adr/0070-wingman-lives-in-team-redbull-and-deploys-through-redbull-platform.md), then re-run this job"
+              exit 1
+            fi
+          done
+
+      - name: Write the chart copy
+        env:
+          VERSION: ${{ needs.release-plan.outputs.version }}
+        run: |
+          python3 wingman/scripts/platform_chart.py write platform --chart wingman/deploy/helm/wingman \
+            --version "$VERSION" --registry "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          git -C platform status --short
+
+      # Offline, as Argo renders it: the copy with the cluster's override file.
+      # A render that fails, or pulls other images, is never pushed.
+      - name: Render the copy the way Argo will
+        env:
+          VERSION: ${{ needs.release-plan.outputs.version }}
+        run: |
+          cd platform
+          helm lint --strict gitops/charts/wingman -f gitops/overrides/wingman.yaml
+          helm template wingman gitops/charts/wingman -n wingman -f gitops/overrides/wingman.yaml \
+            > "$RUNNER_TEMP/wingman.yaml"
+          python3 ../wingman/scripts/platform_chart.py images "$RUNNER_TEMP/wingman.yaml" \
+            --version "$VERSION" --registry "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+
+      # Only gitops/charts/wingman is staged. Every team-redbull service pushes
+      # to this one branch, so a rejected push rebases and retries, as the
+      # shared ghcr-build-push workflow does. The token reaches git through the
+      # environment of this step only.
+      - name: Commit and push to redbull-platform
+        env:
+          REDBULL_WRITE_TOKEN: ${{ secrets.REDBULL_WRITE_TOKEN }}
+          VERSION: ${{ needs.release-plan.outputs.version }}
+          TAG: ${{ needs.release-plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd platform
+          git add gitops/charts/wingman
+          if git diff --cached --quiet; then
+            echo "redbull-platform already has the chart of $TAG: nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "chore(wingman): release $VERSION" \
+            -m "Wingman $TAG, $GITHUB_REPOSITORY@$GITHUB_SHA: deploy/helm/wingman as released, with the three Wingman images and Chart.yaml at $VERSION. The cluster's settings are gitops/overrides/wingman.yaml, which no release touches."
+          auth=$(printf 'x-access-token:%s' "$REDBULL_WRITE_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+          for attempt in 1 2 3 4 5; do
+            if git push -q origin HEAD:main; then
+              echo "pushed $(git rev-parse --short HEAD) to team-redbull/redbull-platform main"
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt): rebasing onto origin/main and retrying"
+            git fetch -q origin main
+            if ! git rebase -q origin/main; then
+              echo "::error::the chart commit does not rebase onto redbull-platform's main (gitops/charts/wingman changed there?): a person needs to look"
+              exit 1
+            fi
+            sleep $((RANDOM % 5 + 2))
+          done
+          echo "::error::could not push to team-redbull/redbull-platform after 5 attempts"
+          exit 1

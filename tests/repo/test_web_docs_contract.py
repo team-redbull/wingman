@@ -318,6 +318,7 @@ NOT_SETTINGS: Mapping[str, str] = {
     "MCE": "the create form's field label, on the docs page",
     "AVAILABLE": "server-scan's openshift_state of a server in no MCE (Inventory, ADR-0057)",
     "INSTALLED_TO_INVENTORY": "server-scan's openshift_state of an MCE's free Agent (ADR-0057)",
+    "REDBULL_WRITE_TOKEN": "the organisation secret CI writes redbull-platform with (ADR-0070)",
     **dict.fromkeys(METHOD.strip("()").split("|"), "an HTTP method"),
 }
 """Upper-case names the docs may show that no settings class reads, and what they are."""
