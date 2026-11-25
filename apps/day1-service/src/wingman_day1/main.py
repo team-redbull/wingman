@@ -363,6 +363,9 @@ def build_context(
         events=MetricRolloutEvents(metrics),
         clock=clock,
     )
+    imports = ImportService(
+        cluster_service, spec_catalog, drift, machine_configs, provisioner, adapters.day2_installs
+    )
     quick_links = quick_links_service(settings, site_catalog)
     dev_secret = settings.dev_auth_secret.get_secret_value() if settings.dev_auth_enabled else None
     return Day1Context(
@@ -372,7 +375,7 @@ def build_context(
         approvals=ApprovalService(gitlab, repos, owned=owned),
         audit=AuditService(repos),
         drift=drift,
-        imports=ImportService(cluster_service, spec_catalog, drift, machine_configs, provisioner),
+        imports=imports,
         sync=sync,
         rollouts=rollouts,
         auth=AuthService(

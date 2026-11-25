@@ -3,7 +3,9 @@
 Day1 never writes a day2 repo (ADR-0016): it asks day2's own API, which opens
 one install MR per team as for any request (``Day2Installs``), in a session of
 the user day1 asks for. A flavor's rollout asks before it opens each
-cluster's MR, so the MR can link them (ADR-0044).
+cluster's MR, so the MR can link them (ADR-0044); a sync and an import ask
+right after theirs opened, in the same action, so nothing opens in day2 for
+a day1 MR that did not (ADR-0037's 2026-11-25 amendment).
 
 Install MRs already open on the cluster for an add-on are not asked again.
 Day2's answer is kept as it came: each MR it opened, each team it refused or
@@ -14,17 +16,25 @@ acted on says so, and the next ask reads the open installs first.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Final
 
 from wingman_core.domain.users import User
+from wingman_core.ports.clock import Clock
 from wingman_day1.domain.addons import AddonDrift, Day2InstallRequest, RequestedAddon
 from wingman_day1.domain.errors import Day2UnavailableError
 from wingman_day1.domain.paths import ClusterRef
 from wingman_day1.ports import Day2Installs
 
 NO_INSTALLS: Final = "day1 has no client for day2's installs here, so day2 was not asked"
+MAX_ASK_CONCURRENCY: Final = 4
+"""Clusters an import asks day2 for at once (each ask is one request per team)."""
+ASK_BUDGET: Final = timedelta(seconds=30)
+"""How long after an import began day2 may still be asked. The request must end well inside
+the proxy's 60 s, since a cut request invites a retry (ADR-0044)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,3 +97,53 @@ async def install_missing(
         already_open=tuple(r for r in pending if any((r.team, c) in wanted for c in r.charts)),
         failed=result.failed if result else (),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class AddonAsk:
+    """One cluster to ask day2 for: what it lacks, or why that is unknown, and the message."""
+
+    cluster: ClusterRef
+    missing: tuple[AddonDrift, ...]
+    unknown: str | None
+    """Set when day2 did not say what is installed: nothing is asked."""
+    message: str
+
+
+async def install_each(
+    day2: Day2Installs | None,
+    asks: Sequence[AddonAsk],
+    *,
+    as_user: User,
+    clock: Clock,
+    started: datetime,
+) -> list[AddonInstalls]:
+    """Each cluster's ask, a few at a time, in order; none once day2 stops answering or time is up.
+
+    Once day2 does not answer for one cluster, or ``ASK_BUDGET`` has passed
+    since ``started``, no more are sent: each of the rest says why it was
+    not asked, and its add-ons are left to install by hand.
+    """
+    limit = asyncio.Semaphore(MAX_ASK_CONCURRENCY)
+    unanswered: list[str] = []
+
+    async def one(ask: AddonAsk) -> AddonInstalls:
+        if ask.unknown is not None:
+            return AddonInstalls(not_asked=ask.unknown)
+        if not ask.missing:
+            return AddonInstalls()
+        async with limit:
+            if unanswered:
+                why = f"not asked: day2 did not answer for {unanswered[0]}, so no more were asked"
+                return AddonInstalls(ask.missing, not_asked=why)
+            if clock() - started >= ASK_BUDGET:
+                why = f"not asked: the import had run {ASK_BUDGET.seconds} s, so no more were asked"
+                return AddonInstalls(ask.missing, not_asked=why)
+            found = await install_missing(
+                day2, ask.cluster, ask.missing, as_user=as_user, message=ask.message
+            )
+            if found.not_asked is not None and day2 is not None:
+                unanswered.append(ask.cluster.name)
+            return found
+
+    return list(await asyncio.gather(*(one(ask) for ask in asks)))

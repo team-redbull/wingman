@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from wingman_core.web.errors import from_git_error
+from wingman_day1.api.v1.addon_installs_schemas import AddonInstallsOut
 from wingman_day1.api.v1.schemas import ClusterDriftOut, MRDetailOut, _In, change_out
 from wingman_day1.application.approvals import RepoKey
 from wingman_day1.application.imports import (
@@ -121,13 +122,16 @@ class ImportPreviewOut(BaseModel):
 
 
 class ImportedClusterOut(BaseModel):
-    """A picked cluster and the day1 MR that links it to the flavor."""
+    """A picked cluster, the day1 MR that links it to the flavor, and its day2 add-on MRs."""
 
     name: str
     site: str
     mce: str
     path: str
     merge_request: MRDetailOut
+    addons: AddonInstallsOut
+    """Day2's answer for the add-ons the flavor lists and the cluster lacks, asked once its MR
+    opened (ADR-0037's 2026-11-25 amendment)."""
 
     @classmethod
     def of(cls, imported: ImportedCluster) -> ImportedClusterOut:
@@ -139,6 +143,7 @@ class ImportedClusterOut(BaseModel):
             mce=ref.mce,
             path=str(ref.path),
             merge_request=change_out(RepoKey.DAY1, imported.merge_request),
+            addons=AddonInstallsOut.of(imported.addons),
         )
 
 

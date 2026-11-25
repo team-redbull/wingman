@@ -1,7 +1,7 @@
 # ADR-0037: Existing clusters join a flavor by one MR that writes only the link, and sync to it by one MR each; Wingman edits a cluster file's text, never a YAML round trip
 
 Date: 2026-11-08
-Status: Accepted; superseded in part by ADR-0044 (an import opens one MR per cluster; a new flavor version opens each cluster's sync MR automatically); amended by ADR-0062 (with `DAY1_SCALE_NODEPOOLS` on, a sync leaves drifted locked replicas out of its MR, for update-nodepool); amended 2026-11-25 (a sync opens the missing add-ons' day2 MRs in the same action)
+Status: Accepted; superseded in part by ADR-0044 (an import opens one MR per cluster; a new flavor version opens each cluster's sync MR automatically); amended by ADR-0062 (with `DAY1_SCALE_NODEPOOLS` on, a sync leaves drifted locked replicas out of its MR, for update-nodepool); amended 2026-11-25 (a sync and an import open the missing add-ons' day2 MRs in the same action)
 
 Since ADR-0044 (2026-11-12, the architect's decision, confirmed by the
 user) an import opens one day1 MR per picked cluster, each the link-only
@@ -171,13 +171,13 @@ as before.
 
 Verified in `apps/day1-service/tests/api/test_replicas_ownership_api.py`.
 
-## Amendment (2026-11-25): a sync opens the day2 add-on MRs in the same action
+## Amendment (2026-11-25): a sync and an import open the day2 add-on MRs in the same action
 
 The user, 2026-11-25: "When pulling a cluster to the flavor the day2 should
 open MR as well, no?", and, asked whether in the same action or as the
 second click the sync dialog offered: in the same action. A sync used to
 open the day1 MR and then offer the missing add-ons as a second click, one
-day2 MR per add-on.
+day2 MR per add-on; an import showed them and opened none.
 
 **One action.** `POST /clusters/{name}/sync` opens the day1 MR, then, in
 the same request, asks day2 for the install MRs of the add-ons the flavor
@@ -194,7 +194,7 @@ rollout's ask does (ADR-0044).
   every answer day2 can give.
 - **In the person's name.** Day1 issues the short-lived session it
   presents to day2 (the services share the session secret) for the admin
-  who synced, so day2's MRs name them, as an install from the Add-ons tab
+  who synced or imported, so day2's MRs name them, as an install from the Add-ons tab
   would. A rollout still asks as `system:wingman-rollout`.
 - **Linked both ways.** Each day2 MR's description names the day1 MR
   (`!iid` and its address) and says to merge it with that one, or close it
@@ -213,6 +213,22 @@ rollout's ask does (ADR-0044).
 - **The dialog** shows the day1 MR and each day2 MR together, day2's words
   for what did not open, and offers to install what was not opened, the
   drift tab's Install (one MR per add-on), as the fallback.
+
+**Import, the same per cluster.** `POST /specs/{name}/import` opens each
+picked cluster's MR as before (ADR-0044), then asks day2 for each opened
+cluster's missing add-ons, measured against the flavor it joins, with the
+values its header records (a re-link keeps those the new flavor lists).
+Each item of `merge_requests` carries its own `addons`; a cluster whose
+import MR did not open has nothing asked. The asks run four clusters at a
+time, and two rules keep the request inside the proxy's 60 s (a cut
+request invites a retry, ADR-0044): once day2 does not answer for one
+cluster no more are asked, and none is asked once the import has run 30 s
+(`ASK_BUDGET`). Each cluster not asked says why, and its add-ons are left
+for its Add-ons tab. Each day2 MR names that cluster's import MR, which
+links the cluster only when it merges: merging the day2 MR without it
+installs the add-ons on a cluster that does not follow the flavor yet.
+The sheet's last step lists, under each cluster's import MR, its day2 MRs
+and day2's words for what did not open.
 
 Rejected:
 
@@ -234,8 +250,14 @@ Verified in:
 - `apps/day1-service/tests/unit/application/test_sync_addons.py`: the
   order, the person's session, the values from the header, the day1 MR
   staying open, nothing asked for a day1 MR that did not open;
-- `apps/day1-service/tests/api/test_addon_installs_api.py`: the JSON;
+- `apps/day1-service/tests/unit/application/test_import_addons.py`: each
+  opened cluster asked once, none for a cluster whose MR did not open, no
+  more once day2 stops answering or the budget is spent, a refused team,
+  unknown add-ons;
+- `apps/day1-service/tests/api/test_addon_installs_api.py`: the JSON of
+  both;
 - `apps/day2-service/tests/api/test_service_session.py`: day2 opening MRs
   in the name of the person day1 issued the session for;
-- `apps/web/e2e/tests/flavor-sync.spec.ts`: both MRs in the dialog, a
-  day2 refusal and a day2 that did not answer.
+- `apps/web/e2e/tests/flavor-sync.spec.ts` and `flavor-import.spec.ts`:
+  both MRs in the dialog and in the sheet's last step, a day2 refusal and
+  a day2 that did not answer.

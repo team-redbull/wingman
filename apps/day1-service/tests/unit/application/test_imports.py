@@ -174,7 +174,7 @@ async def test_an_import_opens_one_mr_per_cluster_each_adding_only_its_header(
     )
     # Each description shows its own cluster's drift, not the other's
     assert "Once linked: 2 locked values differ, 1 add-on missing." in lark
-    assert "- add-on `redbull/cluster-roles`: missing; day2 installs it" in lark
+    assert "- add-on `redbull/cluster-roles`: missing; Wingman asks day2 for its install MR" in lark
     assert "ocp4-prod-heron-site1" not in lark
     assert "Once linked: 2 locked values differ, 2 need a person to decide, 1 add-on missing." in (
         heron

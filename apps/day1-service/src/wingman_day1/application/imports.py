@@ -13,6 +13,11 @@ already linked to another flavor is refused unless the request says to
 re-link it; one already linked to this flavor has nothing to import. The
 import checks every pick again before it opens anything: one refused or
 moved pick, and no merge request opens.
+
+Each cluster whose import MR opened has its missing add-ons asked of day2 in
+the same action, one install MR per team, in the admin's name; a cluster
+whose MR did not open has nothing asked (``addon_installs``; ADR-0037's
+2026-11-25 amendment). Day2's answer is each opened cluster's ``addons``.
 """
 
 from __future__ import annotations
@@ -20,13 +25,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Final
 
 from wingman_core.domain.errors import AmbiguousWriteError, GitError, GitUnavailableError
 from wingman_core.domain.merge_request import MergeRequest
 from wingman_core.domain.users import User
+from wingman_core.ports.clock import Clock, system_clock
+from wingman_day1.application.addon_installs import AddonAsk, AddonInstalls, install_each
 from wingman_day1.application.clusters import ClusterFile, ClusterService
 from wingman_day1.application.drift import ClusterDrift, DriftService
 from wingman_day1.application.machine_configs import MachineConfigService
@@ -40,7 +47,7 @@ from wingman_day1.domain.locks import is_configs_lock
 from wingman_day1.domain.paths import ClusterRef
 from wingman_day1.domain.specs import ClusterSpec
 from wingman_day1.domain.value_drift import show_value
-from wingman_day1.ports import ClusterProvisioner
+from wingman_day1.ports import ClusterProvisioner, Day2Installs
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +110,11 @@ class ImportPreview:
 
 @dataclass(frozen=True, slots=True)
 class ImportedCluster:
-    """A picked cluster whose import merge request opened."""
+    """A picked cluster whose import merge request opened, and day2's answer for its add-ons."""
 
     cluster: ClusterRef
     merge_request: MergeRequest
+    addons: AddonInstalls = field(default_factory=AddonInstalls)
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,13 +172,22 @@ class ImportService:
         drift: DriftService,
         machine_configs: MachineConfigService,
         provisioner: ClusterProvisioner,
+        day2: Day2Installs | None = None,
+        *,
+        clock: Clock = system_clock,
     ) -> None:
-        """Read clusters and flavors, compare them, and propose through ``provisioner``."""
+        """Read clusters and flavors, compare them, and propose through ``provisioner``.
+
+        ``day2`` opens each opened cluster's missing add-ons' MRs; ``clock``
+        times how long day2 may still be asked (``addon_installs.ASK_BUDGET``).
+        """
         self._clusters = clusters
         self._specs = specs
         self._drift = drift
         self._machine_configs = machine_configs
         self._provisioner = provisioner
+        self._day2 = day2
+        self._clock = clock
 
     async def preview(self, flavor: str, refs: Sequence[ClusterRef]) -> ImportPreview:
         """Each picked cluster against the flavor: whether it can join, and what differs."""
@@ -210,8 +227,9 @@ class ImportService:
         cluster's MR opens on its own. Its commit carries that
         ``last_commit_id``, so a file that moves in between fails only its own
         MR (ADR-0006); a failure is reported beside the MRs that opened, never
-        retried.
+        retried. Then day2 is asked for each opened cluster's missing add-ons.
         """
+        started = self._clock()
         spec = await self._specs.get(flavor)
         if spec.metadata.version != spec_version:
             raise StaleError(
@@ -265,10 +283,24 @@ class ImportService:
             for pick, cluster, drift, content in zip(picks, clusters, drifts, contents, strict=True)
         ]
         outcomes = await self._open_each(changes, user=user)
+        opened = [o for o in outcomes if isinstance(o, ImportedCluster)]
+        missing = {c.ref: d for c, d in zip(clusters, drifts, strict=True)}
+        asks = [
+            AddonAsk(
+                o.cluster,
+                missing[o.cluster].addon_drift,
+                missing[o.cluster].error,
+                _day2_message(flavor, spec_version, o),
+            )
+            for o in opened
+        ]
+        answers = await install_each(
+            self._day2, asks, as_user=user, clock=self._clock, started=started
+        )
         return ImportResult(
             flavor,
             spec_version,
-            opened=tuple(o for o in outcomes if isinstance(o, ImportedCluster)),
+            opened=tuple(replace(o, addons=a) for o, a in zip(opened, answers, strict=True)),
             failed=tuple(o for o in outcomes if isinstance(o, ImportFailure)),
         )
 
@@ -406,7 +438,21 @@ def _summary(flavor: str, version: str, cluster: ClusterFile, drift: ClusterDrif
                 f"- {where}: the file has {show_value(item.cluster_value)}, "
                 f"the flavor locks {show_value(item.flavor_value)}"
             )
-    lines += [f"- add-on `{a.team}/{a.name}`: missing; day2 installs it" for a in drift.addon_drift]
+    lines += [
+        f"- add-on `{a.team}/{a.name}`: missing; Wingman asks day2 for its install MR right "
+        "after opening this one"
+        for a in drift.addon_drift
+    ]
     if drift.error is not None:
         lines.append(f"- add-ons: {drift.error}")
     return "\n".join(lines)
+
+
+def _day2_message(flavor: str, version: str, imported: ImportedCluster) -> str:
+    """What each day2 install MR says it came with: the cluster's import MR in day1."""
+    mr = imported.merge_request
+    return (
+        f"Flavor {flavor} v{version} lists these add-ons, which {imported.cluster.name} lacks. "
+        f"Opened with its import into the flavor in day1, !{mr.ref.iid} ({mr.web_url}): merge "
+        "them with it, or close them if it is closed."
+    )

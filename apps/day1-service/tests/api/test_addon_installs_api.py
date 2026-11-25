@@ -1,4 +1,4 @@
-"""The day2 MRs a sync opens with its day1 MR, over HTTP (ADR-0037's 2026-11-25 amendment).
+"""The day2 MRs a sync or an import opens with its day1 MRs, over HTTP (ADR-0037's amendment).
 
 The answer's ``addons`` is what day2 answered (``AddonInstallsOut``), the
 shape the web's ``AddonInstalls`` type reads.
@@ -124,3 +124,41 @@ async def test_day2_not_answering_is_not_asked_with_its_reason(
         "day2 did not answer: day2 unreachable listing its open merge requests (fake)"
     )
     assert (addons["opened"], addons["not_opened"]) == ([], [ROLES])
+
+
+async def test_each_imported_cluster_answers_with_its_own_day2_mrs(
+    client: httpx.AsyncClient, auth: Auth, support: Any
+) -> None:
+    headers = auth(support.ALICE)
+    names = (LARK, "ocp4-prod-herzi-site1")  # herzi has cluster-roles already
+    preview = (
+        await client.post(
+            "/api/day1/specs/agent-baseline/import/preview",
+            json={"clusters": [{"name": n} for n in names]},
+            headers=headers,
+        )
+    ).json()
+    body = {
+        "spec_version": preview["spec_version"],
+        "clusters": [
+            {k: c[k] for k in ("name", "site", "mce", "last_commit_id")}
+            for c in preview["clusters"]
+        ],
+    }
+    response = await client.post(
+        "/api/day1/specs/agent-baseline/import", json=body, headers=headers
+    )
+    assert response.status_code == 201, response.text
+    lark, herzi = response.json()["merge_requests"]
+    assert [(m["team"], m["charts"]) for m in lark["addons"]["opened"]] == [
+        ("redbull", ["cluster-roles"])
+    ]
+    assert lark["addons"]["missing"] == [ROLES]
+    assert herzi["addons"] == {
+        "missing": [],
+        "opened": [],
+        "already_open": [],
+        "failed": [],
+        "not_asked": None,
+        "not_opened": [],
+    }

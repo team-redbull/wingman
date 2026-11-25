@@ -99,3 +99,28 @@ link to its review page and to GitLab, and every cluster whose MR did not
 open with what its code means (an unconfirmed write says to check GitLab
 before trying again). The toast after an import is gone: the step is the
 result.
+
+## 5. Since 2026-11-25: each opened cluster's day2 add-on MRs
+
+Each item of `merge_requests` also has `addons`, day2's answer for the
+add-ons the flavor lists and that cluster lacks, asked in the same
+request once its MR opened (ADR-0037's 2026-11-25 amendment); the sync's
+answer (`POST /clusters/{name}/sync`) has the same `addons`:
+
+```json
+{
+  "missing": [{"addon_name": "cluster-roles", "team": "redbull", "reason": "missing", "expected_version": "main", "override_values": {}}],
+  "opened": [{"team": "redbull", "iid": 1, "title": "[Wingman/Day2] Install addon redbull/cluster-roles on ocp4-prod-lark-site1", "web_url": "...", "charts": ["cluster-roles"]}],
+  "already_open": [],
+  "failed": [],
+  "not_asked": null,
+  "not_opened": []
+}
+```
+
+`failed` is one line per team in day2's words (one it did not confirm says
+its MR may have opened); `not_asked` says why day2 was not asked at all
+(it did not answer, or did not for an earlier cluster, or the import had
+run 30 s), or why what is missing is unknown; `not_opened` is what a
+person installs from the cluster's Add-ons tab. The third step shows them
+under each cluster's MR.

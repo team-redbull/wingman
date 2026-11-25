@@ -263,7 +263,7 @@ placement and Inventory Management are admins' reads (`403`). A viewer's answers
 | `GET` | `/api/day1/specs/{name}/clusters` | Clusters created from the spec, with their drift |
 | `GET` | `/api/day1/specs/{name}/drift` | Drift of every cluster created from the spec |
 | `POST` | `/api/day1/specs/{name}/import/preview` | Each picked existing cluster against the spec: whether it can join (`ready`, `relink`, `linked`, `refused`) and what will show as drift |
-| `POST` | `/api/day1/specs/{name}/import` | Link up to 50 existing clusters to the spec: one MR per cluster that writes only its file's flavor header, all checked before any opens (ADR-0044) |
+| `POST` | `/api/day1/specs/{name}/import` | Link up to 50 existing clusters to the spec: one MR per cluster that writes only its file's flavor header, all checked before any opens (ADR-0044). Then, in the same request, each opened cluster's missing add-ons are asked of day2, one install MR per team in the admin's name, and each item of `merge_requests` carries day2's answer in `addons`; no more are asked once day2 stops answering or after 30 s (ADR-0037's 2026-11-25 amendment) |
 | `GET` | `/api/day1/specs/{name}/rollout` | The rollout of the spec's newest version, one MR per cluster that follows it, from GitLab's state; reading it starts a run when work is pending (ADR-0044) |
 | `POST` | `/api/day1/specs/{name}/rollout` | Reconcile now: open the cluster MRs that are missing, failed ones included (admins; 202) |
 
