@@ -39,6 +39,7 @@ from wingman_day1.domain.machine_configs import flavor_config_problems
 from wingman_day1.domain.nodepool_infra_envs import given as infra_envs_given
 from wingman_day1.domain.nodepool_infra_envs import input_problems as infra_env_problems
 from wingman_day1.domain.nodepool_infra_envs import without_input
+from wingman_day1.domain.nodepool_names import form_schema
 from wingman_day1.domain.scale_down_policy import given as policies_given
 from wingman_day1.domain.specs import (
     ClusterSpec,
@@ -109,6 +110,7 @@ class SpecCatalog:
         template = await self.template()
         found = analyze_template(template, include_reserved=include_reserved) if template else []
         found = [f for f in found if f.name != AGENT_LABELS]  # the deployment's (ADR-0065)
+        found = form_schema(found)  # a suffix, never a whole NodePool name (ADR-0071)
         return found if self._infra_envs else without_input(found)
 
     async def entries(self) -> list[SpecEntry]:

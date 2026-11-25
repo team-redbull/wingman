@@ -2,8 +2,9 @@
 
 ``dev/gitlab-fixtures/wingman/cluster-specs/cluster-template.j2`` is the
 reference template. Rendering it through the real create path (preview) must
-give exactly the keys a person or portal may write (ADR-0012). When ``helm``
-is installed and ``WINGMAN_TEST_CHART_DIR`` points at a hostedclusters-setup
+give exactly the keys a person or portal may write (ADR-0012), every
+NodePool named ``<InfraEnv>[-<suffix>]`` (ADR-0071). When ``helm`` is
+installed and ``WINGMAN_TEST_CHART_DIR`` points at a hostedclusters-setup
 chart, the file is also rendered with the ApplicationSet's value layers.
 """
 
@@ -40,7 +41,7 @@ FORBIDDEN = {
 NODEPOOLS = [
     {
         "infra_env": "dell-r660-site1-128c-1024gb-5tb",
-        "nodepool_name": "falcon-zone-a",
+        "name_suffix": "zone-a",
         "replicas": 3,
         "configs": [{"name": "worker-kubeletconfig-reserved"}, {"name": "nic-ring-buffer"}],
         "node_labels": {"topology.kubernetes.io/zone": "a"},
@@ -89,7 +90,7 @@ async def test_a_rendered_agent_cluster_has_only_the_keys_people_write(
     zone_a, spare = values["nodepool"]
     assert zone_a == {
         "infraEnvName": "dell-r660-site1-128c-1024gb-5tb",
-        "name": "falcon-zone-a",
+        "name": "dell-r660-site1-128c-1024gb-5tb-zone-a",
         "replicas": 3,
         "labels": {"allowDeletion": False},
         "configs": [{"name": "worker-kubeletconfig-reserved"}, {"name": "nic-ring-buffer"}],
@@ -98,6 +99,7 @@ async def test_a_rendered_agent_cluster_has_only_the_keys_people_write(
     }
     assert spare == {
         "infraEnvName": "hp-gen11-site1-64c",
+        "name": "hp-gen11-site1-64c",
         "replicas": 0,
         "labels": {"allowDeletion": False},
         "configs": [{"name": "worker-kubeletconfig-reserved"}],
@@ -129,6 +131,7 @@ async def test_replicas_default_to_two_when_the_form_leaves_them_out(
     assert values["nodepool"] == [
         {
             "infraEnvName": "dell-r660-site1-128c-1024gb-5tb",
+            "name": "dell-r660-site1-128c-1024gb-5tb",
             "replicas": 2,
             "labels": {"allowDeletion": False},
         }
@@ -179,4 +182,4 @@ async def test_the_rendered_file_renders_through_the_chart(
     kinds = [o.get("kind") for o in objects]
     assert "HostedCluster" in kinds
     node_pools = sorted(o["metadata"]["name"] for o in objects if o.get("kind") == "NodePool")
-    assert node_pools == ["falcon-zone-a", f"{NAME}-hp-gen11-site1-64c"]
+    assert node_pools == ["dell-r660-site1-128c-1024gb-5tb-zone-a", "hp-gen11-site1-64c"]

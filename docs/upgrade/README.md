@@ -117,6 +117,7 @@ already have.
 | 3.62 | 3.63.0: Install servers' **Choose servers searches and filters a long list** (ADR-0057's 2026-11-25 amendment): a search on the name, the hardware or the problem, Status and Hardware filters, Chosen only, and Pick the n shown (never past 20, never a server not offered); the dialog is wide (896 pixels on a laptop) and scrolls within the window | Generic |
 | 3.63 | 3.64.0: **a sync and an import open the missing add-ons' day2 MRs in the same action** (ADR-0037's 2026-11-25 amendment): once the day1 MR is open, day1 asks day2 for the add-ons the flavor lists and the cluster lacks, one install MR per team through day2's bulk install, in the name of the admin who synced or imported (day1 issues that short-lived session with the session secret both services already share), each naming the day1 MR; the sync dialog and the import's last step show both, day2's words for what did not open, and why it was not asked; nothing is asked when the day1 MR did not open, and nothing is retried. The answers of `POST /clusters/{name}/sync` and `POST /specs/{name}/import` gain `addons`. An import asks four clusters at a time and none after 30 s | Generic: no new value, Secret, grant or variable; day1 already reaches day2 (`DAY2_SERVICE_URL`). A team that gave Wingman no write access is that team's refusal, as for a rollout |
 | 3.64 | 3.65.0: **OCP-version pins are edited in Wingman** (ADR-0043's 2026-11-25 amendment): an add-on's **OCP-version pins** card adds, edits and removes `operators/<chart>/ocp-versions/<version>/` (a full version, the chart revision there and its values), and **New add-on** can set pins in its create merge request, each a previewed and confirmed merge request on the team's repo, as every add-on write (`POST /api/day2/addons/{team}/{addon}/ocp-versions`, `PUT` and `DELETE .../ocp-versions/{version}`; `ocp_versions` on `POST /api/day2/addons/{team}`). The card warns when a fleet default's deploy config sets `targetRevision`, which overrides every pin. Admins only, for a team that gave Wingman write access; nothing to set | Generic: no new value, Secret, grant or variable. A proxy in front of day2 must pass a `DELETE` request's JSON body (nginx and the chart's own do) |
+| 3.65 | 3.66.0: **a new NodePool is named after its InfraEnv** (ADR-0071): `<InfraEnv>` or `<InfraEnv>-<suffix>`, written as the nodepool's `name` on every create (a KV cluster's too), the create form's **Name suffix** with the whole name previewed, a flavor's preset suffix, and Edit cluster's **NodePool names** (existing names read-only, an added nodepool named from a suffix); a suffix is lowercase letters, digits and `-`, a name at most 63 characters and the cluster's only one; existing NodePools keep their names, and everything that finds one by name reads both shapes | [3.65-to-3.66.md](3.65-to-3.66.md): check that the specs project's `cluster-template.j2` writes `nodepool_name` as `name` (else every create is refused) and replace its old comment above it |
 
 ### Skipping versions
 
@@ -139,7 +140,9 @@ no existing cluster, so they may go in at once. Several InfraEnvs per
 nodepool (3.47) stays off: it is parked (ADR-0064). Going past 3.52, do
 [3.52-to-3.53.md](3.52-to-3.53.md)'s checks before the upgrade: Scale turns on
 by default wherever `workflows.url` is set. Going past 3.53, do [3.53-to-3.54.md](3.53-to-3.54.md)'s checks: which
-InfraEnvs lack the labels a pool draw needs.
+InfraEnvs lack the labels a pool draw needs. Going past 3.65, do
+[3.65-to-3.66.md](3.65-to-3.66.md)'s template check before the upgrade: a
+template that does not write `nodepool_name` refuses every create.
 Rows marked Generic add nothing. A guide's checks still apply: run them
 before its upgrade step.
 

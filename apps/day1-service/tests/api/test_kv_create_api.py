@@ -3,7 +3,8 @@
 The fixtures' seed ``ocp4-prod-seed-site1-az1-a`` (default mastertag
 ``4.18.22-x86_64``, which its ladder does not offer) holds ``-a`` and ``-b``,
 each one NodePool from ``r760-mtl-az1``; the conftest's hub has no access to
-the seed, so its InfraEnvs are the ones those files name.
+the seed, so its InfraEnvs are the ones those files name. A new KV cluster's
+NodePool is named after its InfraEnv (ADR-0071).
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ mastertag: 4.18.56
 
 nodepool:
   - infraEnvName: r760-mtl-az1
+    name: r760-mtl-az1
     replicas: 3
     labels:
       allowDeletion: false

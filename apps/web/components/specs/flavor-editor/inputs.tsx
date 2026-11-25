@@ -5,6 +5,7 @@ import jsYaml from "js-yaml";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { SUFFIX_INPUT, suffixProblem } from "@/lib/nodepool-names";
 import { isMapping } from "@/lib/values";
 import { cn } from "@/lib/utils";
 import { inputCls, ValueField } from "./controls";
@@ -190,9 +191,12 @@ export function PresetInput({
     ? "The template does not read this input; it is kept as the flavor sets it."
     : input.name === "openshift_release_version"
       ? "The create form's default; each cluster picks a release its MCE offers."
-      : undefined;
+      : input.name === SUFFIX_INPUT
+        ? "A preset: the NodePool is named <InfraEnv>-<suffix>, the InfraEnv the cluster's (ADR-0071)."
+        : undefined;
+  const own = input.name === SUFFIX_INPUT && typeof value === "string" ? suffixProblem(value) : null;
   return (
-    <ValueField path={path} label={inputLabel(input.name)} empty={empty} problems={problems} hint={hint}>
+    <ValueField path={path} label={inputLabel(input.name)} empty={empty} problems={own ? [...(problems ?? []), own] : problems} hint={hint}>
       {({ inputId, describedBy, invalid }) => {
         if (input.type === "boolean") {
           return (

@@ -137,10 +137,9 @@ async def test_on_a_create_writes_the_other_infraenvs_after_the_first(
     )
     assert created.status_code == 202, created.text
     text = provision.starts[-1]["content"]
-    assert (
-        f'  - infraEnvName: {DELL}\n    {FILE_KEY}: ["{DELL7}", "{HP}"]\n    replicas: 2\n' in text
-    )
-    assert f"  - infraEnvName: {HP}\n    replicas: 2\n" in text, "the second pool is as before"
+    extra = f'    {FILE_KEY}: ["{DELL7}", "{HP}"]\n'
+    assert f"  - infraEnvName: {DELL}\n{extra}    name: {DELL}\n    replicas: 2\n" in text
+    assert f"  - infraEnvName: {HP}\n    name: {HP}\n    replicas: 2\n" in text, "no other"
 
 
 async def test_on_names_that_are_not_infraenvs_are_refused_at_their_field(
@@ -241,7 +240,9 @@ async def test_on_an_edit_adds_infraenvs_and_may_not_make_another_one_first(
         on,
         alice,
         lambda y: y.replace(
-            f"- infraEnvName: {DELL}\n", f"- infraEnvName: {HP}\n  {FILE_KEY}: [{DELL}]\n", 1
+            f"- infraEnvName: {DELL}\n",
+            f"- infraEnvName: {HP}\n  name: {HP}\n  {FILE_KEY}: [{DELL}]\n",  # ADR-0071's name
+            1,
         ),
     )
     (problem,) = problems(renamed)

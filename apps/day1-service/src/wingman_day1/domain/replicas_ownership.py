@@ -26,6 +26,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, cast
 
+from wingman_day1.domain.nodepool_names import entry_key
+
 REPLICAS_BY_SCALE: Final = "NodePool replicas change through Scale on the cluster's Nodes tab"
 DEFAULT_REPLICAS: Final = 1
 """What the chart renders for an entry without ``replicas``."""
@@ -36,7 +38,9 @@ class ReplicasChange:
     """A NodePool that is on ``main`` and whose replicas a write changes."""
 
     key: str
-    """How it is matched with ``main``: its ``name``, else its ``infraEnvName``, else ``#<i>``."""
+    """How it is named: its ``name``, else its ``infraEnvName``, else ``#<i>``.
+
+    It is matched with ``main`` by its NodePool (``nodepool_names.entry_key``)."""
     index: int
     """Its position in the written file (``nodepool[<index>]``)."""
     main: object
@@ -56,8 +60,8 @@ def replicas_changes(
     """
     before = _replicas(main.get("nodepool"))
     return tuple(
-        ReplicasChange(key=key, index=index, main=before[key][1], written=replicas)
-        for key, (index, replicas) in _replicas(written.get("nodepool")).items()
+        ReplicasChange(key=label, index=index, main=before[key][1], written=replicas)
+        for key, (index, replicas, label) in _replicas(written.get("nodepool")).items()
         if key in before and before[key][1] != replicas
     )
 
@@ -70,15 +74,21 @@ def replicas_problems(main: Mapping[str, object], written: Mapping[str, object])
     ]
 
 
-def _replicas(pools: object) -> dict[str, tuple[int, object]]:
-    """Each entry's position and replicas, by its key; the first entry wins a key used twice."""
-    found: dict[str, tuple[int, object]] = {}
+def _replicas(pools: object) -> dict[str, tuple[int, object, str]]:
+    """Each entry's position, replicas and label, by its NodePool; the first wins a name used twice.
+
+    Matched by ``nodepool_names.entry_key``: a NodePool named ``c200-mtl-az1``
+    is not the one the chart derives from the same InfraEnv.
+    """
+    found: dict[str, tuple[int, object, str]] = {}
     if not isinstance(pools, Sequence) or isinstance(pools, str):
         return found
     for index, pool in enumerate(cast("Sequence[object]", pools)):
         if not isinstance(pool, Mapping):
             continue
         entry = cast("Mapping[str, object]", pool)
-        key = entry.get("name") or entry.get("infraEnvName") or f"#{index}"
-        found.setdefault(str(key), (index, entry.get("replicas", DEFAULT_REPLICAS)))
+        label = str(entry.get("name") or entry.get("infraEnvName") or f"#{index}")
+        found.setdefault(
+            entry_key(index, entry), (index, entry.get("replicas", DEFAULT_REPLICAS), label)
+        )
     return found

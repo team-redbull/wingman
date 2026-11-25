@@ -48,6 +48,7 @@ from wingman_day1.domain.locks import (
     same_value,
 )
 from wingman_day1.domain.machine_configs import MachineConfigCatalog, network_config_name
+from wingman_day1.domain.nodepool_names import rendered_name
 from wingman_day1.domain.tuning_profiles import TUNING_FILE_KEY, file_value, tuning_names
 from wingman_day1.domain.tuning_rule import compare
 
@@ -109,13 +110,11 @@ def file_nodepools(values: Mapping[str, object]) -> list[object]:
 
 
 def nodepool_name(pool: object, index: int, *, cluster_name: str) -> str:
-    """The NodePool the chart renders: ``name``, else ``<clusterName>-<infraEnvName>``."""
+    """The NodePool the chart renders (``nodepool_names.rendered_name``), else its position."""
     if isinstance(pool, Mapping):
-        found = cast("Mapping[str, object]", pool)
-        if found.get("name"):
-            return str(found["name"])
-        if found.get("infraEnvName"):
-            return f"{cluster_name}-{found['infraEnvName']}"
+        found = rendered_name(cast("Mapping[str, object]", pool), cluster_name=cluster_name)
+        if found is not None:
+            return found
     return f"nodepool[{index}]"
 
 

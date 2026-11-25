@@ -34,6 +34,7 @@ from wingman_day1.domain.excluded_agent_labels import flavor_problems as agent_l
 from wingman_day1.domain.image_mirrors import mirror_problems, mirror_template_problems
 from wingman_day1.domain.locks import Lock, enforced_locks, lock_problems
 from wingman_day1.domain.nodepool_infra_envs import template_problems as infra_env_template_problems
+from wingman_day1.domain.nodepool_names import input_problems as name_problems
 from wingman_day1.domain.owners import owner_problems
 from wingman_day1.domain.scale_down_policy import input_problems as policy_problems
 from wingman_day1.domain.scale_down_policy import template_problems as policy_template_problems
@@ -263,7 +264,8 @@ def rule_problems(spec: ClusterSpec) -> list[str]:
     nodepool ratio (ADR-0040), the scale-down policies update-nodepool knows
     (ADR-0062), and the image mirrors (ADR-0063), a nodepool's other
     InfraEnvs (ADR-0064) and its scale-down policy the template in
-    ``day1.template`` reads (not checked without a template).
+    ``day1.template`` reads (not checked without a template), and a
+    nodepool's name suffix, never a whole name (ADR-0071).
     A save refuses them, together with configs that do not resolve
     (ADR-0027); a spec already in GitLab that breaks them still loads, and
     the API lists them as its ``warnings``.
@@ -278,6 +280,7 @@ def rule_problems(spec: ClusterSpec) -> list[str]:
         *policy_problems(values),
         *agent_label_problems(values),
         *policy_template_problems(values, spec.spec.day1.template),
+        *name_problems(values, preset=True),
         *lock_problems(spec.spec.day1.locked_paths, values),
         *ratio_problems(
             spec.spec.day1.nodepool_ratio,

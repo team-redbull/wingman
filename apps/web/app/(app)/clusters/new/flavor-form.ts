@@ -23,6 +23,7 @@ import {
 import { TUNING, TUNING_RULE, isTuningPath, tuningNames, tuningPath, tuningRuleNames } from "@/lib/tuning-profiles";
 import { IMAGE_MIRRORS, asMirrorEntries, isMirrorInput, mirrorEntryProblems, noMirrorsProblem } from "@/lib/image-mirrors";
 import { withoutDefaultPolicy } from "@/lib/nodepool-policy";
+import { SUFFIX_INPUT, formNameProblems } from "@/lib/nodepool-names";
 import type { ConfigEntry, MachineConfigs, SpecEntry, TemplateField } from "@/types";
 
 /** The template inputs day1's locks know by name (`wingman_day1.domain.locks.LOCKABLE`). */
@@ -338,8 +339,9 @@ export function ownerProblems(form: FormValues, schema: TemplateField[], locks: 
 
 /**
  * What stops the review before day1 is asked, one line each: an owner that is
- * not a number, a config entry the catalogue says day1 would refuse (no
- * hardware type, an unknown name, the same entry twice). A locked list is the
+ * not a number, a NodePool name day1 would refuse (a bad suffix, too long, a
+ * clash), a config entry the catalogue says day1 would refuse (no hardware
+ * type, an unknown name, the same entry twice). A locked list is the
  * flavor's: day1 alone judges it.
  */
 export function flavorProblems(
@@ -358,6 +360,8 @@ export function flavorProblems(
   if (none) lines.push(`Image mirrors: ${none}`);
   const pools = form[NODEPOOLS];
   if (!Array.isArray(pools)) return lines;
+  // Each NodePool's name, <InfraEnv>[-<suffix>], the cluster's only one (ADR-0071)
+  for (const [i, p] of Object.entries(formNameProblems(pools))) lines.push(`${label(`${NODEPOOLS}[${i}].${SUFFIX_INPUT}`)}: ${p}`);
   pools.forEach((pool, i) => {
     const path = nodepoolConfigsPath(i);
     if (!isMap(pool) || !Array.isArray(pool[CONFIGS]) || locks.values.has(path)) return;
