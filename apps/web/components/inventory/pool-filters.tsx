@@ -1,47 +1,9 @@
 "use client";
 
-import { useRef } from "react";
-import { Search, X } from "lucide-react";
 import { FilterPills } from "@/components/clusters/list/filter-pills";
+import { SearchBox } from "@/components/common/search-box";
 import { cn } from "@/lib/utils";
 import type { Facet, Facets, PoolFilter } from "@/lib/inventory/pool-filter";
-
-/** A part of the name; Escape clears it, then leaves the box. */
-function SearchBox({ value, onChange }: { value: string; onChange: (next: string) => void }) {
-  const input = useRef<HTMLInputElement>(null);
-  return (
-    <div className="relative w-full sm:w-56">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-      <input
-        ref={input}
-        type="search"
-        aria-label="Search the pools by name"
-        placeholder="Search by name…"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          if (value) onChange("");
-          else event.currentTarget.blur();
-        }}
-        className="h-8 w-full rounded-lg border bg-card pl-8 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 [&::-webkit-search-cancel-button]:hidden"
-      />
-      {value && (
-        <button
-          type="button"
-          aria-label="Clear the search"
-          onClick={() => {
-            onChange("");
-            input.current?.focus();
-          }}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden />
-        </button>
-      )}
-    </div>
-  );
-}
 
 const FACET_LABEL: Record<Facet, string> = { zone: "Zone", size: "Size" };
 
@@ -83,7 +45,13 @@ export function PoolFilters({
 }) {
   return (
     <>
-      <SearchBox value={filter.search} onChange={(search) => onChange({ ...filter, search })} />
+      <SearchBox
+        value={filter.search}
+        onChange={(search) => onChange({ ...filter, search })}
+        label="Search the pools by name"
+        placeholder="Search by name…"
+        className="sm:w-56"
+      />
       <button
         type="button"
         aria-pressed={filter.withServers}

@@ -620,3 +620,43 @@ kept across MCEs with those an MCE lacks reported, the filters, the empty
 state, the order and the sticky header, the runs never filtered, a phone's
 width), with `inventory.spec.ts`, `inventory-names.spec.ts` and
 `inventory-used.spec.ts` showing the other MCE by the picker or `?mce=`.
+
+## Amendment (2026-11-25): Choose servers searches and filters a long list; the dialog is wide
+
+The user (2026-11-25): "Inside the install server, when giving specific
+servers across many of them there should be search / filter, and the pop-up
+box should be wider because it's unused screen space we can use." A pool may
+hold dozens of free servers, and Choose servers listed them all, in a dialog
+512 pixels wide. Web only: day1's candidates, their groups and what an
+install sends do not change.
+
+- **Filters over the list** (`components/inventory/candidate-filters.tsx`,
+  pure rules in `lib/inventory/candidate-filter.ts`): a search whose every
+  word must appear in the server's name, its hardware, or why it needs a fix
+  or is not offered (`fch0012`, `proliant`, `bmc`); Status (Ready, Needs fix,
+  Not offered) and Hardware (each vendor and model), one each or All, with
+  their counts, shown only when the pool holds more than one; and "Chosen
+  only". "n of m servers" says what shows; when nothing does, Clear the
+  filters. The list keeps its groups. Escape in the search clears it first
+  and closes the dialog only once it is empty. The filters start empty for
+  each pool.
+- **Picking what is shown.** "Pick the n shown" adds every shown server that
+  can be picked (Ready and Needs fix; never Not offered), after those chosen,
+  up to the 20 one install takes ("Pick the first n shown" when the room is
+  smaller); "Unpick all" empties the choice. A chosen server the filters hide
+  stays chosen, and the line under the list says how many are hidden. Picking
+  a Needs fix server this way still leads to the waiver's confirmation.
+- **A wide dialog.** The dialog is 672 pixels wide from a tablet up and 896
+  from a laptop up (`sm:max-w-2xl lg:max-w-4xl`), and scrolls within the
+  window's height; the three truths share one row there. The list is up to
+  26rem (or 45% of the window) tall. A phone keeps the full width, the pills
+  wrapping.
+- The search field is one component, `components/common/search-box.tsx`,
+  shared with the pool table's filters.
+
+Verification: `apps/web/lib/inventory/candidate-filter.test.ts` (the search
+by name, hardware and problem, the facets and their order, the filters
+combined, picking the shown never past 20 nor a server not offered, the
+chosen ones hidden) (Vitest); `apps/web/e2e/tests/inventory-install-search.spec.ts`
+(the dialog's width, the search and Escape, the pills together, "Pick the n
+shown" and "Chosen only", the 20 limit and Unpick all, the request sent).

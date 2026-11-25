@@ -115,7 +115,12 @@ export function InstallServersDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
-      <DialogContent className="sm:max-w-lg" showCloseButton={false} data-testid="add-servers-dialog">
+      {/* Wide, so a long list of servers reads in full; it scrolls within the screen's height */}
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl lg:max-w-4xl"
+        showCloseButton={false}
+        data-testid="add-servers-dialog"
+      >
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>{heading.title}</DialogTitle>

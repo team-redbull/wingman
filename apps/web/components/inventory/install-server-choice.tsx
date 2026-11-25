@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Hint } from "@/components/common/hint";
 import { useCandidates } from "@/lib/api/inventory";
 import { unnamedReason } from "@/lib/inventory/pools";
-import { MAX_SERVERS, toggled, type AddMode } from "@/lib/inventory/start";
+import { MAX_SERVERS, type AddMode } from "@/lib/inventory/start";
 import type { PoolCount } from "@/types/inventory";
 import { CandidateList } from "./candidate-list";
 
@@ -26,7 +26,7 @@ function Truth({ icon: Icon, children, hint }: { icon: typeof Info; children: Re
 /** What an install does, said before anything is sent. */
 export function InstallTruths() {
   return (
-    <ul className="space-y-1.5" aria-label="What it does">
+    <ul className="grid gap-1.5 lg:grid-cols-3 lg:gap-4" aria-label="What it does">
       <Truth icon={Network} hint="Any NodePool on this InfraEnv that is short of nodes takes it, whatever its cluster. A cluster grows by raising its NodePool's replicas.">
         Joins the MCE&apos;s pool, not one cluster.
       </Truth>
@@ -130,12 +130,14 @@ export function InstallServerChoice({
         <p className="text-xs text-muted-foreground">Choose the MCE and the pool to list its servers.</p>
       ) : (
         <div className="grid gap-1.5">
+          {/* Keyed by the pool, so another pool's list starts with no filters */}
           <CandidateList
+            key={`${pool.mce}/${pool.infraEnv}`}
             found={candidates.data}
             isLoading={candidates.isLoading}
             error={candidates.error}
             selected={names}
-            onToggle={(name) => onNames(toggled(names, name))}
+            onSelected={onNames}
           />
           <p className="text-xs text-muted-foreground">
             {names.length} of {MAX_SERVERS} at most

@@ -1,14 +1,20 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Info, Lock, Wrench } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Hint } from "@/components/common/hint";
 import { ProblemList } from "@/components/common/problem-list";
+import {
+  NO_CANDIDATE_FILTER, candidateFacets, filterCandidates, isFiltering, type CandidateFilter,
+} from "@/lib/inventory/candidate-filter";
 import { hardwareLabel, unnamedReason } from "@/lib/inventory/pools";
+import { toggled } from "@/lib/inventory/start";
 import { groupCandidates, type GroupInfo } from "@/lib/inventory/waiver";
 import { cn } from "@/lib/utils";
 import type { Candidate, Candidates } from "@/types/inventory";
+import { CandidateFilterBar, PickShown } from "./candidate-filters";
 
 const HEALTH_TONE: Record<string, string> = {
   HEALTHY: "bg-status-ready",
@@ -122,20 +128,21 @@ function Unfiltered({ found }: { found: Candidates }) {
  * servers its InfraEnv's agentLabels name, or every free server, said so,
  * when those name none. With `selected`, a picker: a server that is not
  * offered cannot be picked, one that needs a fix can (the dialog then asks to
- * waive its health checks).
+ * waive its health checks), and filters narrow a long list, its shown servers
+ * picked at once (ADR-0057's 2026-11-25 amendment).
  */
 export function CandidateList({
   found,
   isLoading,
   error,
   selected,
-  onToggle,
+  onSelected,
 }: {
   found: Candidates | undefined;
   isLoading: boolean;
   error: unknown;
   selected?: string[];
-  onToggle?: (name: string) => void;
+  onSelected?: (names: string[]) => void;
 }) {
   if (isLoading) return <Skeleton className="h-16 w-full" />;
   if (error) return <ProblemList error={error} title="The pool's servers could not be read" />;
@@ -146,23 +153,78 @@ export function CandidateList({
   return (
     <div className="grid gap-1">
       <Unfiltered found={found} />
-      <CandidateGroups found={found} selected={selected} onToggle={onToggle} />
+      {selected && onSelected ? (
+        <CandidatePicker found={found} selected={selected} onSelected={onSelected} />
+      ) : (
+        <CandidateGroups found={found} candidates={found.candidates} />
+      )}
+    </div>
+  );
+}
+
+/** The list as a picker: its filters, the servers they keep, and picking the shown ones. */
+function CandidatePicker({
+  found,
+  selected,
+  onSelected,
+}: {
+  found: Candidates;
+  selected: string[];
+  onSelected: (names: string[]) => void;
+}) {
+  const [filter, setFilter] = useState<CandidateFilter>(NO_CANDIDATE_FILTER);
+  const facets = useMemo(() => candidateFacets(found.candidates), [found.candidates]);
+  const shown = filterCandidates(found.candidates, filter, selected);
+  const filtering = isFiltering(filter);
+  return (
+    <div className="grid gap-2">
+      <CandidateFilterBar
+        facets={facets}
+        filter={filter}
+        onChange={setFilter}
+        shown={shown.length}
+        total={found.candidates.length}
+        filtering={filtering}
+      />
+      {shown.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground" data-testid="candidates-none-shown">
+          No server matches the filters.
+          <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => setFilter(NO_CANDIDATE_FILTER)}>
+            Clear the filters
+          </button>
+        </div>
+      ) : (
+        <CandidateGroups
+          found={found}
+          candidates={shown}
+          selected={selected}
+          onToggle={(name) => onSelected(toggled(selected, name))}
+        />
+      )}
+      <PickShown chosen={selected} shown={shown} onSelected={onSelected} />
     </div>
   );
 }
 
 function CandidateGroups({
   found,
+  candidates,
   selected,
   onToggle,
 }: {
   found: Candidates;
+  /** The servers to list: all of them, or those a picker's filters keep. */
+  candidates: Candidate[];
   selected?: string[];
   onToggle?: (name: string) => void;
 }) {
   return (
-    <div className="max-h-64 overflow-auto rounded-lg border" role="group" aria-label="Servers in no MCE">
-      {groupCandidates(found.candidates).map(({ group, candidates: members }) => (
+    <div
+      className={cn("overflow-auto rounded-lg border", selected ? "max-h-[min(26rem,45vh)]" : "max-h-64")}
+      role="group"
+      aria-label="Servers in no MCE"
+    >
+      {groupCandidates(candidates).map(({ group, candidates: members }) => (
         <section key={group.group} aria-label={group.label}>
           <GroupHeading group={group} count={members.length} />
           <ul className="divide-y divide-border/60">

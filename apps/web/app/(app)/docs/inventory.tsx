@@ -127,7 +127,9 @@ export function InventorySection() {
           <strong>Let the pool pick</strong> takes a number (up to 20) and leaves the choice to the workflow.{" "}
           <strong>Choose servers</strong> lists the free servers named for the pool, or every free server when the
           pool&apos;s labels are unknown or lacking, saying so (up to 20 at once). A locked,
-          in-maintenance or contested server is listed with why and cannot be chosen.
+          in-maintenance or contested server is listed with why and cannot be chosen. A long list has a
+          search (name, hardware or problem), Status and Hardware filters and <strong>Chosen only</strong>;{" "}
+          <strong>Pick the n shown</strong> chooses every server the filters show that can be chosen.
         </Step>
         <Step n={4} title="Install">
           Before anything is sent the dialog says what an install does: the server <strong>joins the MCE&apos;s pool,

@@ -19,7 +19,7 @@ export interface GroupInfo {
 }
 
 /** Each group, in the order they are listed. */
-const GROUPS: readonly GroupInfo[] = [
+export const CANDIDATE_GROUPS: readonly GroupInfo[] = [
   {
     group: "ready",
     label: "Ready",
@@ -37,14 +37,15 @@ const GROUPS: readonly GroupInfo[] = [
   },
 ];
 
-function candidateGroup(candidate: Candidate): CandidateGroup {
+/** A server's group: not offered, ready, or needing a fix. */
+export function candidateGroup(candidate: Candidate): CandidateGroup {
   if (!candidate.offered) return "not-offered";
   return candidate.ready ? "ready" : "needs-fix";
 }
 
-/** The candidates by group, in `GROUPS`' order, leaving out the empty groups; day1's order within each. */
+/** The candidates by group, in `CANDIDATE_GROUPS`' order, leaving out the empty groups; day1's order within each. */
 export function groupCandidates(candidates: readonly Candidate[]): { group: GroupInfo; candidates: Candidate[] }[] {
-  return GROUPS.map((group) => ({ group, candidates: candidates.filter((c) => candidateGroup(c) === group.group) })).filter(
+  return CANDIDATE_GROUPS.map((group) => ({ group, candidates: candidates.filter((c) => candidateGroup(c) === group.group) })).filter(
     (found) => found.candidates.length > 0
   );
 }
