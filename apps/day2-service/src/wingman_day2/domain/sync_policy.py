@@ -92,6 +92,18 @@ class SyncSettings:
             )
         return self
 
+    def words(self) -> str:
+        """The settings said in a sentence, as MR notes say them."""
+        mode = (
+            "auto-sync"
+            + (" with prune" if self.prune else "")
+            + (" and self-heal" if self.self_heal else "")
+            if self.auto_sync
+            else "manual sync"
+        )
+        options = ", ".join(self.sync_options) if self.sync_options else "no sync options"
+        return f"{mode} and {options}"
+
 
 PLATFORM_DEFAULT: Final = SyncSettings(sync_options=("CreateNamespace=true",))
 """A new add-on's settings when the team has none to copy: manual sync, create the namespace."""

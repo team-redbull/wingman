@@ -232,18 +232,6 @@ def new_deploy_config(spec: NewAddon) -> dict[str, object]:
     return doc
 
 
-def _sync_words(sync: SyncSettings) -> str:
-    mode = (
-        "auto-sync"
-        + (" with prune" if sync.prune else "")
-        + (" and self-heal" if sync.self_heal else "")
-        if sync.auto_sync
-        else "manual sync"
-    )
-    options = ", ".join(sync.sync_options) if sync.sync_options else "no sync options"
-    return f"{mode} and {options}"
-
-
 def _existing_note(plan: AuthoringPlan) -> str | None:
     """The note on destinations that had the chart before and whose deploy config changes."""
     changed = [i for i in plan.impact if i.effect is Effect.CHANGED]
@@ -416,7 +404,7 @@ class AuthoringService(PlanWriter):
         existing = _existing_note(plan)
         plan.notes.append(
             f"After the merge, {chart} is in {state.team.project.path_with_namespace}'s catalog "
-            f"(operators/{chart}/), with {_sync_words(sync)}. "
+            f"(operators/{chart}/), with {sync.words()}. "
             + (
                 existing
                 if existing
