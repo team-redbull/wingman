@@ -368,6 +368,9 @@ confirmed by id (`confirm_changes`) with the preview's `digest`
 | `PUT` | `/api/day2/addons/{team}/{addon}/defaults/{scope}/destinations/{cluster}/values` | One MCE's, hosted cluster's or UPI cluster's `values-<name>.yaml` of a fleet default (opens an MR) |
 | `PUT` | `/api/day2/addons/{team}/{addon}/defaults/{scope}/envs/{env}/values` | One env's `values-<env>.yaml` (prod, prep or test) of a fleet default (opens an MR) |
 | `POST` | `/api/day2/addons/{team}/{addon}/mce-installs` | Deploy it on specific MCEs: one install MR per MCE, in each one's own `in-cluster/<chart>/` (an MCE default of it is refused, the XOR rule) |
+| `POST` | `/api/day2/addons/{team}/{addon}/ocp-versions` | Add an OCP-version pin, `operators/<addon>/ocp-versions/<version>/`: a full version (`4.16.27`), the chart revision there, and its values (opens an MR) |
+| `PUT` | `/api/day2/addons/{team}/{addon}/ocp-versions/{version}` | Change a pin's revision (edited in place) or its values (opens an MR) |
+| `DELETE` | `/api/day2/addons/{team}/{addon}/ocp-versions/{version}` | Remove a pin: destinations at that version get the add-on's revision again (opens an MR) |
 
 #### Destinations and their charts
 

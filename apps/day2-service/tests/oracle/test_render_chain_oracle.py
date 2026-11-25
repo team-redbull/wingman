@@ -45,6 +45,7 @@ from wingman_day2.application.services import Day2Services
 from wingman_day2.application.topology import Topology, TopologyService
 from wingman_day2.domain.clusters import DefaultsScope
 from wingman_day2.domain.findings import Rule, Severity
+from wingman_day2.domain.ocp_pins import PinSpec
 from wingman_day2.domain.sync_policy import SyncSettings
 from wingman_day2.infrastructure.repositories import (
     GitLabChartRepository,
@@ -691,4 +692,43 @@ async def test_an_env_override_changes_that_envs_values_only(tmp_path: Path) -> 
             assert mine == {**theirs, **{"replicas": 9}, **(own or {})}
         else:
             assert mine == theirs, uid
+    await assert_same_apps(after_files, tmp_path / "again", "redbull")
+
+
+async def test_a_pin_moves_the_destinations_at_its_version_only(tmp_path: Path) -> None:
+    # ADR-0043's 2026-11-25 amendment: the platform reads the pin Wingman writes, where it says.
+    files = fixture_files()
+    before = _leaves(oracle(files, tmp_path / "before", "redbull")["apps"])
+    after_files, result = await authored_with(
+        files,
+        lambda day2: lambda **kw: day2.ocp_pins.add(
+            "redbull", "cluster-roles", PinSpec("4.20.9", "HEAD", {"extra": 1}), ADMIN, **kw
+        ),
+    )
+    snapshot = oracle(after_files, tmp_path / "after", "redbull")
+    assert snapshot["check_failures"] == []
+    after = _leaves(snapshot["apps"])
+    assert sorted(after) == sorted(before)
+    moved = sorted(
+        uid
+        for uid, leaf in after.items()
+        if leaf["identity"] != before[uid]["identity"]
+        or workload(after_files, "redbull", leaf) != workload(files, "redbull", before[uid])
+    )
+    assert moved == [
+        f"ocp4-prep-mce-site1-a:redbull-{name}-cluster-roles-deploy"
+        for name in ("ocp4-prep-eyal-site1", "ocp4-prep-itay-site1")
+    ]
+    assert [i.ref.name for i in result.plan.impact] == [
+        "ocp4-prep-eyal-site1",
+        "ocp4-prep-itay-site1",
+    ]
+    for uid in moved:
+        # The add-on tracks main; the pin moves 4.20.9 to the chart repo's default branch.
+        assert before[uid]["identity"]["source_targetRevision"] == "main"
+        assert after[uid]["identity"]["source_targetRevision"] == "HEAD"
+        assert workload(after_files, "redbull", after[uid]) == {
+            **workload(files, "redbull", before[uid]),
+            "extra": 1,
+        }
     await assert_same_apps(after_files, tmp_path / "again", "redbull")

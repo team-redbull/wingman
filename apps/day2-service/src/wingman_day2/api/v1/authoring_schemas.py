@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from wingman_day2.api.v1.schemas import (
+    ConfirmedIn,
     FileChangeOut,
     FindingOut,
     MRDetailOut,
@@ -146,14 +147,7 @@ class UpdateFleetDefaultBody(_Input):
     message: str | None = None
 
 
-class _Confirmed(_Input):
-    last_commit_id: str | None = Field(default=None, description="The file's, as read.")
-    confirm_changes: list[str] = Field(default_factory=list)
-    expected_digest: str | None = Field(default=None, description="The preview's digest.")
-    message: str | None = None
-
-
-class DestinationValuesBody(_Confirmed):
+class DestinationValuesBody(ConfirmedIn):
     """A destination's ``values-<name>.yaml`` of a fleet default; null or {} deletes it."""
 
     values: dict[str, Any] | None

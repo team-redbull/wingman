@@ -21,12 +21,34 @@ from wingman_core.domain.merge_request import MergeRequest
 from wingman_day2.application.catalog import CatalogEntry
 from wingman_day2.domain.deploy_config import IGNORE_DIFFERENCES, SYNC_POLICY
 from wingman_day2.domain.findings import Finding
+from wingman_day2.domain.ocp_pins import PinSpec
 from wingman_day2.domain.sync_policy import SyncSettings, sync_settings
 from wingman_day2.domain.teams import TeamAccess
 
 
 class _Input(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class ConfirmedIn(_Input):
+    """A write confirmed against its preview, guarded by the commit its file was read at."""
+
+    last_commit_id: str | None = Field(default=None, description="The file's, as read.")
+    confirm_changes: list[str] = Field(default_factory=list)
+    expected_digest: str | None = Field(default=None, description="The preview's digest.")
+    message: str | None = None
+
+
+class OcpPinIn(_Input):
+    """An OCP-version pin, ``operators/<chart>/ocp-versions/<version>/`` (ADR-0043)."""
+
+    version: str = Field(description="The full OpenShift version: 4.16.27, never 4.16.")
+    target_revision: str = Field(description="A branch of the chart repo; HEAD its default.")
+    values: dict[str, Any] = Field(default_factory=dict, description="{}: no values.yaml.")
+
+    def spec(self) -> PinSpec:
+        """The domain's pin (checked where it is used)."""
+        return PinSpec(self.version, self.target_revision, self.values)
 
 
 # ── Responses ───────────────────────────────────────────────────────────────
