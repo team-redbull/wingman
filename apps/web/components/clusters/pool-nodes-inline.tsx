@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProblemList } from "@/components/common/problem-list";
 import { HealthBadge, NodeStateChip } from "@/components/clusters/node-badges";
 import { NodeServerAnchor } from "@/components/clusters/node-server-link";
+import { renderedName } from "@/lib/nodepool-names";
 import type { NodesRead } from "@/lib/nodes";
 import { cn } from "@/lib/utils";
 import type { NodePoolNodes, PoolNode } from "@/types";
@@ -16,17 +17,23 @@ import type { NodePoolNodes, PoolNode } from "@/types";
  * quick look.
  */
 
-/** The MCE's NodePool for a file's nodepool: by its name, which the chart derives as `<clusterName>-<infraEnv>`. */
+/**
+ * The MCE's NodePool for a file's nodepool: by its name, either shape (its
+ * `name`, else the chart's `<clusterName>-<infraEnv>`, ADR-0071). Failing that,
+ * the one pool selecting its InfraEnv, among those no other nodepool of the
+ * file takes by name (`taken`): several NodePools may draw from one InfraEnv.
+ */
 export function matchPool(
   pools: NodePoolNodes[],
-  { name, infraEnv, clusterName }: { name: string | null; infraEnv: string | null; clusterName: string }
+  { name, infraEnv, clusterName }: { name: string | null; infraEnv: string | null; clusterName: string },
+  taken: ReadonlySet<string> = new Set()
 ): NodePoolNodes | null {
-  const expected = name ?? (infraEnv ? `${clusterName}-${infraEnv}` : null);
+  const expected = renderedName({ name, infraEnvName: infraEnv }, clusterName);
   const byName = expected ? pools.find((p) => p.name === expected) : undefined;
   if (byName) return byName;
   // An explicit name the MCE renamed is rare; the InfraEnv in the selector still finds the pool
   if (!infraEnv) return null;
-  const bySelector = pools.filter((p) => p.agent_selector?.endsWith(`=${infraEnv}`));
+  const bySelector = pools.filter((p) => !taken.has(p.name) && p.agent_selector?.endsWith(`=${infraEnv}`));
   return bySelector.length === 1 ? bySelector[0] : null;
 }
 

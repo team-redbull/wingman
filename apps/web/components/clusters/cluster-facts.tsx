@@ -9,6 +9,7 @@ import { PoolLiveState, PoolNodesInline, matchPool } from "@/components/clusters
 import { ClusterSegmentsLink } from "@/components/clusters/segments-link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClusterNetwork } from "@/lib/network";
+import { renderedName } from "@/lib/nodepool-names";
 import { useClusterNodes } from "@/lib/nodes";
 import { useIsAdmin } from "@/stores/auth-store";
 import { showTuning as tuningText, tuningNames } from "@/lib/tuning-profiles";
@@ -224,10 +225,12 @@ export function NodePoolsCard({ values, nodes }: { values: ClusterValues; nodes?
       return next;
     });
 
+  // Either shape of name (ADR-0071); a pool a nodepool takes by name is never another's by selector
+  const poolNames = values.nodepools.map((np) => (nodes ? renderedName({ name: np.name, infraEnvName: np.infra_env_name }, nodes.clusterName) : np.name));
+  const taken = new Set(pools.filter((p) => poolNames.includes(p.name)).map((p) => p.name));
   const rows: PoolRow[] = values.nodepools.map((np, index) => {
-    const poolName = np.name ?? (np.infra_env_name && nodes ? `${nodes.clusterName}-${np.infra_env_name}` : null);
-    const pool = nodes ? matchPool(pools, { name: np.name, infraEnv: np.infra_env_name, clusterName: nodes.clusterName }) : null;
-    return { key: `file-${index}`, kind: "file", index, np, poolName, pool };
+    const pool = nodes ? matchPool(pools, { name: np.name, infraEnv: np.infra_env_name, clusterName: nodes.clusterName }, taken) : null;
+    return { key: `file-${index}`, kind: "file", index, np, poolName: poolNames[index], pool };
   });
   const matched = new Set(rows.flatMap((r) => (r.kind === "file" && r.pool ? [r.pool.name] : [])));
   for (const pool of pools) {

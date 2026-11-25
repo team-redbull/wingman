@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, Eye, FileCode2, GitBranch, Layers, Network, RefreshCw, Settings2, Zap } from "lucide-react";
+import { AlertTriangle, ExternalLink, Eye, FileCode2, GitBranch, Layers, Network, RefreshCw, Settings2, Tag, Zap } from "lucide-react";
 import { Callout, CodeBlock, InlineCode, SectionHeader } from "./docs-parts";
 
 /** A titled card in the "Special features" list. */
@@ -191,6 +191,36 @@ maxConcurrentControlPlanes: 1`}
             By default, InfraEnvs are listed across the whole hub. The day1 service&apos;s{" "}
             <InlineCode>MCE_INFRAENV_NAMESPACE</InlineCode> restricts the list to one namespace; the Helm chart does
             not set it yet.
+          </Callout>
+        </FeaturePanel>
+
+        <FeaturePanel icon={Tag} tint="bg-sky-500/10 text-sky-500" title="NodePool names" where="New Cluster → nodepool fields, a flavor's nodepools, Edit cluster">
+          <p>
+            A new NodePool is named after the InfraEnv it draws from: <InlineCode>{"<InfraEnv>"}</InlineCode>, or{" "}
+            <InlineCode>{"<InfraEnv>-<suffix>"}</InlineCode>. The InfraEnv part is fixed; the <strong>Name suffix</strong>{" "}
+            beside it is yours, and lets several NodePools draw from one InfraEnv, one zone. The form shows the whole
+            name as you type. There is no cluster prefix: each cluster&apos;s NodePools sit in its own namespace,{" "}
+            <InlineCode>{"hcp-<clusterName>"}</InlineCode>.
+          </p>
+          <CodeBlock language="Three NodePools on one zone's InfraEnv">
+{`nodepool:
+  - infraEnvName: c200-mtl-az1
+    name: c200-mtl-az1          # no suffix
+  - infraEnvName: c200-mtl-az1
+    name: c200-mtl-az1-gpu      # suffix gpu
+  - infraEnvName: c200-mtl-az1
+    name: c200-mtl-az1-b        # suffix b`}
+          </CodeBlock>
+          <p>
+            A suffix is lowercase letters, digits and <InlineCode>-</InlineCode>, not starting or ending with one; the
+            whole name is at most 63 characters (it labels each of the NodePool&apos;s nodes), and no two NodePools of a
+            cluster share one. A flavor may preset the suffix, never a whole name.
+          </p>
+          <Callout type="tip" title="Existing NodePools keep their names">
+            Renaming a NodePool deletes it and creates a new one with new nodes, so Wingman never renames one. Edit
+            cluster lists every NodePool: an existing one read-only, by the name it has (the chart&apos;s{" "}
+            <InlineCode>{"<clusterName>-<infraEnvName>"}</InlineCode>, or one written in the file, marked{" "}
+            <strong>older name</strong> when it does not follow the rule), and one you add with its own suffix.
           </Callout>
         </FeaturePanel>
 

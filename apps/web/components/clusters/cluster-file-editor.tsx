@@ -9,6 +9,7 @@ import { fileNodepools, offersInfraEnvs, withInfraEnvs, type FileNodepool } from
 import { offersPolicy } from "@/lib/nodepool-policy";
 import type { TemplateField } from "@/types";
 import { AlsoDrawsFrom } from "./also-draws-from";
+import { NodePoolNamesPanel } from "./nodepool-names-panel";
 import { hasPolicies, PolicyPanel } from "./policy-panel";
 
 /** The MCE's InfraEnvs, as the create form reads them; `null` when live status is off. */
@@ -98,12 +99,21 @@ function InfraEnvsPanel({ text, onChange, mce }: { text: string; onChange: (text
 }
 
 /**
- * The cluster file while it is edited: its text, and with
- * `DAY1_MULTI_INFRAENV_NODEPOOLS` on (day1's template schema offers the
- * input) each nodepool's InfraEnvs above it; each nodepool's scale-down
- * policy when the template writes it or the file already sets one (ADR-0062).
+ * The cluster file while it is edited: its text, each NodePool's name above
+ * it (an existing one read-only, an added one named from a suffix, ADR-0071),
+ * and with `DAY1_MULTI_INFRAENV_NODEPOOLS` on (day1's template schema offers
+ * the input) each nodepool's InfraEnvs; each nodepool's scale-down policy when
+ * the template writes it or the file already sets one (ADR-0062).
  */
-export function ClusterFileEditor({ value, onChange, mce }: { value: string; onChange: (text: string) => void; mce: string }) {
+export function ClusterFileEditor({ value, onChange, mce, base, clusterName }: {
+  value: string;
+  onChange: (text: string) => void;
+  mce: string;
+  /** The file when the edit began: the NodePools it has keep their names. */
+  base: string;
+  /** The chart's `clusterName`. */
+  clusterName: string;
+}) {
   const { data: schema } = useQuery<TemplateField[]>({
     queryKey: day1Keys.specs.templateSchema,
     queryFn: day1Api.specs.templateSchema,
@@ -111,6 +121,7 @@ export function ClusterFileEditor({ value, onChange, mce }: { value: string; onC
   });
   return (
     <div>
+      <NodePoolNamesPanel text={value} base={base} clusterName={clusterName} onChange={onChange} />
       {offersInfraEnvs(schema) && <InfraEnvsPanel text={value} onChange={onChange} mce={mce} />}
       {(offersPolicy(schema) || hasPolicies(value)) && <PolicyPanel text={value} onChange={onChange} />}
       <textarea
