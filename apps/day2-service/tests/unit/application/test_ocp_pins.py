@@ -17,7 +17,7 @@ from wingman_core.domain.errors import RevisionConflictError
 from wingman_core.domain.git import ChangeKind, FileChange, RepoPath
 from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
-from wingman_day2.application.authoring import AuthoringResult, Effect
+from wingman_day2.application.authoring import AuthoringResult, Effect, NewAddon
 from wingman_day2.application.ocp_pins import PinChange
 from wingman_day2.application.services import Day2Services
 from wingman_day2.domain.errors import (
@@ -30,7 +30,9 @@ from wingman_day2.domain.errors import (
 )
 from wingman_day2.domain.findings import Rule
 from wingman_day2.domain.ocp_pins import PinSpec
+from wingman_day2.domain.sync_policy import PLATFORM_DEFAULT
 from wingman_day2.infrastructure.repositories import GitLabSigsRepository
+from wingman_day2.settings import FAKE_GITLAB_URL
 
 PINS = "operators/cluster-roles/ocp-versions"
 EYAL = "hosted:site1:prep:ocp4-prep-mce-site1-a:ocp4-prep-eyal-site1"
@@ -389,3 +391,52 @@ async def test_removing_a_pin_deleted_since_the_read_is_a_conflict(
         await remove(last_commit_id=at, dry_run=True)
     with pytest.raises(ChartNotInstalledError):
         await remove(dry_run=True)
+
+
+# ── a new add-on's pins ─────────────────────────────────────────────────────
+
+
+def podinfo(*pins: PinSpec) -> NewAddon:
+    return NewAddon(
+        team="redbull",
+        chart="podinfo",
+        repourl=f"{FAKE_GITLAB_URL}/redbull/helm-charts/example-chart.git",
+        sync=PLATFORM_DEFAULT,
+        project_namespace="podinfo",
+        pins=pins,
+    )
+
+
+async def test_a_new_addons_pins_are_written_in_its_create_mr(
+    services: Day2Services, gitlab: InMemoryGitLab, jane_user: User
+) -> None:
+    spec = podinfo(PinSpec("4.20.9", "0.1.0", {"a": 1}), PinSpec("4.16.27", "HEAD"))
+    result = await services.authoring.create(spec, jane_user)
+    plan = result.plan
+    assert [(c.kind, str(c.path)) for c in plan.changes] == [
+        (ChangeKind.CREATE, "operators/podinfo/podinfo.yaml"),
+        (ChangeKind.CREATE, "operators/podinfo/values.yaml"),
+        (ChangeKind.CREATE, "operators/podinfo/ocp-versions/4.16.27/podinfo.yaml"),
+        (ChangeKind.CREATE, "operators/podinfo/ocp-versions/4.20.9/podinfo.yaml"),
+        (ChangeKind.CREATE, "operators/podinfo/ocp-versions/4.20.9/values.yaml"),
+    ]
+    assert plan.title == "[Wingman/Day2] Create addon redbull/podinfo in the team catalog"
+    pinned_note = "ocp-versions/ pins it per OCP version (4.16.27: HEAD, 4.20.9: 0.1.0)"
+    assert any(pinned_note in n for n in plan.notes)
+    files = await files_of(gitlab, result)
+    assert files["operators/podinfo/ocp-versions/4.16.27/podinfo.yaml"] == "targetRevision: HEAD\n"
+    assert yaml.safe_load(files["operators/podinfo/ocp-versions/4.20.9/values.yaml"]) == {"a": 1}
+
+
+async def test_a_new_addons_pins_are_checked_before_anything_is_written(
+    services: Day2Services, jane_user: User
+) -> None:
+    for pins, rule in [
+        ((PinSpec("4.20.9", "0.1.0"), PinSpec("4.20.9", "HEAD")), "pin-duplicate"),
+        ((PinSpec("4.20", "0.1.0"),), "ocp-version-invalid"),
+        ((PinSpec("4.20.9", ""),), "pin-revision-missing"),
+        ((PinSpec("4.20.9", "9.9.9"),), "revision-unknown"),
+    ]:
+        with pytest.raises(ChangeRefusedError) as raised:
+            await services.authoring.create(podinfo(*pins), jane_user, dry_run=True)
+        assert raised.value.details["rule"] == rule

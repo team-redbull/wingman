@@ -248,6 +248,10 @@ the platform would render (ADR-0023), measured on every app of the chart
 (`ocp_versions[].last_commit_id`) and is refused when the pin changed or went
 since (ADR-0006).
 
+**Create** takes `ocp_versions: [{version, target_revision, values}]`, zero
+or more, checked the same (`pin-duplicate` for a version given twice) and
+written in the create's MR beside the add-on's two files.
+
 **The footguns are said, not hidden.** A fleet default whose deploy config
 sets `targetRevision` overrides every pin's revision on its scope (layer 3
 over layer 2): each plan warns with `fleet-pin-overrides-ocp-versions`. A pin
@@ -261,7 +265,8 @@ Verification: `tests/unit/domain/test_ocp_pins.py` (the version shape, a
 property over every version a `mastertag` gives, the files),
 `tests/unit/application/test_ocp_pins.py` and
 `tests/api/test_ocp_pins_api.py` (add, change, remove, stale writes,
-a viewer and a read-only team refused, the fleet-default warning), and the
+a viewer and a read-only team refused, the fleet-default warning, a create
+with pins), and the
 oracle's `test_a_pin_moves_the_destinations_at_its_version_only`:
 `render_chain.py` renders the pin Wingman writes on exactly the destinations
 at its version, with the revision and values the plan lists.

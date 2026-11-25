@@ -154,6 +154,7 @@ What the New add-on form starts from, read from the team's own files:
   "values": {},
   "default_scope": null,
   "default_values": {},
+  "ocp_versions": [],
   "confirm_changes": [],
   "message": null
 }
@@ -180,9 +181,15 @@ What the New add-on form starts from, read from the team's own files:
   `defaults/<scope>/<name>/values.yaml`. As §5, including clusters that
   already have a folder of that name, which `confirm_changes` confirms as
   there.
+- `ocp_versions` (since 3.64.0): zero or more OCP-version pins,
+  `[{"version": "4.20.9", "target_revision": "2.1.5-hotfix", "values": {}}]`,
+  each checked as §8's `POST` (a full version, a branch of the chart repo)
+  and a version given twice refused (422 `pin-duplicate`). Each is written in
+  the same MR, as `operators/<name>/ocp-versions/<version>/<name>.yaml` and,
+  when it has values, `values.yaml`.
 
 Writes `operators/<name>/<name>.yaml` and `operators/<name>/values.yaml`
-(plus §5's files with `default_scope`). `409 ALREADY_EXISTS` (rule
+(plus §5's files with `default_scope`, and each pin's). `409 ALREADY_EXISTS` (rule
 `addon-exists`) when `operators/<name>/` exists. Title:
 `[Wingman/Day2] Create addon <team>/<name> in the team catalog` (with a
 scope: `... and as a fleet default on every hosted cluster`). Labels

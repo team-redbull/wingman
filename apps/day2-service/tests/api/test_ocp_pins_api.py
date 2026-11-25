@@ -14,6 +14,7 @@ import yaml
 
 from wingman_core.domain.git import FileChange, RepoPath
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
+from wingman_day2.settings import FAKE_GITLAB_URL
 
 PINS = "/api/day2/addons/redbull/cluster-roles/ocp-versions"
 FOLDER = "operators/cluster-roles/ocp-versions/4.20.9"
@@ -161,3 +162,30 @@ async def test_a_pins_version_revision_and_existence_are_checked(
     missing = await jane.put(f"{PINS}/4.16.27", params=dry, json={"target_revision": "2.0.0"})
     assert problem(missing, 404, "NOT_FOUND")["details"]["rule"] == "pin-unknown"
     problem(await jane.put(f"{PINS}/4.20", params=dry, json={}), 422, "VALIDATION_ERROR")
+
+
+async def test_a_new_addon_is_created_with_its_pins(
+    jane: httpx.AsyncClient, gitlab: InMemoryGitLab
+) -> None:
+    body: dict[str, Any] = {
+        "name": "podinfo",
+        "repourl": f"{FAKE_GITLAB_URL}/redbull/helm-charts/example-chart.git",
+        "sync": {"auto_sync": False, "prune": False, "self_heal": False, "sync_options": []},
+        "ocp_versions": [{"version": "4.20.9", "target_revision": "0.1.0", "values": {"a": 1}}],
+    }
+    change = await confirmed(jane, "POST", "/api/day2/addons/redbull", body, 201)
+    assert [f["path"] for f in change["files"]] == [
+        "operators/podinfo/podinfo.yaml",
+        "operators/podinfo/values.yaml",
+        "operators/podinfo/ocp-versions/4.20.9/podinfo.yaml",
+        "operators/podinfo/ocp-versions/4.20.9/values.yaml",
+    ]
+    files = await branch_files(gitlab, change)
+    assert files["operators/podinfo/ocp-versions/4.20.9/podinfo.yaml"] == "targetRevision: 0.1.0\n"
+    twice = {**body, "ocp_versions": body["ocp_versions"] * 2}
+    refused = problem(
+        await jane.post("/api/day2/addons/redbull", params={"dry_run": "true"}, json=twice),
+        422,
+        "VALIDATION_ERROR",
+    )
+    assert refused["details"]["rule"] == "pin-duplicate"

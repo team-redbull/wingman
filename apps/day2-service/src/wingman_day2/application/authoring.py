@@ -7,7 +7,7 @@ Wingman writes, on the team's own repo only:
 - **create**: ``operators/<chart>/<chart>.yaml`` (the deploy config: lowercase
   ``repourl``, and ``targetRevision``, ``path``, ``projectNamespace``,
   ``syncPolicy``, ``ignoreDifferences`` only when set) and
-  ``operators/<chart>/values.yaml``; optionally a fleet default in the same MR.
+  ``operators/<chart>/values.yaml``; optionally pins and a fleet default too.
 - **update the team default**: the deploy config edited in place (comments
   and untouched lines kept, ``domain.yaml_text``), and the values file.
 - **make default**: ``defaults/<scope>/<chart>/values.yaml`` (always: the file
@@ -41,6 +41,7 @@ from wingman_core.domain.mr_conventions import Repo, ResourceType, Verb, mr_titl
 from wingman_core.domain.users import User
 from wingman_day2.application.apps import LoadedLayer, load_layers
 from wingman_day2.application.changes import check_chart_name
+from wingman_day2.application.ocp_pins import plan_new_pins
 from wingman_day2.application.plan_writer import (
     SCOPE_LABELS,
     SCOPE_NOUNS,
@@ -83,6 +84,7 @@ from wingman_day2.domain.errors import (
 from wingman_day2.domain.exclusions import set_excluded
 from wingman_day2.domain.findings import Finding, Rule, warning
 from wingman_day2.domain.merge import merge_values
+from wingman_day2.domain.ocp_pins import PinSpec, check_pins
 from wingman_day2.domain.platform import TeamPlan, scope_exclusions
 from wingman_day2.domain.stacks import Layer, LayerRole
 from wingman_day2.domain.sync_policy import (
@@ -150,6 +152,7 @@ class NewAddon:
     values: Mapping[str, object] = field(default_factory=dict)
     default_scope: DefaultsScope | None = None
     default_values: Mapping[str, object] = field(default_factory=dict)
+    pins: tuple[PinSpec, ...] = ()
     confirm_changes: tuple[str, ...] = ()
 
 
@@ -382,6 +385,7 @@ class AuthoringService(PlanWriter):
         sync = spec.sync.checked()
         check_namespace(spec.project_namespace)
         check_ignore_differences(spec.ignore_differences)
+        pins = check_pins(spec.pins)
         plan = AuthoringPlan(state, Action.CREATE, chart, spec.default_scope)
         deploy_path = folder.child(layout.deploy_config_name(chart))
         plan.findings += await self.check_chart_repo(
@@ -395,6 +399,7 @@ class AuthoringService(PlanWriter):
             FileChange.create(deploy_path, dump_yaml(new_deploy_config(spec))),
             FileChange.create(folder.child(layout.VALUES_FILE), dump_values(spec.values)),
         ]
+        await plan_new_pins(self, plan, pins, repourl=spec.repourl, chart_path=spec.path)
         label = SCOPE_LABELS[spec.default_scope] if spec.default_scope else ""
         if spec.default_scope is not None:
             await self._plan_default(
