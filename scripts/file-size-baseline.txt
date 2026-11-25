@@ -11,7 +11,7 @@
 # TypeScript source files, and one test); 2026-11-24: 13 Python and 8
 # TypeScript source files, and one test.
 
-  720  apps/day1-service/src/wingman_day1/application/rollouts.py
+  700  apps/day1-service/src/wingman_day1/application/rollouts.py
   540  apps/day1-service/src/wingman_day1/domain/machine_configs.py
   651  apps/day1-service/src/wingman_day1/domain/node_pools.py
   521  apps/day1-service/src/wingman_day1/domain/quick_links.py

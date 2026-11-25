@@ -62,7 +62,7 @@ from wingman_day1.application.kv_clusters import KvClusterService
 from wingman_day1.application.machine_configs import MachineConfigService
 from wingman_day1.application.network import NetworkService
 from wingman_day1.application.placement import PlacementService
-from wingman_day1.application.rollouts import ROLLOUT_USER, RolloutService
+from wingman_day1.application.rollouts import RolloutService
 from wingman_day1.application.sites import SiteCatalog
 from wingman_day1.application.specs import SpecCatalog
 from wingman_day1.application.sync import SyncService
@@ -135,7 +135,7 @@ class Adapters:
     ledger: SegmentLedger | None = None
     """segments-manager; ``None`` when ``SEGMENTS_MANAGER_URL`` is empty (ADR-0039)."""
     day2_installs: Day2Installs | None = None
-    """Day2 opening a rollout's add-on MRs (ADR-0044); ``None``: listed for a person instead."""
+    """Day2 opening add-on MRs: a rollout's, a sync's, an import's; ``None``: none are asked."""
     add_server: AddServerWorkflow | None = None
     """The add-server-to-mce workflow wherever the orchestrator is (ADR-0057)."""
     upgrade: UpgradeWorkflow | None = None
@@ -151,14 +151,13 @@ def build_adapters(
     *,
     metrics: WingmanMetrics,
     service_token: Callable[[], str],
-    rollout_token: Callable[[], str] | None = None,
+    installs_token: Callable[[User], str] | None = None,
     clock: Clock = system_clock,
 ) -> Adapters:
     """The real adapters for these settings (or the in-memory GitLab, for ``fake``).
 
-    ``service_token`` mints the short-lived session day1 presents to day2;
-    ``rollout_token`` the admin one a flavor's rollout asks day2 to install
-    add-ons with (ADR-0044).
+    ``service_token`` mints day1's own short-lived session towards day2; ``installs_token``
+    the one it asks day2 to install add-ons with, as the user it asks for (ADR-0044).
     """
     closers: list[platform.Close] = []
     if runtime.git_backend is GitBackend.FAKE:
@@ -176,20 +175,17 @@ def build_adapters(
         adapter = GitLabHttpAdapter(build_client(GitLabSettings()))
         closers.append(adapter.aclose)
         inner = adapter
+    day2_url = str(settings.day2_service_url)
     day2 = HttpDay2Addons(
-        base_url=str(settings.day2_service_url),
+        base_url=day2_url,
         token=service_token,
         timeout_seconds=settings.day2_timeout_seconds,
         metrics=metrics,
     )
     closers.append(day2.aclose)
     day2_installs: Day2Installs | None = None
-    if rollout_token is not None:
-        installs = HttpDay2Installs(
-            base_url=str(settings.day2_service_url),
-            token=rollout_token,
-            metrics=metrics,
-        )
+    if installs_token is not None:
+        installs = HttpDay2Installs(base_url=day2_url, token=installs_token, metrics=metrics)
         closers.append(installs.aclose)
         day2_installs = installs
     hub: HubApi | None = None
@@ -450,7 +446,7 @@ def create_app(
         runtime,
         metrics=metrics,
         service_token=lambda: service_tokens.issue(SERVICE_USER),
-        rollout_token=lambda: service_tokens.issue(ROLLOUT_USER),
+        installs_token=service_tokens.issue,
         clock=clock,
     )
     context = build_context(

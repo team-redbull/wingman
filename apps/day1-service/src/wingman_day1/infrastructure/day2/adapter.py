@@ -3,10 +3,12 @@
 The only place day1 knows day2 exists. Day1 never writes a day2 repo
 itself (ADR-0016): ``HttpDay2Addons`` reads what is installed, and
 ``HttpDay2Installs`` asks day2's own API to open install MRs for a
-flavor's rollout (ADR-0044), which day2 opens as for any request, one per
-team. Each authenticates with a short-lived session token of day1's own
-(the services share the session secret), issued by the injected ``token``
-callable, so neither depends on which user's request is being served.
+flavor's rollout (ADR-0044), a sync or an import (ADR-0037's 2026-11-25
+amendment), which day2 opens as for any request, one per team. Each
+authenticates with a short-lived session token of day1's own (the services
+share the session secret), issued by the injected ``token`` callable:
+``HttpDay2Addons`` as day1 itself, ``HttpDay2Installs`` as the user it asks
+for, so day2's MRs name the person who synced or imported.
 
 ``Day2UnavailableError`` means day2 did not answer usefully: addon state
 is then *unknown*, never "nothing installed" (ADR-0004). An install day2
@@ -24,6 +26,7 @@ from urllib.parse import quote
 
 import httpx
 
+from wingman_core.domain.users import User
 from wingman_core.observability.metrics import Dependency, WingmanMetrics
 from wingman_day1.domain.addons import (
     Day2InstallRequest,
@@ -114,8 +117,9 @@ class HttpDay2Addons:
 class HttpDay2Installs:
     """A ``Day2Installs`` over day2's approvals list and its bulk install.
 
-    ``token`` must issue an *admin* session (day2's bulk install is an
-    admin write); the MRs' footers then name its user as the requester.
+    ``token`` issues a session for the user it is given, who must be an
+    admin (day2's bulk install is an admin write); the MRs' footers then
+    name that user as the requester.
     A version is never sent: a missing add-on is installed at its team's
     default revision, and any other version would be an emergency pin
     that day2 refuses unless asked for (ADR-0025, ADR-0022).
@@ -125,13 +129,13 @@ class HttpDay2Installs:
         self,
         *,
         base_url: str,
-        token: Callable[[], str],
+        token: Callable[[User], str],
         timeout_seconds: float = 30.0,
         metrics: WingmanMetrics | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         timer: Timer = time.perf_counter,
     ) -> None:
-        """Call day2 at ``base_url`` as ``token()``; an install commits per team, so allow time."""
+        """Call day2 at ``base_url`` as ``token(user)``; an install commits per team: allow time."""
         self._token = token
         self._observer = Observer(Dependency.DAY2, metrics, timer=timer)
         self._client = json_client(
@@ -142,18 +146,20 @@ class HttpDay2Installs:
         """Close the HTTP client."""
         await self._client.aclose()
 
-    def _auth(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._token()}"}
+    def _auth(self, user: User) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._token(user)}"}
 
-    async def open_installs(self, cluster: ClusterRef) -> list[Day2InstallRequest]:
+    async def open_installs(
+        self, cluster: ClusterRef, *, as_user: User
+    ) -> list[Day2InstallRequest]:
         """See Day2Installs.open_installs."""
         return await self._observer.call(
-            Day2Operation.LIST_OPEN_INSTALLS, self._open_installs(cluster)
+            Day2Operation.LIST_OPEN_INSTALLS, self._open_installs(cluster, as_user)
         )
 
-    async def _open_installs(self, cluster: ClusterRef) -> list[Day2InstallRequest]:
+    async def _open_installs(self, cluster: ClusterRef, user: User) -> list[Day2InstallRequest]:
         try:
-            response = await self._client.get(APPROVALS_PATH, headers=self._auth())
+            response = await self._client.get(APPROVALS_PATH, headers=self._auth(user))
         except httpx.TransportError as exc:
             raise Day2UnavailableError(
                 f"day2 unreachable listing its open merge requests: {type(exc).__name__}"
@@ -168,7 +174,12 @@ class HttpDay2Installs:
             raise Day2UnavailableError("day2 returned a malformed merge request list") from exc
 
     async def install(
-        self, cluster: ClusterRef, addons: Sequence[RequestedAddon], *, message: str
+        self,
+        cluster: ClusterRef,
+        addons: Sequence[RequestedAddon],
+        *,
+        message: str,
+        as_user: User,
     ) -> Day2InstallResult:
         """See Day2Installs.install. Nothing to install asks nothing.
 
@@ -188,7 +199,7 @@ class HttpDay2Installs:
         for team, asked in teams.items():
             try:
                 result = await self._observer.call(
-                    Day2Operation.INSTALL_ADDONS, self._install(cluster, asked, message)
+                    Day2Operation.INSTALL_ADDONS, self._install(cluster, asked, message, as_user)
                 )
             except Day2UnavailableError as exc:
                 failed.append(f"{team}: {exc}")
@@ -198,7 +209,7 @@ class HttpDay2Installs:
         return Day2InstallResult(opened=tuple(opened), failed=tuple(failed))
 
     async def _install(
-        self, cluster: ClusterRef, addons: Sequence[RequestedAddon], message: str
+        self, cluster: ClusterRef, addons: Sequence[RequestedAddon], message: str, user: User
     ) -> Day2InstallResult:
         what = f"the install of {len(addons)} add-on(s) on {cluster.name}"
         body = {
@@ -213,7 +224,7 @@ class HttpDay2Installs:
                 _addons_path(cluster, "/bulk"),
                 params={"mce": cluster.mce},
                 json=body,
-                headers=self._auth(),
+                headers=self._auth(user),
             )
         except NOT_SENT as exc:
             raise Day2UnavailableError(

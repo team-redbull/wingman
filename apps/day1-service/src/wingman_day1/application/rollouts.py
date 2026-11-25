@@ -63,16 +63,15 @@ from wingman_core.domain.merge_request import MergeRequest, MRState
 from wingman_core.domain.mr_conventions import ROLLOUT_LABEL, WINGMAN_LABEL, rollout_branch
 from wingman_core.domain.users import Role, User
 from wingman_core.ports.clock import Clock
+from wingman_day1.application.addon_installs import install_missing
 from wingman_day1.application.clusters import ClusterFile, ClusterService
 from wingman_day1.application.drift import DriftService
 from wingman_day1.application.machine_configs import MachineConfigService
 from wingman_day1.application.open_syncs import OpenSyncs, open_syncs, supersede
 from wingman_day1.application.specs import SpecCatalog
 from wingman_day1.application.sync import Rebooting, Removal, SyncPlan, SyncService, sync_summary
-from wingman_day1.domain.addons import Day2InstallRequest, RequestedAddon
 from wingman_day1.domain.changes import ClusterAction, ClusterChange
 from wingman_day1.domain.errors import (
-    Day2UnavailableError,
     InvalidInputError,
     InvalidSpecError,
     ResourceNotFoundError,
@@ -650,50 +649,31 @@ class RolloutService:
         if not missing:
             return []
         names = ", ".join(f"`{a.team}/{a.name}`" for a in missing)
-        if self._day2 is None:
+        message = (
+            f"Flavor {spec.metadata.name} v{spec.metadata.version} lists these add-ons; "
+            f"installed with {cluster.ref.name}'s rollout MR in day1"
+        )
+        asked = await install_missing(
+            self._day2, cluster.ref, missing, as_user=ROLLOUT_USER, message=message
+        )
+        if asked.not_asked is not None:
             return [
-                f"Add-ons flavor {flavor} lists that this cluster lacks: {names}. Install them "
-                "through day2 (the cluster's Add-ons tab)."
+                f"Add-ons flavor {flavor} lists that this cluster lacks: {names}. Their install "
+                f"MRs were not opened ({asked.not_asked}); install them from the cluster's "
+                "Add-ons tab."
             ]
-        wanted = {(a.team, a.name) for a in missing}
-        try:
-            pending = await self._day2.open_installs(cluster.ref)
-            have = {(r.team, chart) for r in pending for chart in r.charts}
-            asked = [
-                RequestedAddon(a.team, a.name, a.expected_version, a.override_values)
-                for a in missing
-                if (a.team, a.name) not in have
-            ]
-            result = (
-                await self._day2.install(
-                    cluster.ref,
-                    asked,
-                    message=f"Flavor {spec.metadata.name} v{spec.metadata.version} lists these "
-                    f"add-ons; installed with {cluster.ref.name}'s rollout MR in day1",
-                )
-                if asked
-                else None
-            )
-        except Day2UnavailableError as exc:
-            return [
-                f"Add-ons flavor {flavor} lists that this cluster lacks: {names}. Day2 did not "
-                f"answer ({exc}), so their install MRs were not opened; install them from the "
-                "cluster's Add-ons tab."
-            ]
-        linked: list[Day2InstallRequest] = [
-            r for r in pending if any((r.team, c) in wanted for c in r.charts)
-        ]
-        if result is not None:
-            linked += result.opened
         lines = [
             f"Add-ons flavor {flavor} lists that this cluster lacks: {names}. Day2 installs them "
             "in their own MRs; merge them with this one:",
-            *(f"- {r.team} !{r.iid}: {r.title} ({r.web_url})" for r in linked),
+            *(
+                f"- {r.team} !{r.iid}: {r.title} ({r.web_url})"
+                for r in (*asked.already_open, *asked.opened)
+            ),
         ]
-        if result is not None and result.failed:
+        if asked.failed:
             lines += [
                 "Not opened in day2 (install them from the cluster's Add-ons tab):",
-                *(f"- {line}" for line in result.failed),
+                *(f"- {line}" for line in asked.failed),
             ]
         return lines
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from wingman_core.domain.mr_conventions import Repo, ResourceType, Verb, mr_title
+from wingman_core.domain.users import User
 from wingman_day1.domain.addons import (
     Day2InstallRequest,
     Day2InstallResult,
@@ -35,7 +36,10 @@ class FakeDay2Addons:
       request was accepted; the other teams' MRs still open.
     - ``unconfirmed``: each team's MR opens, but the answer is a ``failed``
       line saying it may have, like a day2 that timed out.
-    - ``install_requests``: every ``install`` call that reached day2, in order.
+    - ``installs_down``: day2 answers its addon list but neither install
+      call: ``open_installs`` raises and nothing opens.
+    - ``install_requests``: every ``install`` call that reached day2, in order;
+      ``install_users``: whose session each was in.
     """
 
     def __init__(
@@ -53,6 +57,8 @@ class FakeDay2Addons:
         self.refuse: dict[str, str] = dict(refuse or {})
         self.fail_open: dict[str, str] = dict(fail_open or {})
         self.unconfirmed = unconfirmed
+        self.installs_down = False
+        self.install_users: list[str] = []
         self.install_requests: list[tuple[ClusterRef, tuple[RequestedAddon, ...], str]] = []
         self.open_merge_requests: list[tuple[str, Day2InstallRequest]] = []
         """``(cluster name, MR)`` per open install MR; a test may remove one (merged, closed)."""
@@ -67,13 +73,22 @@ class FakeDay2Addons:
         self._check_available(f"listing addons of {cluster.name}")
         return list(self._installed.get(cluster.name, []))
 
-    async def open_installs(self, cluster: ClusterRef) -> list[Day2InstallRequest]:
+    async def open_installs(
+        self, cluster: ClusterRef, *, as_user: User
+    ) -> list[Day2InstallRequest]:
         """See Day2Installs.open_installs: matched by cluster name, as day2's titles name it."""
         self._check_available("listing its open merge requests")
+        if self.installs_down:
+            raise Day2UnavailableError("day2 unreachable listing its open merge requests (fake)")
         return [mr for name, mr in self.open_merge_requests if name == cluster.name]
 
     async def install(
-        self, cluster: ClusterRef, addons: Sequence[RequestedAddon], *, message: str
+        self,
+        cluster: ClusterRef,
+        addons: Sequence[RequestedAddon],
+        *,
+        message: str,
+        as_user: User,
     ) -> Day2InstallResult:
         """See Day2Installs.install: per team, as the adapter asks day2.
 
@@ -87,7 +102,7 @@ class FakeDay2Addons:
         by_team: dict[str, list[str]] = {}
         for addon in addons:
             by_team.setdefault(addon.team, []).append(addon.name)
-        if self.unavailable:
+        if self.unavailable or self.installs_down:
             return Day2InstallResult(
                 opened=(),
                 failed=tuple(
@@ -97,6 +112,7 @@ class FakeDay2Addons:
                 ),
             )
         self.install_requests.append((cluster, tuple(addons), message))
+        self.install_users.append(as_user.username)
         opened: list[Day2InstallRequest] = []
         failed: list[str] = []
         for team, charts in by_team.items():
