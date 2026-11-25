@@ -111,3 +111,22 @@ async def test_a_team_that_gave_wingman_no_write_access_refuses_the_rollout_with
         response = await rollout.post(BULK, params={"mce": MCE}, json=body)
     assert response.status_code == 403, response.text
     assert response.json()["code"] == "TEAM_READ_ONLY"
+
+
+async def test_a_session_day1_issues_for_the_person_who_synced_opens_mrs_in_their_name(
+    app: FastAPI, config: Config, clock: Any
+) -> None:
+    # A sync or an import asks day2 as whoever pressed it (ADR-0037's 2026-11-25 amendment).
+    alice = User(username="alice", role=Role.ADMIN, full_name="Alice Admin")
+    body = {**rollout_body(), "custom_message": "Day1 MR !12 syncs this cluster; merge with it."}
+    async with day1_session(app, config, clock, alice) as person:
+        response = await person.post(BULK, params={"mce": MCE}, json=body)
+    assert response.status_code == 201, response.text
+    opened = response.json()["merge_requests"]
+    assert len(opened) == 2
+    for mr in opened:
+        footer = parse_mr_description(mr["description"])
+        assert footer is not None
+        assert footer.author == "alice"
+        assert mr["source_branch"].startswith("platform/alice/install-")
+        assert "Day1 MR !12 syncs this cluster" in mr["description"]

@@ -204,7 +204,7 @@ async def test_the_import_opens_one_day1_mr_per_cluster(
         [],
     )
     lark, heron = result["merge_requests"]
-    assert {k: v for k, v in lark.items() if k != "merge_request"} == {
+    assert {k: v for k, v in lark.items() if k not in ("merge_request", "addons")} == {
         "name": LARK,
         "site": "site1",
         "mce": "ocp4-prod-mce-site1-a",

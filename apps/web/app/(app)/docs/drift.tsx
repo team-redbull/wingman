@@ -54,9 +54,12 @@ export function DriftSection() {
           the CI&apos;s block or your comments.
         </Step>
         <Step n={4} title="Install what is missing">
-          Each missing add-on has an <strong>Install</strong> button (admins), and the sync offers to install them
-          after its MR. Each opens a Day2 MR that installs the chart at the team&apos;s default version, with the
-          values requested when the cluster was created.
+          The sync installs the missing add-ons in the same click: once its Day1 MR is open, Wingman asks Day2 for
+          their install MRs, one per team, in your name, at the team&apos;s default version and with the values
+          requested when the cluster was created. The result shows the sync MR beside each Day2 MR (each names the
+          sync MR: merge them together), and what Day2 did not open, in its words; nothing is asked when the sync
+          MR did not open, and nothing is retried. What was not opened, and any add-on missing later, has an{" "}
+          <strong>Install</strong> button (admins) on the Drift tab, one Day2 MR each.
         </Step>
       </div>
       <h3 className="text-base font-semibold mb-3">Rolling out a new version</h3>

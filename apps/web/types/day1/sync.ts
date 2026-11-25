@@ -1,4 +1,6 @@
+import type { MRDetail } from "../index";
 import type { HeldReplicas } from "../scale";
+import type { AddonInstalls } from "./addon-installs";
 import type { AddonDrift, NodepoolRef, ValueDrift, VersionDifference } from "./drift";
 
 // ── Sync a cluster to its flavor (§12, ADR-0037) ────────────────────────────
@@ -60,7 +62,7 @@ export interface SyncPreview {
   /** Worth checking before merging; they don't block. */
   warnings: string[];
   can_sync: boolean;
-  /** Not in the day1 MR: install them through day2 (one MR per team). */
+  /** Not in the day1 MR: the sync asks day2 for them (one MR per team) once it is open. */
   addons_to_install: AddonDrift[];
   version_differences: VersionDifference[];
   /** Set when day2 did not answer: missing add-ons are unknown. */
@@ -76,4 +78,12 @@ export interface SyncRequest {
   hardware?: HardwareChoice[];
   /** Exactly the preview's `removals`, or the sync is refused. */
   confirm_removals: { nodepool: number; name: string }[];
+}
+
+/** `POST /clusters/{name}/sync` (201): the sync MR, and what the sync left to others. */
+export interface SyncResult extends MRDetail {
+  /** As the preview's: each restored through update-nodepool, not by this MR (ADR-0062). */
+  held_replicas?: HeldReplicas[];
+  /** Day2's answer for the missing add-ons, asked once the MR was open (absent from an older day1). */
+  addons?: AddonInstalls;
 }

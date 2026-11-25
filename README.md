@@ -228,7 +228,7 @@ placement and Inventory Management are admins' reads (`403`). A viewer's answers
 | `GET` | `/api/day1/clusters/{name}/history` | Commits that changed the file |
 | `GET` | `/api/day1/clusters/{name}/drift` | The cluster against its flavor: the locked values its file does not hold, and its missing Day2 add-ons |
 | `POST` | `/api/day1/clusters/{name}/sync/preview` | What syncing the cluster to its flavor would write: each locked value it does not hold, the configs removed, the nodepools whose nodes roll, and what blocks it (`hardware` choices when a nodepool's network config can't be read) |
-| `POST` | `/api/day1/clusters/{name}/sync` | Open one day1 MR that sets those values; refused unless `confirm_removals` names exactly the preview's removals. With `DAY1_SCALE_NODEPOOLS`, drifted locked replicas are not in it: the preview and the answer list them in `held_replicas`, each restored through update-nodepool (ADR-0062) |
+| `POST` | `/api/day1/clusters/{name}/sync` | Open one day1 MR that sets those values; refused unless `confirm_removals` names exactly the preview's removals. With `DAY1_SCALE_NODEPOOLS`, drifted locked replicas are not in it: the preview and the answer list them in `held_replicas`, each restored through update-nodepool (ADR-0062). Once it is open, the same request asks day2 for the missing add-ons' install MRs, one per team, in the admin's name, and answers with day2's answer in `addons` (`opened`, `already_open`, `failed` in day2's words, `not_asked`, `not_opened`); day2 failing or not answering leaves the day1 MR open, never retried (ADR-0037's 2026-11-25 amendment) |
 | `GET` | `/api/day1/clusters/{name}/status` | The HostedCluster and NodePools on the MCE hub (an admin's `?mce=`, else the cluster's folder; 501 when live status is off) |
 | `GET` | `/api/day1/clusters/{name}/status/stream` | The same as server-sent events, every `DAY1_STATUS_POLL_SECONDS` |
 
@@ -263,7 +263,7 @@ placement and Inventory Management are admins' reads (`403`). A viewer's answers
 | `GET` | `/api/day1/specs/{name}/clusters` | Clusters created from the spec, with their drift |
 | `GET` | `/api/day1/specs/{name}/drift` | Drift of every cluster created from the spec |
 | `POST` | `/api/day1/specs/{name}/import/preview` | Each picked existing cluster against the spec: whether it can join (`ready`, `relink`, `linked`, `refused`) and what will show as drift |
-| `POST` | `/api/day1/specs/{name}/import` | Link up to 50 existing clusters to the spec: one MR per cluster that writes only its file's flavor header, all checked before any opens (ADR-0044) |
+| `POST` | `/api/day1/specs/{name}/import` | Link up to 50 existing clusters to the spec: one MR per cluster that writes only its file's flavor header, all checked before any opens (ADR-0044). Then, in the same request, each opened cluster's missing add-ons are asked of day2, one install MR per team in the admin's name, and each item of `merge_requests` carries day2's answer in `addons`; no more are asked once day2 stops answering or after 30 s (ADR-0037's 2026-11-25 amendment) |
 | `GET` | `/api/day1/specs/{name}/rollout` | The rollout of the spec's newest version, one MR per cluster that follows it, from GitLab's state; reading it starts a run when work is pending (ADR-0044) |
 | `POST` | `/api/day1/specs/{name}/rollout` | Reconcile now: open the cluster MRs that are missing, failed ones included (admins; 202) |
 
@@ -654,7 +654,7 @@ sigs/<team>/
 
 - **Spec**: A preset for the create form (nodepool shape, preset template inputs, the Day2 addons its clusters should get); every spec fills the one shared `cluster-template.j2`
 - **Cluster**: An actual cluster instance, optionally linked to a spec
-- **Drift**: A value the cluster's flavor locks that its file does not hold, or an add-on the flavor lists that is not installed (ADR-0036); a different version is reported, not drift (ADR-0025). Sync to flavor fixes the values in one MR (ADR-0037)
+- **Drift**: A value the cluster's flavor locks that its file does not hold, or an add-on the flavor lists that is not installed (ADR-0036); a different version is reported, not drift (ADR-0025). Sync to flavor fixes the values in one MR and, in the same action, opens the missing add-ons' day2 MRs, one per team (ADR-0037)
 
 ### Addon Layers
 

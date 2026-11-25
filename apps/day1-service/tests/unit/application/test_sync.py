@@ -235,7 +235,9 @@ async def test_a_sync_is_one_mr_that_changes_only_the_cluster_file(
     assert f"- `{LARK_POOLS[0]}` (3 nodes): drained and rebooted in place, one node at a time" in (
         mr.description
     )
-    assert "install them through day2: `redbull/cluster-roles`." in mr.description
+    assert "Missing add-ons are not part of this MR: `redbull/cluster-roles`. Wingman asks" in (
+        mr.description
+    )
     assert "specVersion" not in mr.description  # the version did not change
 
 

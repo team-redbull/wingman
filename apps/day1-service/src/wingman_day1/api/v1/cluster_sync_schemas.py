@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from wingman_day1.api.v1.addon_installs_schemas import AddonInstallsOut
 from wingman_day1.api.v1.scale_schemas import HeldReplicasOut
 from wingman_day1.api.v1.schemas import (
     AddonDriftOut,
@@ -12,8 +13,10 @@ from wingman_day1.api.v1.schemas import (
     ValueDriftOut,
     VersionDifferenceOut,
     _In,
+    change_out,
 )
-from wingman_day1.application.sync import SyncPlan
+from wingman_day1.application.approvals import RepoKey
+from wingman_day1.application.sync import SyncPlan, SyncResult
 
 
 class HardwareChoiceIn(_In):
@@ -102,7 +105,7 @@ class SyncPreviewOut(BaseModel):
     can_sync: bool
     """No problems, and the file changes."""
     addons_to_install: list[AddonDriftOut]
-    """Missing add-ons: not in the day1 MR; install them through day2."""
+    """Missing add-ons: not in the day1 MR; the sync asks day2 for them once it is open."""
     version_differences: list[VersionDifferenceOut]
     addons_error: str | None
     """Set when day2 did not answer: missing add-ons are unknown."""
@@ -156,7 +159,22 @@ class SyncPreviewOut(BaseModel):
 
 
 class SyncOut(MRDetailOut):
-    """``POST /clusters/{name}/sync``: the MR it opened, and the replicas it left out (ADR-0062)."""
+    """``POST /clusters/{name}/sync``: the MR it opened, and what the sync left to others.
+
+    The replicas it left out for update-nodepool (ADR-0062), and day2's answer
+    for the missing add-ons, asked once the MR was open (ADR-0037).
+    """
 
     held_replicas: list[HeldReplicasOut] = Field(default_factory=list)
     """As the preview's: each is restored through update-nodepool, not by this MR."""
+    addons: AddonInstallsOut
+
+    @classmethod
+    def of_sync(cls, result: SyncResult) -> SyncOut:
+        """From a sync's result."""
+        opened = change_out(RepoKey.DAY1, result.provision.merge_request)
+        return cls(
+            **opened.model_dump(),
+            held_replicas=[HeldReplicasOut.of(h) for h in result.plan.held_replicas],
+            addons=AddonInstallsOut.of(result.addons),
+        )

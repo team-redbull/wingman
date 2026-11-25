@@ -19,6 +19,7 @@ export * from "./drift";
 export * from "./rollout";
 export * from "./import-clusters";
 export * from "./sync";
+export * from "./addon-installs";
 export * from "./workflows";
 export * from "./nodes";
 export * from "./kv-clusters";

@@ -35,7 +35,6 @@ from wingman_day1.api.v1.clusters_schemas import (
     PreviewOut,
     cluster_detail,
 )
-from wingman_day1.api.v1.scale_schemas import HeldReplicasOut
 from wingman_day1.api.v1.schemas import (
     ClusterDriftOut,
     CommitOut,
@@ -208,7 +207,12 @@ async def sync_cluster(
     site: Site = None,
     mce: Mce = None,
 ) -> SyncOut:
-    """Open one day1 MR that sets every locked value the file does not hold to the flavor's."""
+    """Open one day1 MR that sets every locked value the file does not hold to the flavor's.
+
+    Once it is open, the same request asks day2 for the missing add-ons' install
+    MRs, one per team, in the admin's name; day2's answer is ``addons``, and a
+    day2 that fails or does not answer leaves the day1 MR open (ADR-0037).
+    """
     ref = await cluster_ref(context, user, name, site, mce)
     result = await context.sync.sync(
         ref,
@@ -218,9 +222,7 @@ async def sync_cluster(
         confirm_removals=[(r.nodepool, r.name) for r in body.confirm_removals],
         user=user,
     )
-    opened = change_out(RepoKey.DAY1, result.provision.merge_request)
-    held = [HeldReplicasOut.of(h) for h in result.plan.held_replicas]
-    return SyncOut(**opened.model_dump(), held_replicas=held)
+    return SyncOut.of_sync(result)
 
 
 @router.get("/{name}")

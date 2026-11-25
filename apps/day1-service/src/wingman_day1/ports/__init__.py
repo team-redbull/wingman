@@ -297,21 +297,30 @@ class Day2Addons(Protocol):
 
 
 class Day2Installs(Protocol):
-    """Day2 opening add-on install MRs for a flavor's rollout (ADR-0044).
+    """Day2 opening a cluster's add-on install MRs: a rollout's, a sync's, an import's.
 
     Day1 never writes a day2 repo itself: it asks the day2 service, which
-    opens its MRs as for any request (one per team). Raises
+    opens its MRs as for any request (one per team), in a session of
+    ``as_user`` (the person who asked, or the rollout's service user;
+    ADR-0044, ADR-0037's 2026-11-25 amendment). Raises
     ``Day2UnavailableError`` when day2 does not answer, or answers with a
     server error; a request day2 may have acted on is never resent (the next
-    rollout run reads ``open_installs`` first).
+    ask reads ``open_installs`` first).
     """
 
-    async def open_installs(self, cluster: ClusterRef) -> list[Day2InstallRequest]:
+    async def open_installs(
+        self, cluster: ClusterRef, *, as_user: User
+    ) -> list[Day2InstallRequest]:
         """Day2's open Wingman MRs that install add-ons on ``cluster``."""
         ...
 
     async def install(
-        self, cluster: ClusterRef, addons: Sequence[RequestedAddon], *, message: str
+        self,
+        cluster: ClusterRef,
+        addons: Sequence[RequestedAddon],
+        *,
+        message: str,
+        as_user: User,
     ) -> Day2InstallResult:
         """Ask day2 to install ``addons`` on ``cluster``: an MR per team; refusals in ``failed``."""
         ...

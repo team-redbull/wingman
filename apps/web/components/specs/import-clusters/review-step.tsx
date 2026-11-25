@@ -162,7 +162,8 @@ export function ReviewStep({
           The import opens one day1 MR per cluster, and each writes only the flavor link (
           <code className="font-mono">specName</code>, <code className="font-mono">specVersion</code>) into its
           file&apos;s header. Nothing on the clusters changes. Once a cluster&apos;s MR merges, its differences below
-          show as drift, and Sync on its page fixes them.
+          show as drift, and Sync on its page fixes them. The missing add-ons below are asked of day2 in the same
+          click, once the cluster&apos;s MR is open: one install MR per team, merged with it.
         </p>
       </div>
 

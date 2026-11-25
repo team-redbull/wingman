@@ -179,9 +179,12 @@ import and sync.
   flavor in the specs repo at its saved version, so a new flavor has no
   cluster-file preview until it is merged (its edit page has one). It needs a
   preview that takes the flavor document in the request.
-- **Missing add-ons in one MR per team.** Sync and the drift tab install them
-  one chart per MR through day2's per-chart install; day2's
-  `POST /clusters/{id}/addons/bulk` would make it one MR per team.
+- **Missing add-ons in one MR per team.** Done for sync and import
+  (2026-11-25, the user: "When pulling a cluster to the flavor the day2
+  should open MR as well, no?"): both ask day2 in the same action, once
+  the day1 MR is open, one MR per team through day2's bulk install (ADR-0037's
+  amendment). Still one chart per MR: the drift tab's Install and Fix all,
+  which is also how the sync dialog installs what day2 did not open.
 - **The cluster-name prefix in the web.** The create form shows
   `nm-conf-<clusterName>-<hw>` assuming day1 strips `ocp4-` (the default of
   `DAY1_CLUSTER_NAME_STRIP_PREFIX`); on the sandbox (`""`) the hint is wrong,
