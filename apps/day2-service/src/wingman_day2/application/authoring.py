@@ -30,7 +30,6 @@ plans everything and opens nothing.
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -69,6 +68,8 @@ from wingman_day2.domain.deploy_config import (
     REPOURL,
     SYNC_POLICY,
     TARGET_REVISION,
+    check_ignore_differences,
+    check_namespace,
     leaf_application,
     miscased_repourl_keys,
     truthy,
@@ -119,9 +120,6 @@ __all__ = [
     "fleet_apps",
     "new_deploy_config",
 ]
-
-NAMESPACE: Final = re.compile(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$")
-"""A Kubernetes namespace name (a DNS label)."""
 
 EDITABLE_KEYS: Final = (REPOURL, TARGET_REVISION, PATH, PROJECT_NAMESPACE, IGNORE_DIFFERENCES)
 """The team-default deploy-config keys an edit may set (sync options go separately)."""
@@ -232,25 +230,6 @@ def new_deploy_config(spec: NewAddon) -> dict[str, object]:
     if spec.ignore_differences:
         doc[IGNORE_DIFFERENCES] = list(spec.ignore_differences)
     return doc
-
-
-def check_namespace(namespace: object) -> None:
-    """Refuse a value that is no Kubernetes namespace name."""
-    if namespace is not None and not NAMESPACE.match(str(namespace)):
-        raise ChangeRefusedError(
-            f"{namespace!r} is not a Kubernetes namespace name (lowercase letters, digits, '-')",
-            details={"rule": "namespace-invalid"},
-        )
-
-
-def _check_ignore_differences(value: object) -> None:
-    if value is not None and not (
-        isinstance(value, list) and all(isinstance(item, dict) for item in value)
-    ):
-        raise ChangeRefusedError(
-            "ignoreDifferences is ArgoCD's list of {group, kind, jsonPointers, ...} entries",
-            details={"rule": "ignore-differences-invalid"},
-        )
 
 
 def _sync_words(sync: SyncSettings) -> str:
@@ -414,7 +393,7 @@ class AuthoringService(PlanWriter):
             )
         sync = spec.sync.checked()
         check_namespace(spec.project_namespace)
-        _check_ignore_differences(spec.ignore_differences)
+        check_ignore_differences(spec.ignore_differences)
         plan = AuthoringPlan(state, Action.CREATE, chart, spec.default_scope)
         deploy_path = folder.child(layout.deploy_config_name(chart))
         plan.findings += await self.check_chart_repo(
@@ -572,7 +551,7 @@ class AuthoringService(PlanWriter):
             if key == PROJECT_NAMESPACE:
                 check_namespace(value)
             if key == IGNORE_DIFFERENCES:
-                _check_ignore_differences(value)
+                check_ignore_differences(value)
             if key == TARGET_REVISION and value == DEFAULT_REVISION:
                 value = None
             if key == PATH and value is not None and str(value).strip("/") in ("", DEFAULT_PATH):
