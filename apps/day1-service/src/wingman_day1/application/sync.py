@@ -17,9 +17,11 @@ person (a nodepool without one network config, a position the file does not
 have) is never guessed: a hardware type can be chosen in the request, the
 rest blocks the sync with the reason.
 
-Missing add-ons are not day1's to write (ADR-0016): the preview and the
-result list them, and the web installs them through day2, as the drift fix
-does (one MR per team, ``POST /api/day2/clusters/{id}/addons/bulk``).
+Missing add-ons are not day1's to write (ADR-0016): the preview lists them,
+and once the day1 MR is open the same sync asks day2 for their install MRs,
+one per team, as whoever synced (``addon_installs``; ADR-0037's 2026-11-25
+amendment). Nothing is asked when the day1 MR did not open; day2's answer,
+whatever it is, is the result's ``addons`` beside the open day1 MR.
 
 A cluster has at most one open sync MR (ADR-0044): a sync to the newest
 version is refused while one is open, whether a person or a flavor's
@@ -40,7 +42,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
 
+from wingman_core.domain.merge_request import MergeRequest
 from wingman_core.domain.users import User
+from wingman_day1.application.addon_installs import AddonInstalls, install_missing
 from wingman_day1.application.clusters import ClusterFile, ClusterService
 from wingman_day1.application.drift import DriftService
 from wingman_day1.application.machine_configs import MachineConfigService
@@ -82,7 +86,7 @@ from wingman_day1.domain.value_drift import (
     show_value,
     value_drift,
 )
-from wingman_day1.ports import ClusterProvisioner, RepoReads, RolloutMergeRequests
+from wingman_day1.ports import ClusterProvisioner, Day2Installs, RepoReads, RolloutMergeRequests
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,10 +132,11 @@ class SyncPlan:
 
 @dataclass(frozen=True, slots=True)
 class SyncResult:
-    """The MR a sync opened, and what day2 still has to install."""
+    """The MR a sync opened, and what day2 answered for the missing add-ons."""
 
     provision: ProvisionResult
     plan: SyncPlan
+    addons: AddonInstalls
 
 
 def sync_edits(drift: Sequence[ValueDrift]) -> list[Edit]:
@@ -180,12 +185,14 @@ class SyncService:
         rollouts: RolloutMergeRequests,
         *,
         owned: WorkflowKeys = NO_WORKFLOW_KEYS,
+        day2: Day2Installs | None = None,
     ) -> None:
         """Read the cluster, its flavor and the catalogue; propose through ``provisioner``.
 
         ``day1`` gives the open sync MRs; ``rollouts`` closes one a new sync
         supersedes. ``owned``: the keys a workflow owns (the NodePools'
         replicas with ``DAY1_SCALE_NODEPOOLS``), which the MR leaves alone.
+        ``day2`` opens the missing add-ons' MRs once the sync's is open.
         """
         self._clusters = clusters
         self._specs = specs
@@ -195,6 +202,7 @@ class SyncService:
         self._day1 = day1
         self._rollouts = rollouts
         self._owned = owned
+        self._day2 = day2
 
     async def preview(self, ref: ClusterRef, *, hardware: Mapping[int, str]) -> SyncPlan:
         """What a sync would write, the removals and reboots it means, and what blocks it."""
@@ -350,7 +358,23 @@ class SyncService:
             flavor=flavor,
             version=version,
         )
-        return SyncResult(result, plan)
+        if plan.addons_error is not None:  # day2 did not say what is installed
+            return SyncResult(result, plan, AddonInstalls(not_asked=plan.addons_error))
+        message = _day2_message(plan, result.merge_request)
+        addons = await install_missing(
+            self._day2, ref, plan.addons_to_install, as_user=user, message=message
+        )
+        return SyncResult(result, plan, addons)
+
+
+def _day2_message(plan: SyncPlan, merge_request: MergeRequest) -> str:
+    """What each day2 install MR says it came with: the sync MR in day1."""
+    flavor, version = plan.spec.metadata.name, plan.spec.metadata.version
+    return (
+        f"Flavor {flavor} v{version} lists these add-ons, which {plan.cluster.ref.name} lacks. "
+        f"Opened with its sync in day1, !{merge_request.ref.iid} ({merge_request.web_url}): "
+        "merge them with it, or close them if it is closed."
+    )
 
 
 def _mc_files_warnings(values: Mapping[str, object], drift: Sequence[ValueDrift]) -> list[str]:
@@ -432,7 +456,9 @@ def sync_summary(
         names = ", ".join(f"`{a.team}/{a.name}`" for a in plan.addons_to_install)
         lines += [
             "",
-            f"Missing add-ons are not part of this MR; install them through day2: {names}.",
+            f"Missing add-ons are not part of this MR: {names}. Wingman asks day2 for their "
+            "install MRs, one per team, right after opening this one, and each links back here; "
+            "any day2 does not open is installed from the cluster's Add-ons tab.",
         ]
     keys = ", ".join(f"`{k}`" for k in AUTOMATION_KEYS)
     lines += [

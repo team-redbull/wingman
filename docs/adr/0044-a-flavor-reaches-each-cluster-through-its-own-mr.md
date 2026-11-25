@@ -1,7 +1,7 @@
 # ADR-0044: A flavor's changes reach each cluster through its own MR, which the customer takes when ready; a cluster is measured against its own version
 
 Date: 2026-11-12
-Status: Accepted (supersedes in part ADR-0016, ADR-0036 and ADR-0037); amended by ADR-0062 (with `DAY1_SCALE_NODEPOOLS` on, a rollout's MR leaves drifted locked replicas out)
+Status: Accepted (supersedes in part ADR-0016, ADR-0036 and ADR-0037); amended by ADR-0062 (with `DAY1_SCALE_NODEPOOLS` on, a rollout's MR leaves drifted locked replicas out); amended 2026-11-25 (a sync asks day2 as a rollout does, in the name of the person who synced)
 
 ## Context
 
@@ -247,3 +247,17 @@ through update-nodepool, one run per cluster.
 
 Verified in `apps/day1-service/tests/api/test_replicas_ownership_api.py` and
 `apps/web/e2e/tests/flavor-rollout.spec.ts`.
+
+## Amendment (2026-11-25): a sync asks day2 the same way, as the person who synced
+
+ADR-0037's 2026-11-25 amendment (the user: "When pulling a cluster to the
+flavor the day2 should open MR as well, no?") has a sync ask day2 for the
+missing add-ons as a rollout does, after its own MR opened. The ask is one
+helper for both (`application/addon_installs.py`: the open installs first,
+then one bulk install per team). `Day2Installs` now takes the user whose
+session day2 sees: a rollout's is still `system:wingman-rollout`'s, a
+sync's is the admin who synced. So day1 issues that short-lived session
+for any user it asks for, no longer only for the rollout's service user
+(the Consequences' "used only for a rollout's installs" no longer holds).
+A rollout's MR text is unchanged but for day2 not answering, which now
+reads "Their install MRs were not opened (day2 did not answer: …)".

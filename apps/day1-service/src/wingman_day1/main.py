@@ -349,6 +349,7 @@ def build_context(
         day1,
         rollout_writer,
         owned=owned,
+        day2=adapters.day2_installs,
     )
     rollouts = RolloutService(
         cluster_service,

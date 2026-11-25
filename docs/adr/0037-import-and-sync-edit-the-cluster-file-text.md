@@ -1,7 +1,7 @@
 # ADR-0037: Existing clusters join a flavor by one MR that writes only the link, and sync to it by one MR each; Wingman edits a cluster file's text, never a YAML round trip
 
 Date: 2026-11-08
-Status: Accepted; superseded in part by ADR-0044 (an import opens one MR per cluster; a new flavor version opens each cluster's sync MR automatically); amended by ADR-0062 (with `DAY1_SCALE_NODEPOOLS` on, a sync leaves drifted locked replicas out of its MR, for update-nodepool)
+Status: Accepted; superseded in part by ADR-0044 (an import opens one MR per cluster; a new flavor version opens each cluster's sync MR automatically); amended by ADR-0062 (with `DAY1_SCALE_NODEPOOLS` on, a sync leaves drifted locked replicas out of its MR, for update-nodepool); amended 2026-11-25 (a sync opens the missing add-ons' day2 MRs in the same action)
 
 Since ADR-0044 (2026-11-12, the architect's decision, confirmed by the
 user) an import opens one day1 MR per picked cluster, each the link-only
@@ -170,3 +170,72 @@ drift and the version is the same, nothing is left to sync. Off, a sync is
 as before.
 
 Verified in `apps/day1-service/tests/api/test_replicas_ownership_api.py`.
+
+## Amendment (2026-11-25): a sync opens the day2 add-on MRs in the same action
+
+The user, 2026-11-25: "When pulling a cluster to the flavor the day2 should
+open MR as well, no?", and, asked whether in the same action or as the
+second click the sync dialog offered: in the same action. A sync used to
+open the day1 MR and then offer the missing add-ons as a second click, one
+day2 MR per add-on.
+
+**One action.** `POST /clusters/{name}/sync` opens the day1 MR, then, in
+the same request, asks day2 for the install MRs of the add-ons the flavor
+lists and day2 does not report installed: one MR per team, through day2's
+bulk install, at the team's default version, with the values the file's
+header records (`# wingmanAddons`, the create's `addon_overrides`), as a
+rollout's ask does (ADR-0044).
+
+- **Day1 asks, not the web**, through the `Day2Installs` port a rollout
+  uses (one helper, `application/addon_installs.py`). The order is then
+  the server's: nothing is asked when the day1 MR did not open (a stale
+  preview, a refusal, an unconfirmed write). A closed tab between two
+  browser calls cannot leave the day2 half unasked, and the fakes test
+  every answer day2 can give.
+- **In the person's name.** Day1 issues the short-lived session it
+  presents to day2 (the services share the session secret) for the admin
+  who synced, so day2's MRs name them, as an install from the Add-ons tab
+  would. A rollout still asks as `system:wingman-rollout`.
+- **Linked both ways.** Each day2 MR's description names the day1 MR
+  (`!iid` and its address) and says to merge it with that one, or close it
+  if that one is closed. The day1 MR's description says Wingman asks day2
+  right after it opens, and that any day2 did not open is installed from
+  the cluster's Add-ons tab.
+- **Not asked twice.** An install MR already open on the cluster for an
+  add-on is listed, not asked again.
+- **Day2's answer is the answer's `addons`**: `missing`, `opened`,
+  `already_open`, `failed` (one line per team, in day2's words; one it did
+  not confirm says its MR may have opened), `not_asked` (day2 did not
+  answer, so nothing was asked; or day2 did not say what is installed, so
+  what is missing is unknown) and `not_opened` (the missing add-ons no MR
+  covers). None of it fails the sync: the day1 MR stays open, and nothing
+  is retried (ADR-0006).
+- **The dialog** shows the day1 MR and each day2 MR together, day2's words
+  for what did not open, and offers to install what was not opened, the
+  drift tab's Install (one MR per add-on), as the fallback.
+
+Rejected:
+
+- **The web making both calls**: the session would be the person's
+  without day1 issuing one, but the rule "nothing in day2 without the day1
+  MR" would be kept by a page, and a closed tab between the two calls
+  leaves half of one action done.
+- **Day2 first, as a rollout asks** (so the day1 MR can link the day2
+  MRs): the user wants nothing opened in day2 when the day1 MR could not
+  be.
+- **A comment on the day1 MR with the day2 links**: a second write on it,
+  with its own failure to report. The day2 MRs link the day1 MR instead.
+
+Verified in:
+
+- `apps/day1-service/tests/unit/application/test_addon_installs.py`: day2
+  answers, refuses a team, does not confirm, does not answer; an open
+  install MR is not asked again;
+- `apps/day1-service/tests/unit/application/test_sync_addons.py`: the
+  order, the person's session, the values from the header, the day1 MR
+  staying open, nothing asked for a day1 MR that did not open;
+- `apps/day1-service/tests/api/test_addon_installs_api.py`: the JSON;
+- `apps/day2-service/tests/api/test_service_session.py`: day2 opening MRs
+  in the name of the person day1 issued the session for;
+- `apps/web/e2e/tests/flavor-sync.spec.ts`: both MRs in the dialog, a
+  day2 refusal and a day2 that did not answer.

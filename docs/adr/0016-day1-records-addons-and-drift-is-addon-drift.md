@@ -1,7 +1,7 @@
 # ADR-0016: Day1 records a spec's addons and their overrides; it never writes day2, and unknown drift is not "in sync"
 
 Date: 2026-11-07
-Status: Accepted; superseded in part by ADR-0025 (version differences), ADR-0036 (drift also compares the flavor's locked values) and ADR-0044 (a flavor's rollout asks day2 for the add-ons a new version needs)
+Status: Accepted; superseded in part by ADR-0025 (version differences), ADR-0036 (drift also compares the flavor's locked values) and ADR-0044 (a flavor's rollout asks day2 for the add-ons a new version needs); amended 2026-11-25 by ADR-0037's amendment (a sync asks day2 too)
 
 Since ADR-0044 (2026-11-12), when a flavor's new version lists add-ons a
 cluster lacks, day1 asks the day2 service to open their install MRs (one
