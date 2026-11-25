@@ -1,7 +1,7 @@
 # ADR-0043: Teams opt in to day2 writes per project; Wingman creates add-ons, edits team and fleet defaults, and a new fleet default takes over the clusters that already have the chart
 
 Date: 2026-11-12
-Status: Accepted; superseded in part by ADR-0053 (every write is confirmed against its preview's digest; a stale exclusion of an adopted cluster goes in the same commit; the review of 3.8.0); amended 2026-11-13 (the UI says sig values and the add-on, not team default; the API names stay; since 3.19.1 the MR titles say Sig values too); amended 2026-11-14 (ADR-0060: a new add-on's suggested chart address is the team's `<team>/helm-charts` group)
+Status: Accepted; superseded in part by ADR-0053 (every write is confirmed against its preview's digest; a stale exclusion of an adopted cluster goes in the same commit; the review of 3.8.0); amended 2026-11-13 (the UI says sig values and the add-on, not team default; the API names stay; since 3.19.1 the MR titles say Sig values too); amended 2026-11-14 (ADR-0060: a new add-on's suggested chart address is the team's `<team>/helm-charts` group); amended 2026-11-25 (OCP-version pins are edited on the add-on's page and set when creating one, no longer left for later)
 
 ## Context
 
@@ -151,7 +151,8 @@ labels and footer action `create-addon`, `update-default`, `make-default`
 - Left for later: **stopping being a default** (deleting the folder deletes
   the app on every destination it reaches, and `prune: false` orphans every
   workload: it must say so as loudly as remove does); authoring
-  `ocp-versions/` pins; editing `ignoreDifferences` in the web.
+  `ocp-versions/` pins (done: the 2026-11-25 amendment); editing
+  `ignoreDifferences` in the web.
 
 ## Verification
 
@@ -207,3 +208,77 @@ template's field keeps its name, `repourl_prefix`, and is never `null` now.
 The checks on a `repourl` are unchanged: one on this GitLab must name a
 project Wingman can read, one elsewhere is accepted with a warning, and no
 address is refused or flagged for sitting outside the team's group.
+
+## Amendment (2026-11-25): OCP-version pins are authored
+
+The user: "I want to also control the ocp-version feature and that new
+addons could be configured [with] it." Chosen: **edit pins on the add-on's
+page** and **set pins when creating an add-on**, not a "pin ahead of an
+upgrade" button (a pin for a version no cluster runs yet is simply added on
+the page). Until now Wingman only read `operators/<chart>/ocp-versions/<v>/`
+(the add-on page's card, the catalog, the lints that warn when a cluster's
+next version has no pin).
+
+**What a pin is, as written.** `<v>` is the full OpenShift version the
+platform derives from a cluster's `mastertag` (`$mastertag | splitList "-" |
+first`, `domain.versions.ocp_version`): `<major>.<minor>.<patch>`, `4.16.27`
+and never `4.16`, which is refused (`ocp-version-invalid`), since a
+destination even a z-stream away does not read the folder. A pin Wingman
+writes is the platform's shape and nothing else: `<chart>.yaml` holding
+`targetRevision: <revision>` (a branch of the add-on's chart repo, checked as
+a new add-on's revision is; `HEAD` its default branch) and `values.yaml` only
+when it has values (`domain.ocp_pins`). A pin always pins a revision
+(`pin-revision-missing`); a layer someone wrote with values only keeps its
+shape when only its values change.
+
+**The writes** (`application.ocp_pins`, `api.v1.ocp_pins`): add
+(`POST /addons/{team}/{addon}/ocp-versions`), change
+(`PUT .../ocp-versions/{v}`: the revision edited in place in `<chart>.yaml`,
+comments kept; `values.yaml` replaced whole, `{}` deleting it) and remove
+(`DELETE .../ocp-versions/{v}`, with the confirmed write's JSON body). Each is
+one MR of the add-on's own folder in this ADR's conventions: label and footer
+action `update-default`, titled `[Wingman/Day2] Update addon <team>/<chart>
+OCP-version pin <v>` with ` (new: <revision>)` or ` (removed)`; parsed as
+every `Update addon` (ADR-0007). The access rules are this ADR's: admins
+only (`AdminUser`), and for a team that has given Wingman write access
+(`403 TEAM_READ_ONLY` first). Like every authoring write they are checked as
+the platform would render (ADR-0023), measured on every app of the chart
+(the destinations at `<v>` change) and confirmed against the preview's digest
+(ADR-0053); a change or removal carries the commit the pin was read at
+(`ocp_versions[].last_commit_id`) and is refused when the pin changed or went
+since (ADR-0006).
+
+**Create** takes `ocp_versions: [{version, target_revision, values}]`, zero
+or more, checked the same (`pin-duplicate` for a version given twice) and
+written in the create's MR beside the add-on's two files.
+
+**The web.** The add-on page's **OCP-version pins** card is the editor (one
+view per thing): Add pin, and Edit and Remove on each pin, each previewed and
+confirmed as every authoring write; the version field offers the versions
+the add-on's destinations run (from the page's own read), and the revision
+field the chart repo's branches. New add-on has an **OCP-version pins**
+section with the same fields, offering the versions the team's destinations
+run (`GET /api/day2/clusters`). The web checks the same rules before
+sending. The removal is a `DELETE` with the confirmed write's JSON body, so
+the web's API client sends a body on a delete.
+
+**The footguns are said, not hidden.** A fleet default whose deploy config
+sets `targetRevision` overrides every pin's revision on its scope (layer 3
+over layer 2): each plan warns with `fleet-pin-overrides-ocp-versions`, and
+the pins card says so above the pins. A pin is read only at its exact
+version: each plan notes the versions the add-on runs on with no pin, and a
+pin for a version no destination runs yet says it waits for the first
+cluster day1 moves there, to be merged before that `mastertag` flips. A cluster's own emergency pin is not reached by the pin's
+revision, and the plan names those clusters.
+
+Verification: `tests/unit/domain/test_ocp_pins.py` (the version shape, a
+property over every version a `mastertag` gives, the files),
+`tests/unit/application/test_ocp_pins.py` and
+`tests/api/test_ocp_pins_api.py` (add, change, remove, stale writes,
+a viewer and a read-only team refused, the fleet-default warning, a create
+with pins), `components/addons/ocp-pins/model.test.ts` (the same rules
+in the web), `e2e/tests/addon-ocp-pins.spec.ts` (the editor and a create
+with a pin, mocked), and the
+oracle's `test_a_pin_moves_the_destinations_at_its_version_only`:
+`render_chain.py` renders the pin Wingman writes on exactly the destinations
+at its version, with the revision and values the plan lists.

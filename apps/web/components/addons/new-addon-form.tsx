@@ -20,6 +20,8 @@ import { SyncOptionsControl } from "@/components/addons/sync-options";
 import { ReadOnlyNote } from "@/components/addons/team-access";
 import { ValuesLevels } from "@/components/addons/values-levels";
 import { YamlValuesField } from "@/components/addons/yaml-values-field";
+import { NewAddonPins } from "@/components/addons/ocp-pins/new-addon-pins";
+import { draftsProblem, pinBody, type PinRow } from "@/components/addons/ocp-pins/model";
 import type { AuthoringChange, CreateAddonBody, FleetScope, SyncSettings } from "@/types/day2";
 
 function Section({ title, description, children }: { title: string; description?: React.ReactNode; children: React.ReactNode }) {
@@ -47,7 +49,7 @@ function ChartAddressHint({ team }: { team: string }) {
 /**
  * A new add-on in a team's catalog (ADR-0043, ADR-0053):
  * `operators/<name>/<name>.yaml` and its Sig values, `values.yaml`, in one MR, optionally a
- * fleet default in the same MR. It starts from the team's own files
+ * fleet default and OCP-version pins in the same MR. It starts from the team's own files
  * (`GET /teams/{team}/addon-template`). The preview lists every cluster that
  * already has a chart of that name in its own folder and changes; they are
  * confirmed before the MR opens, against the previewed plan's digest.
@@ -83,6 +85,7 @@ export function NewAddonForm({
   const [values, setValues] = useState<Values | null>({});
   const [scope, setScope] = useState<FleetScope | null>(null);
   const [defaultValues, setDefaultValues] = useState<Values | null>({});
+  const [pins, setPins] = useState<PinRow[]>([]);
   const write = useAuthoringWrite<CreateAddonBody>({
     method: "post",
     url: (dryRun) => day2Api.createAddon(team, dryRun),
@@ -114,7 +117,7 @@ export function NewAddonForm({
                 ? "Fix the ignoreDifferences YAML"
                 : values === null || (scope !== null && defaultValues === null)
                   ? "Fix the values YAML"
-                  : null;
+                  : draftsProblem(pins);
 
   function body(): CreateAddonBody {
     const trimmedPath = path.trim();
@@ -129,6 +132,8 @@ export function NewAddonForm({
       values: values ?? {},
       default_scope: scope,
       default_values: scope ? (defaultValues ?? {}) : {},
+      // Sent only when there are pins: a create without them is the same body as before.
+      ...(pins.length > 0 && { ocp_versions: pins.map(pinBody) }),
       confirm_changes: [],
       message: null,
     };
@@ -195,6 +200,13 @@ export function NewAddonForm({
 
       <Section title="Sig values" description={<ValuesLevels current="Sig values" />}>
         <YamlValuesField label="Sig values" path={`operators/${chart || "<name>"}/values.yaml`} initial={{}} onChange={setValues} />
+      </Section>
+
+      <Section
+        title="OCP-version pins"
+        description="Optional: a chart revision and values for every destination at exactly one OpenShift version, in the same merge request. Edit them later from the add-on's page."
+      >
+        <NewAddonPins team={team} chart={chart} rows={pins} onChange={setPins} />
       </Section>
 
       <Section

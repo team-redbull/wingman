@@ -19,6 +19,8 @@ export interface CreateAddonBody {
   /** Also make it a fleet default in the same MR. */
   default_scope: FleetScope | null;
   default_values: Record<string, unknown>;
+  /** Its OCP-version pins, written in the same MR; sent only when there are some. */
+  ocp_versions?: OcpPinBody[];
   /** The preview's `needs_confirmation`, confirmed (ADR-0053). */
   confirm_changes?: string[];
   /** The preview's `digest`: the plan the user saw (ADR-0053). */
@@ -40,6 +42,42 @@ export interface UpdateTeamDefaultBody {
   sync?: SyncSettings;
   ignore_differences?: unknown[] | null;
   values?: Record<string, unknown>;
+  last_commit_id: string | null;
+  confirm_changes?: string[];
+  expected_digest?: string | null;
+  message?: string | null;
+}
+
+/** An OCP-version pin, `operators/<chart>/ocp-versions/<version>/` (ADR-0043's 2026-11-25 amendment). */
+export interface OcpPinBody {
+  /** The full OpenShift version, `4.16.27` (never `4.16`). */
+  version: string;
+  /** A branch of the chart repo; `HEAD` its default branch. */
+  target_revision: string;
+  /** Its `values.yaml`; `{}`: none. */
+  values: Record<string, unknown>;
+}
+
+/** `POST /api/day2/addons/{team}/{addon}/ocp-versions`: a new pin. */
+export interface AddPinBody extends OcpPinBody {
+  confirm_changes?: string[];
+  expected_digest?: string | null;
+  message?: string | null;
+}
+
+/** `PUT .../ocp-versions/{version}`: an absent field is unchanged; `values: {}` deletes `values.yaml`. */
+export interface ChangePinBody {
+  target_revision?: string;
+  values?: Record<string, unknown>;
+  /** `AddonOcpVersion.last_commit_id`. */
+  last_commit_id: string | null;
+  confirm_changes?: string[];
+  expected_digest?: string | null;
+  message?: string | null;
+}
+
+/** `DELETE .../ocp-versions/{version}`, with this JSON body: every file of the pin goes. */
+export interface RemovePinBody {
   last_commit_id: string | null;
   confirm_changes?: string[];
   expected_digest?: string | null;

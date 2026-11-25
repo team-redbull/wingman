@@ -154,6 +154,7 @@ What the New add-on form starts from, read from the team's own files:
   "values": {},
   "default_scope": null,
   "default_values": {},
+  "ocp_versions": [],
   "confirm_changes": [],
   "message": null
 }
@@ -180,9 +181,15 @@ What the New add-on form starts from, read from the team's own files:
   `defaults/<scope>/<name>/values.yaml`. As §5, including clusters that
   already have a folder of that name, which `confirm_changes` confirms as
   there.
+- `ocp_versions` (since 3.65.0): zero or more OCP-version pins,
+  `[{"version": "4.20.9", "target_revision": "2.1.5-hotfix", "values": {}}]`,
+  each checked as §8's `POST` (a full version, a branch of the chart repo)
+  and a version given twice refused (422 `pin-duplicate`). Each is written in
+  the same MR, as `operators/<name>/ocp-versions/<version>/<name>.yaml` and,
+  when it has values, `values.yaml`.
 
 Writes `operators/<name>/<name>.yaml` and `operators/<name>/values.yaml`
-(plus §5's files with `default_scope`). `409 ALREADY_EXISTS` (rule
+(plus §5's files with `default_scope`, and each pin's). `409 ALREADY_EXISTS` (rule
 `addon-exists`) when `operators/<name>/` exists. Title:
 `[Wingman/Day2] Create addon <team>/<name> in the team catalog` (with a
 scope: `... and as a fleet default on every hosted cluster`). Labels
@@ -407,15 +414,88 @@ and `notes`.
 | Status, code | `details.rule` | When |
 |---|---|---|
 | 403 `TEAM_READ_ONLY` | | the team has not given Wingman write access (§1) |
-| 404 `NOT_FOUND` | | unknown team, add-on, or fleet default |
-| 409 `ALREADY_EXISTS` | `addon-exists`, `default-exists` | the folder exists already |
-| 409 `REVISION_CONFLICT` | | a file changed since `last_commit_id` |
-| 422 `VALIDATION_ERROR` | `chart-name`, `repourl-invalid`, `repourl-missing`, `chart-repo-missing`, `revision-unknown`, `namespace-invalid`, `ignore-differences-invalid`, `sync-without-auto`, `sync-option-invalid`, `sync-layering`, `adoption-blocked`, `confirm-changes`, `deploy-config-layout`, `yaml-invalid` (a file the change needs does not parse), `no-change`, or a lint rule the change would break (ADR-0023) | the request cannot be written as asked |
+| 404 `NOT_FOUND` | `pin-unknown` (§8) | unknown team, add-on, fleet default, or OCP-version pin |
+| 409 `ALREADY_EXISTS` | `addon-exists`, `default-exists`, `pin-exists` | the folder exists already |
+| 409 `REVISION_CONFLICT` | | a file changed (or was deleted) since `last_commit_id` |
+| 422 `VALIDATION_ERROR` | `chart-name`, `repourl-invalid`, `repourl-missing`, `chart-repo-missing`, `revision-unknown`, `namespace-invalid`, `ignore-differences-invalid`, `sync-without-auto`, `sync-option-invalid`, `sync-layering`, `adoption-blocked`, `confirm-changes`, `deploy-config-layout`, `yaml-invalid` (a file the change needs does not parse), `no-change`, `ocp-version-invalid`, `pin-revision-missing`, `pin-values-invalid`, `pin-duplicate`, `pin-empty` (§8), or a lint rule the change would break (ADR-0023) | the request cannot be written as asked |
 
 Warnings a plan may carry (`warnings[].rule`): `chart-repo-elsewhere` (the
 chart repo is not on this GitLab), `chart-values-missing` (no `values.yaml` at
 the chart's path and revision), `repourl-moved`, and `sync-differs` (an
 OCP-version pin or a cluster's own deploy config gives some destinations other
-sync options than the default's).
+sync options than the default's), and `fleet-pin-overrides-ocp-versions` (a
+fleet default's deploy config sets `targetRevision`, which overrides every
+pin's revision on its scope; §8).
 
 Body validation (a wrong type, an unknown field) is 422 as everywhere.
+
+## 8. OCP-version pins (3.65.0)
+
+ADR-0043's 2026-11-25 amendment. A pin is
+`operators/<addon>/ocp-versions/<version>/` in the team repo: layer 2 of both
+of the add-on's stacks on every destination whose OCP version (what comes
+before its day1 `mastertag`'s first `-`) is exactly `<version>`. `<version>`
+is the full `<major>.<minor>.<patch>`: `4.16.27`, never `4.16` (422
+`ocp-version-invalid`). Wingman writes the platform's shape and nothing
+else:
+
+```yaml
+# operators/<addon>/ocp-versions/<version>/<addon>.yaml
+targetRevision: 2.1.5-hotfix
+```
+
+and `operators/<addon>/ocp-versions/<version>/values.yaml` only when the pin
+has values. Each write is one MR in the authoring conventions (label and
+footer action `update-default`, branch `update-default-<addon>-…`), is
+previewed with `?dry_run=true`, and confirms its impact (the destinations at
+that version) with the preview's digest, as §6. Admins only; a read-only team
+is `403 TEAM_READ_ONLY` before anything else.
+
+### `POST /addons/{team}/{addon}/ocp-versions` (admin)
+
+```json
+{"version": "4.20.9", "target_revision": "2.1.5-hotfix", "values": {"extra": 1}, "confirm_changes": [], "expected_digest": null, "message": null}
+```
+
+`version` and `target_revision` are required; `target_revision` is a branch
+of the add-on's chart repo, `HEAD` its default (422 `pin-revision-missing`
+when blank, `revision-unknown` when the repo has no such branch; a chart repo
+elsewhere is accepted with `chart-repo-elsewhere`). `values` (`{}`: no
+`values.yaml`). `409 ALREADY_EXISTS` (`pin-exists`) when the folder exists;
+404 when the team has no `operators/<addon>/`. Title:
+`[Wingman/Day2] Update addon <team>/<addon> OCP-version pin <version> (new: <revision>)`.
+
+### `PUT /addons/{team}/{addon}/ocp-versions/{version}` (admin)
+
+```json
+{"target_revision": "2.0.0", "values": {"extra": 2}, "last_commit_id": "9f1c…", "confirm_changes": [], "expected_digest": null, "message": null}
+```
+
+Absent or `null` fields are unchanged. `target_revision` is set in
+`<addon>.yaml` in place (its comments and other keys kept, §4), or written as
+the file when the pin holds values only; it cannot be blanked (remove the pin
+instead). `values` replaces `values.yaml` whole; `{}` deletes it (422
+`pin-empty` when that would leave the folder empty). `last_commit_id` is the
+pin's, from `GET /teams/{team}/addons/{addon}` (`ocp_versions[].last_commit_id`):
+a pin changed since is `409 REVISION_CONFLICT`, one deleted since too; one
+that is not there `404` (`pin-unknown`). Title:
+`[Wingman/Day2] Update addon <team>/<addon> OCP-version pin <version>`.
+
+### `DELETE /addons/{team}/{addon}/ocp-versions/{version}` (admin)
+
+```json
+{"last_commit_id": "9f1c…", "confirm_changes": ["hosted:site1:prep:…:ocp4-prep-eyal-site1"], "expected_digest": "…", "message": null}
+```
+
+A JSON body, as every confirmed write has. Deletes every file of the folder,
+each guarded by `last_commit_id`: the destinations at that version go back to
+the add-on's revision and Sig values. Title:
+`[Wingman/Day2] Update addon <team>/<addon> OCP-version pin <version> (removed)`.
+
+Every pin plan says which destinations read it (`reach`, none for a version
+no destination runs yet: the pin waits for the first cluster day1 moves
+there), warns with `fleet-pin-overrides-ocp-versions` for each fleet default
+whose deploy config sets `targetRevision` (its scope ignores every pin's
+revision; the values still apply), and notes the versions the add-on runs on
+with no pin and the clusters whose own folder pins a revision (an emergency
+pin, which the pin's revision does not reach).

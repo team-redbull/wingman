@@ -15,6 +15,7 @@ from wingman_day2.application.changes import ChangeService
 from wingman_day2.application.fleet_targets import FleetTargetService
 from wingman_day2.application.installed import InstalledService
 from wingman_day2.application.lints import LintService
+from wingman_day2.application.ocp_pins import OcpPinService
 from wingman_day2.application.operators import OperatorService
 from wingman_day2.application.preview import PreviewService
 from wingman_day2.application.topology import TopologyService
@@ -42,6 +43,7 @@ class Day2Services:
     changes: ChangeService
     authoring: AuthoringService
     fleet_targets: FleetTargetService
+    ocp_pins: OcpPinService
     operators: OperatorService
     approvals: ApprovalService
     audit: AuditService
@@ -73,6 +75,7 @@ class Day2Services:
             changes=ChangeService(gitlab, topology, sigs, access, clock),
             authoring=authoring,
             fleet_targets=FleetTargetService(gitlab, topology, sigs, charts, access, clock),
+            ocp_pins=OcpPinService(gitlab, topology, sigs, charts, access, clock),
             operators=OperatorService(topology, sigs, catalog, authoring, access),
             approvals=ApprovalService(gitlab, sigs, access),
             audit=AuditService(gitlab, topology, sigs),

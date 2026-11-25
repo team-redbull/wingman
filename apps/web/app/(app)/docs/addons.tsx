@@ -61,6 +61,25 @@ Cluster values  what a cluster gets where the add-on is used: create, a flavor, 
         plan instead. A team that has not given Wingman write access is read-only.
       </p>
 
+      <h3 className="text-base font-semibold mt-6 mb-3">OCP-version pins</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+        A pin gives every destination at exactly one OpenShift version its own chart revision and values:{" "}
+        <InlineCode>operators/{"{chart}"}/ocp-versions/{"{version}"}/</InlineCode>, a{" "}
+        <InlineCode>{"{chart}"}.yaml</InlineCode> holding <InlineCode>targetRevision</InlineCode> (a branch of the
+        chart repo) and, when it has values, a <InlineCode>values.yaml</InlineCode> above the Sig values. The version is
+        the full one a cluster&apos;s <InlineCode>mastertag</InlineCode> gives (<InlineCode>4.16.27-x86_64</InlineCode>{" "}
+        is <InlineCode>4.16.27</InlineCode>); <InlineCode>4.16</InlineCode> is refused, since a cluster even a z-stream
+        away does not read it. The add-on&apos;s <strong>OCP-version pins</strong> card adds, edits and removes them,
+        offering the versions its destinations run; <strong>New add-on</strong> can set them in its create merge
+        request. Each one is previewed and confirmed, as above.
+      </p>
+      <Callout type="warning" title="Two things the platform does with pins">
+        A fleet default whose own <InlineCode>{"{chart}"}.yaml</InlineCode> sets <InlineCode>targetRevision</InlineCode>{" "}
+        overrides every pin&apos;s revision on its scope (its values still apply): the card says so. And a pin is read
+        only at its exact version, so a cluster that day1 moves to a new one, z-streams too, falls back to the
+        add-on&apos;s revision until that version&apos;s pin exists: add it first, then upgrade.
+      </Callout>
+
       <h3 className="text-base font-semibold mt-6 mb-3">Value layering</h3>
       <p className="text-sm text-muted-foreground leading-relaxed mb-3">
         On top of the chart&apos;s own defaults, the platform merges up to ten files from the team&apos;s repo,

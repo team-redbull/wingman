@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from wingman_day2.api.v1 import approvals, authoring, catalog, clusters, operators
+from wingman_day2.api.v1 import approvals, authoring, catalog, clusters, ocp_pins, operators
 
 router = APIRouter()
 router.include_router(catalog.router)
 router.include_router(clusters.router)
 router.include_router(approvals.router)
 router.include_router(authoring.router)
+router.include_router(ocp_pins.router)
 router.include_router(operators.router)

@@ -15,6 +15,7 @@ template in Python:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final
@@ -22,6 +23,7 @@ from urllib.parse import urlsplit
 
 from wingman_core.domain.git import Project
 from wingman_day2.domain.clusters import UPI_ARGO_NAMESPACE, ClusterKind, ClusterRef
+from wingman_day2.domain.errors import ChangeRefusedError
 
 REPOURL: Final = "repourl"
 TARGET_REVISION: Final = "targetRevision"
@@ -33,6 +35,9 @@ APPNAME: Final = "appname"
 OLD_CONVENTION: Final = "oldConvention"
 DEFAULT_REVISION: Final = "HEAD"
 DEFAULT_PATH: Final = "."
+
+NAMESPACE: Final = re.compile(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$")
+"""A Kubernetes namespace name (a DNS label)."""
 
 
 def truthy(value: object) -> bool:
@@ -79,6 +84,26 @@ def auto_sync_enabled(automated: object) -> bool:
         return False
     enabled = automated.get("enabled")
     return enabled is None or enabled is True
+
+
+def check_namespace(namespace: object) -> None:
+    """Refuse a ``projectNamespace`` that is no Kubernetes namespace name."""
+    if namespace is not None and not NAMESPACE.match(str(namespace)):
+        raise ChangeRefusedError(
+            f"{namespace!r} is not a Kubernetes namespace name (lowercase letters, digits, '-')",
+            details={"rule": "namespace-invalid"},
+        )
+
+
+def check_ignore_differences(value: object) -> None:
+    """Refuse an ``ignoreDifferences`` that is not ArgoCD's list of entries."""
+    if value is not None and not (
+        isinstance(value, list) and all(isinstance(item, dict) for item in value)
+    ):
+        raise ChangeRefusedError(
+            "ignoreDifferences is ArgoCD's list of {group, kind, jsonPointers, ...} entries",
+            details={"rule": "ignore-differences-invalid"},
+        )
 
 
 def miscased_repourl_keys(doc: Mapping[str, object]) -> list[str]:

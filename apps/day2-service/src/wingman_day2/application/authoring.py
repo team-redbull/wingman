@@ -7,7 +7,7 @@ Wingman writes, on the team's own repo only:
 - **create**: ``operators/<chart>/<chart>.yaml`` (the deploy config: lowercase
   ``repourl``, and ``targetRevision``, ``path``, ``projectNamespace``,
   ``syncPolicy``, ``ignoreDifferences`` only when set) and
-  ``operators/<chart>/values.yaml``; optionally a fleet default in the same MR.
+  ``operators/<chart>/values.yaml``; optionally pins and a fleet default too.
 - **update the team default**: the deploy config edited in place (comments
   and untouched lines kept, ``domain.yaml_text``), and the values file.
 - **make default**: ``defaults/<scope>/<chart>/values.yaml`` (always: the file
@@ -30,7 +30,6 @@ plans everything and opens nothing.
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -42,6 +41,7 @@ from wingman_core.domain.mr_conventions import Repo, ResourceType, Verb, mr_titl
 from wingman_core.domain.users import User
 from wingman_day2.application.apps import LoadedLayer, load_layers
 from wingman_day2.application.changes import check_chart_name
+from wingman_day2.application.ocp_pins import plan_new_pins
 from wingman_day2.application.plan_writer import (
     SCOPE_LABELS,
     SCOPE_NOUNS,
@@ -69,6 +69,8 @@ from wingman_day2.domain.deploy_config import (
     REPOURL,
     SYNC_POLICY,
     TARGET_REVISION,
+    check_ignore_differences,
+    check_namespace,
     leaf_application,
     miscased_repourl_keys,
     truthy,
@@ -82,6 +84,7 @@ from wingman_day2.domain.errors import (
 from wingman_day2.domain.exclusions import set_excluded
 from wingman_day2.domain.findings import Finding, Rule, warning
 from wingman_day2.domain.merge import merge_values
+from wingman_day2.domain.ocp_pins import PinSpec, check_pins
 from wingman_day2.domain.platform import TeamPlan, scope_exclusions
 from wingman_day2.domain.stacks import Layer, LayerRole
 from wingman_day2.domain.sync_policy import (
@@ -120,9 +123,6 @@ __all__ = [
     "new_deploy_config",
 ]
 
-NAMESPACE: Final = re.compile(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$")
-"""A Kubernetes namespace name (a DNS label)."""
-
 EDITABLE_KEYS: Final = (REPOURL, TARGET_REVISION, PATH, PROJECT_NAMESPACE, IGNORE_DIFFERENCES)
 """The team-default deploy-config keys an edit may set (sync options go separately)."""
 
@@ -152,6 +152,7 @@ class NewAddon:
     values: Mapping[str, object] = field(default_factory=dict)
     default_scope: DefaultsScope | None = None
     default_values: Mapping[str, object] = field(default_factory=dict)
+    pins: tuple[PinSpec, ...] = ()
     confirm_changes: tuple[str, ...] = ()
 
 
@@ -232,37 +233,6 @@ def new_deploy_config(spec: NewAddon) -> dict[str, object]:
     if spec.ignore_differences:
         doc[IGNORE_DIFFERENCES] = list(spec.ignore_differences)
     return doc
-
-
-def check_namespace(namespace: object) -> None:
-    """Refuse a value that is no Kubernetes namespace name."""
-    if namespace is not None and not NAMESPACE.match(str(namespace)):
-        raise ChangeRefusedError(
-            f"{namespace!r} is not a Kubernetes namespace name (lowercase letters, digits, '-')",
-            details={"rule": "namespace-invalid"},
-        )
-
-
-def _check_ignore_differences(value: object) -> None:
-    if value is not None and not (
-        isinstance(value, list) and all(isinstance(item, dict) for item in value)
-    ):
-        raise ChangeRefusedError(
-            "ignoreDifferences is ArgoCD's list of {group, kind, jsonPointers, ...} entries",
-            details={"rule": "ignore-differences-invalid"},
-        )
-
-
-def _sync_words(sync: SyncSettings) -> str:
-    mode = (
-        "auto-sync"
-        + (" with prune" if sync.prune else "")
-        + (" and self-heal" if sync.self_heal else "")
-        if sync.auto_sync
-        else "manual sync"
-    )
-    options = ", ".join(sync.sync_options) if sync.sync_options else "no sync options"
-    return f"{mode} and {options}"
 
 
 def _existing_note(plan: AuthoringPlan) -> str | None:
@@ -414,7 +384,8 @@ class AuthoringService(PlanWriter):
             )
         sync = spec.sync.checked()
         check_namespace(spec.project_namespace)
-        _check_ignore_differences(spec.ignore_differences)
+        check_ignore_differences(spec.ignore_differences)
+        pins = check_pins(spec.pins)
         plan = AuthoringPlan(state, Action.CREATE, chart, spec.default_scope)
         deploy_path = folder.child(layout.deploy_config_name(chart))
         plan.findings += await self.check_chart_repo(
@@ -428,6 +399,7 @@ class AuthoringService(PlanWriter):
             FileChange.create(deploy_path, dump_yaml(new_deploy_config(spec))),
             FileChange.create(folder.child(layout.VALUES_FILE), dump_values(spec.values)),
         ]
+        await plan_new_pins(self, plan, pins, repourl=spec.repourl, chart_path=spec.path)
         label = SCOPE_LABELS[spec.default_scope] if spec.default_scope else ""
         if spec.default_scope is not None:
             await self._plan_default(
@@ -437,7 +409,7 @@ class AuthoringService(PlanWriter):
         existing = _existing_note(plan)
         plan.notes.append(
             f"After the merge, {chart} is in {state.team.project.path_with_namespace}'s catalog "
-            f"(operators/{chart}/), with {_sync_words(sync)}. "
+            f"(operators/{chart}/), with {sync.words()}. "
             + (
                 existing
                 if existing
@@ -572,7 +544,7 @@ class AuthoringService(PlanWriter):
             if key == PROJECT_NAMESPACE:
                 check_namespace(value)
             if key == IGNORE_DIFFERENCES:
-                _check_ignore_differences(value)
+                check_ignore_differences(value)
             if key == TARGET_REVISION and value == DEFAULT_REVISION:
                 value = None
             if key == PATH and value is not None and str(value).strip("/") in ("", DEFAULT_PATH):

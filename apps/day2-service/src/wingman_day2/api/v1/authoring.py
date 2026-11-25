@@ -38,9 +38,10 @@ router = APIRouter(prefix="/api/day2", tags=["authoring"])
 DryRun = Query(default=False, description="Plan and check only; open nothing (200).")
 
 
-def _answer(
+def answer(
     result: AuthoringResult, response: Response, *, created: bool
 ) -> AuthoringPlanOut | AuthoringChangeOut:
+    """A dry run's plan (200), or the MR the write opened (201 when it created, else 200)."""
     if result.merge_request is None:
         response.status_code = status.HTTP_200_OK
         return AuthoringPlanOut.of(result.plan)
@@ -89,7 +90,7 @@ async def create_addon(
         message=body.message,
         expected_digest=body.expected_digest,
     )
-    return _answer(result, response, created=True)
+    return answer(result, response, created=True)
 
 
 @router.put("/addons/{team}/{addon}")
@@ -113,7 +114,7 @@ async def update_team_default(
         confirm_changes=body.confirm_changes,
         expected_digest=body.expected_digest,
     )
-    return _answer(result, response, created=False)
+    return answer(result, response, created=False)
 
 
 @router.post("/addons/{team}/{addon}/defaults/{scope}", status_code=status.HTTP_201_CREATED)
@@ -140,7 +141,7 @@ async def make_default(
         message=body.message,
         expected_digest=body.expected_digest,
     )
-    return _answer(result, response, created=True)
+    return answer(result, response, created=True)
 
 
 @router.put("/addons/{team}/{addon}/defaults/{scope}")
@@ -172,7 +173,7 @@ async def update_fleet_default(
         confirm_changes=body.confirm_changes,
         expected_digest=body.expected_digest,
     )
-    return _answer(result, response, created=False)
+    return answer(result, response, created=False)
 
 
 @router.put("/addons/{team}/{addon}/defaults/{scope}/destinations/{cluster}/values")
@@ -201,7 +202,7 @@ async def set_destination_values(
         dry_run=dry_run,
         message=body.message,
     )
-    return _answer(result, response, created=False)
+    return answer(result, response, created=False)
 
 
 @router.put("/addons/{team}/{addon}/defaults/{scope}/envs/{env}/values")
@@ -230,7 +231,7 @@ async def set_env_values(
         dry_run=dry_run,
         message=body.message,
     )
-    return _answer(result, response, created=False)
+    return answer(result, response, created=False)
 
 
 @router.post("/addons/{team}/{addon}/mce-installs")

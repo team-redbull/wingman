@@ -184,6 +184,8 @@ export function planFor(method: string, url: URL, body: Record<string, unknown>)
       file("create", `operators/${name}/values.yaml`, "{}\n", null),
     ];
     if (defaultScope) files.push(file("create", `defaults/${defaultScope}/${name}/values.yaml`, "{}\n", null));
+    for (const pin of (body.ocp_versions as { version: string; target_revision: string }[] | undefined) ?? [])
+      files.push(file("create", `operators/${name}/ocp-versions/${pin.version}/${name}.yaml`, `targetRevision: ${pin.target_revision}\n`, null));
     return {
       ...base,
       action: "create-addon",

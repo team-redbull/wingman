@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Boxes, GitBranch, Layers, Pencil, RefreshCw } from "lucide-react";
+import { AlertTriangle, Boxes, Layers, Pencil, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { FLEET_SCOPES, day2Api, day2Keys, keyFromParam, problemOf, syncSummary, teamAddonsHref } from "@/lib/day2";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ import { ReadOnlyBadge, ReadOnlyNote } from "@/components/addons/team-access";
 import { DefinitionList } from "@/components/addons/definition-list";
 import { Breadcrumbs, PageTitle, useAddonAccess } from "@/components/addons/page-header";
 import { RepoFileView } from "@/components/addons/repo-file";
+import { OcpPinsCard } from "@/components/addons/ocp-pins/pins-card";
 import { ScopePanelCard, type AddonWrites } from "@/components/addons/scope-panel";
 import { ValuesLevels } from "@/components/addons/values-levels";
 import type { AuthoringChange, CatalogEntry, AddonDetail, ScopePanel } from "@/types/day2";
@@ -139,39 +140,6 @@ function AddonFiles({ detail, writes }: { detail: AddonDetail; writes: AddonWrit
   );
 }
 
-function OcpVersions({ detail }: { detail: AddonDetail }) {
-  return (
-    <Card title="OCP-version pins" icon={GitBranch} label="OCP-version pins">
-      {detail.ocp_versions.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          None: every OCP version gets the add-on&apos;s revision. A pin is <code>operators/{detail.name}/ocp-versions/&lt;version&gt;/</code>,
-          edited in the repo.
-        </p>
-      ) : (
-        <ul className="space-y-2" aria-label="Pins per OCP version">
-          {detail.ocp_versions.map((pin) => (
-            <li key={pin.version} className="rounded-lg border px-3 py-2" data-testid={`ocp-pin-${pin.version}`}>
-              <details>
-                <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                  <span className="font-semibold">OCP {pin.version}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    {pin.target_revision ? `targetRevision ${pin.target_revision}` : "values only"}
-                  </span>
-                </summary>
-                <div className="mt-2 grid gap-3 lg:grid-cols-2">
-                  <RepoFileView file={pin.deploy_config} absent="No deploy config: the add-on's revision." />
-                  <RepoFileView file={pin.values_file} absent="No values.yaml for this version." />
-                </div>
-              </details>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="text-[11px] text-muted-foreground">Read-only in Wingman.</p>
-    </Card>
-  );
-}
-
 function sortedScopes(scopes: ScopePanel[]): ScopePanel[] {
   const order = (s: ScopePanel) => {
     const i = FLEET_SCOPES.indexOf(s.scope);
@@ -193,7 +161,7 @@ function PageSkeleton() {
 /**
  * One add-on of a team, reached from the Addons page (ADR-0053): the add-on
  * itself (`operators/<chart>/` in the team repo: its deploy config and Sig
- * values), its OCP-version pins, and
+ * values), its OCP-version pins (edited here, ADR-0043's 2026-11-25 amendment), and
  * one panel per fleet scope: whether it is a default there, which destinations
  * get it, and each destination's overrides. Every write is previewed first and
  * confirmed against the previewed plan. One cluster's add-ons stay on that
@@ -271,7 +239,7 @@ export default function AddonPage() {
           <FindingsList findings={detail.warnings} showContext />
           <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <AddonFiles detail={detail} writes={writes} />
-            <OcpVersions detail={detail} />
+            <OcpPinsCard detail={detail} writes={writes} />
           </div>
           <section className="space-y-3" aria-label="Defaults">
             <div>

@@ -7,9 +7,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from wingman_day2.api.v1.schemas import (
+    ConfirmedIn,
     FileChangeOut,
     FindingOut,
     MRDetailOut,
+    OcpPinIn,
     SyncOut,
     _Input,
     findings,
@@ -66,6 +68,7 @@ class CreateAddonBody(_Input):
     values: dict[str, Any] = Field(default_factory=dict)
     default_scope: DefaultsScope | None = None
     default_values: dict[str, Any] = Field(default_factory=dict)
+    ocp_versions: list[OcpPinIn] = Field(default_factory=list, description="Its pins, if any.")
     confirm_changes: list[str] = Field(default_factory=list)
     expected_digest: str | None = Field(default=None, description="The preview's digest.")
     message: str | None = None
@@ -84,6 +87,7 @@ class CreateAddonBody(_Input):
             values=self.values,
             default_scope=self.default_scope,
             default_values=self.default_values,
+            pins=tuple(p.spec() for p in self.ocp_versions),
             confirm_changes=tuple(self.confirm_changes),
         )
 
@@ -146,14 +150,7 @@ class UpdateFleetDefaultBody(_Input):
     message: str | None = None
 
 
-class _Confirmed(_Input):
-    last_commit_id: str | None = Field(default=None, description="The file's, as read.")
-    confirm_changes: list[str] = Field(default_factory=list)
-    expected_digest: str | None = Field(default=None, description="The preview's digest.")
-    message: str | None = None
-
-
-class DestinationValuesBody(_Confirmed):
+class DestinationValuesBody(ConfirmedIn):
     """A destination's ``values-<name>.yaml`` of a fleet default; null or {} deletes it."""
 
     values: dict[str, Any] | None

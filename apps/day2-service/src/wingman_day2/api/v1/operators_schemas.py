@@ -46,21 +46,24 @@ class FileOut(BaseModel):
 
 
 class OcpVersionOut(BaseModel):
-    """An ``ocp-versions/<v>/`` pin of an add-on."""
+    """An ``ocp-versions/<v>/`` pin of an add-on; send ``last_commit_id`` back to change it."""
 
     version: str
     target_revision: str | None
     deploy_config: FileOut
     values_file: FileOut
+    last_commit_id: str | None
 
     @classmethod
     def of(cls, pin: OcpVersionPin) -> OcpVersionOut:
         """From the application value."""
+        file = pin.deploy.file or pin.values.file
         return cls(
             version=pin.version,
             target_revision=pin.target_revision,
             deploy_config=FileOut.of(pin.deploy),
             values_file=FileOut.of(pin.values),
+            last_commit_id=file.last_commit_id if file else None,
         )
 
 
