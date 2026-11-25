@@ -101,9 +101,15 @@ def test_an_edit_that_changes_replicas_is_refused_only_while_scaling_is_on() -> 
 
 
 def test_an_edit_of_the_rest_is_not_refused_while_scaling_is_on() -> None:
-    written = (
-        MAIN.replace('merkaz: "1234"', 'merkaz: "4321"') + "- infraEnvName: hp\n  replicas: 2\n"
-    )
+    new_pool = "- infraEnvName: hp\n  name: hp\n  replicas: 2\n"  # named by ADR-0071's rule
+    written = MAIN.replace('merkaz: "1234"', 'merkaz: "4321"') + new_pool
+    assert edit_problems(MAIN, written, owned=SCALING) == []
+
+
+def test_a_new_nodepool_named_as_its_infraenv_is_not_the_derived_one_on_main() -> None:
+    """``dell-zone-a`` beside the chart's ``<clusterName>-dell-zone-a`` is another NodePool."""
+    written = MAIN + "- infraEnvName: dell-zone-a\n  name: dell-zone-a\n  replicas: 1\n"
+    assert changes(written) == ()
     assert edit_problems(MAIN, written, owned=SCALING) == []
 
 

@@ -345,10 +345,10 @@ class ClusterService:
         expected = await self._expect(ref, current, last_commit_id)
         if content == current.content:
             raise InvalidInputError("the edit changes nothing", ["the content is identical"])
-        problems = edit_problems(current.content, content, owned=self._owned)
+        name = (await self.hosted_cluster(ref)).cluster_name  # its NodePools, tuning/<it>/
+        problems = edit_problems(current.content, content, owned=self._owned, cluster_name=name)
         if not problems:
             tuning = await self._machine_configs.tuning()
-            name = (await self.hosted_cluster(ref)).cluster_name  # tuning/<it>/: its variants
             problems = edit_text_problems(current.content, content, tuning, cluster_name=name)
         require_valid(problems, message="the edit is not valid")
         return await self._provisioner.apply(

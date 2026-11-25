@@ -36,7 +36,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, cast
 
-from wingman_day1.domain.nodepool_infra_envs import REPLACE, nodepool_entries
+from wingman_day1.domain.nodepool_infra_envs import REPLACE
+from wingman_day1.domain.nodepool_names import entry_key, nodepool_entries, rendered_name
 
 FILE_KEY: Final = "excludeAgentLabels"
 """A ``nodepool[]`` entry's Agent label keys its NodePool excludes."""
@@ -139,7 +140,7 @@ def rendered_problems(inputs: Mapping[str, object], rendered: Mapping[str, objec
 # ── Edits of an existing file ────────────────────────────────────────────────
 
 
-def _key(index: int, pool: Mapping[str, object]) -> str:
+def _label(index: int, pool: Mapping[str, object]) -> str:
     return str(pool.get("name") or pool.get("infraEnvName") or f"#{index}")
 
 
@@ -148,12 +149,12 @@ def edit_problems(old: Mapping[str, object], new: Mapping[str, object]) -> list[
 
     A changed list must be Agent label keys; and an existing ``Replace``
     NodePool's list may not change: its selector change would replace every
-    node. Nodepools are matched by ``name``, else ``infraEnvName``.
+    node. Nodepools are matched by their NodePool (``nodepool_names.entry_key``).
     """
-    before = {_key(i, p): p for i, p in nodepool_entries(old, "nodepool")}
+    before = {entry_key(i, p): p for i, p in nodepool_entries(old, "nodepool")}
     problems: list[str] = []
     for index, pool in nodepool_entries(new, "nodepool"):
-        was = before.get(_key(index, pool))
+        was = before.get(entry_key(index, pool))
         keys = keys_of(pool)
         if keys == (keys_of(was) if was is not None else []):
             continue
@@ -164,7 +165,7 @@ def edit_problems(old: Mapping[str, object], new: Mapping[str, object]) -> list[
         problems += [f"{where}: {p}" for key in keys for p in label_key_problems(key)]
         if was is not None and REPLACE in (pool.get("upgradeType"), was.get("upgradeType")):
             problems.append(
-                f"{where}: NodePool {_key(index, pool)} is upgradeType Replace, so a change of "
+                f"{where}: NodePool {_label(index, pool)} is upgradeType Replace, so a change of "
                 "the Agents it excludes would replace every node; leave it as it is, or change "
                 "the NodePool to InPlace first"
             )
@@ -190,12 +191,8 @@ class PoolPlan:
 
 
 def nodepool_name(index: int, pool: Mapping[str, object], cluster_name: str) -> str:
-    """The NodePool the chart renders: ``value_drift.nodepool_name``'s rule (an import cycle)."""
-    if pool.get("name"):
-        return str(pool["name"])
-    if pool.get("infraEnvName"):
-        return f"{cluster_name}-{pool['infraEnvName']}"
-    return f"nodepool[{index}]"
+    """The NodePool the chart renders (``nodepool_names.rendered_name``), else its position."""
+    return rendered_name(pool, cluster_name=cluster_name) or f"nodepool[{index}]"
 
 
 def plan(

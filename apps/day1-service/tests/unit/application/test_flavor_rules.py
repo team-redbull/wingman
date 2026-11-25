@@ -93,7 +93,8 @@ async def test_every_config_that_does_not_resolve_is_one_problem(
         support,
         nodepools=[
             pool({"name": "worker-chrony-configuration"}, {"name": "nm-conf"}),
-            pool({"name": "nm-conf", "hardware": "hp"}, {"name": "restored-example-config"}),
+            pool({"name": "nm-conf", "hardware": "hp"}, {"name": "restored-example-config"})
+            | {"name_suffix": "b"},  # its own NodePool on the same InfraEnv (ADR-0071)
         ],
     )
     with pytest.raises(InvalidInputError) as caught:

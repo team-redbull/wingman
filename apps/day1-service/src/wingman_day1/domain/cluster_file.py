@@ -43,6 +43,8 @@ from wingman_day1.domain.errors import InvalidClusterFileError
 from wingman_day1.domain.excluded_agent_labels import edit_problems as agent_label_problems
 from wingman_day1.domain.nodepool_infra_envs import additional_of, infra_envs_of
 from wingman_day1.domain.nodepool_infra_envs import edit_problems as infra_env_problems
+from wingman_day1.domain.nodepool_names import edit_problems as name_problems
+from wingman_day1.domain.nodepool_names import entry_key
 from wingman_day1.domain.replicas_ownership import replicas_problems
 from wingman_day1.domain.scale_down_policy import edit_problems as policy_problems
 from wingman_day1.domain.upgrades import version_problems
@@ -294,8 +296,15 @@ def _mastertag_problems(values: Mapping[str, object]) -> list[str]:
     return []
 
 
-def _nodepool_problems(values: Mapping[str, object], *, required: bool) -> list[str]:
-    """The chart's own nodepool rules (templates/nodepool.yaml), checked before Helm does."""
+def _nodepool_problems(
+    values: Mapping[str, object], *, required: bool, cluster_name: str | None = None
+) -> list[str]:
+    """The chart's own nodepool rules (templates/nodepool.yaml), checked before Helm does.
+
+    Two entries may not render one NodePool: by its ``name``, else the
+    ``<clusterName>-<infraEnvName>`` the chart derives (with ``cluster_name``,
+    the chart's ``clusterName``, when known).
+    """
     if "nodepool" not in values:
         return ["nodepool must list at least one nodepool"] if required else []
     pools = values["nodepool"]
@@ -319,13 +328,13 @@ def _nodepool_problems(values: Mapping[str, object], *, required: bool) -> list[
             isinstance(replicas, bool) or not isinstance(replicas, int) or replicas < 0
         ):
             problems.append(f"{where}: replicas must be a whole number of at least 0")
-        derived = str(name) if name else f"<clusterName>-{infra_env}"
-        if derived in seen:
+        rendered = entry_key(index, pool, cluster_name)
+        if rendered in seen:
             problems.append(
-                f"{where}: nodepool name {derived!r} is used twice; nodepools that share an "
-                "InfraEnv must each set name"
+                f"{where}: nodepool name {rendered!r} is used twice; nodepools that share an "
+                "InfraEnv need names of their own, <infraEnvName>-<suffix> (ADR-0071)"
             )
-        seen.add(derived)
+        seen.add(rendered)
     return problems
 
 
@@ -377,7 +386,12 @@ NO_WORKFLOW_KEYS: Final = WorkflowKeys()
 
 
 def edit_problems(
-    current: str, edited: str, *, owned: WorkflowKeys = NO_WORKFLOW_KEYS, main: str | None = None
+    current: str,
+    edited: str,
+    *,
+    owned: WorkflowKeys = NO_WORKFLOW_KEYS,
+    main: str | None = None,
+    cluster_name: str | None = None,
 ) -> list[str]:
     """Why an edit of an existing cluster file may not be proposed; empty when it may.
 
@@ -388,7 +402,10 @@ def edit_problems(
     NodePool is renamed by its InfraEnvs, nor a Replace one's InfraEnvs changed
     (``nodepool_infra_envs.edit_problems``), and a scale-down policy the edit
     sets is one update-nodepool knows (``scale_down_policy.edit_problems``), and no
-    existing Replace NodePool's excluded Agent labels change (ADR-0065).
+    existing Replace NodePool's excluded Agent labels change (ADR-0065). A
+    NodePool the edit adds is named ``<infraEnvName>[-<suffix>]``, and none is
+    renamed (``nodepool_names.edit_problems``, ADR-0071; ``cluster_name`` is
+    the chart's ``clusterName`` when the caller knows it).
     With ``owned.versions`` so must
     the version keys the upgrade workflow owns (``upgrades.version_problems``),
     and with ``owned.replicas`` each NodePool's replicas as ``main`` (the file
@@ -400,7 +417,8 @@ def edit_problems(
     except InvalidClusterFileError as exc:
         return list(exc.problems)
     old = _lenient_values(current)
-    problems = _mastertag_problems(new) + _nodepool_problems(new, required=False)
+    problems = _mastertag_problems(new)
+    problems += _nodepool_problems(new, required=False, cluster_name=cluster_name)
     for key in (*AUTOMATION_KEYS, "clusterName"):
         if old.get(key) != new.get(key):
             owner = "automation" if key in AUTOMATION_KEYS else "the file name"
@@ -415,6 +433,8 @@ def edit_problems(
     if owned.replicas:
         problems += replicas_problems(old if main is None else _lenient_values(main), new)
     problems += policy_problems(old, new) + agent_label_problems(old, new)
+    if _parses(current):  # one that does not names no NodePool to tell the new ones from
+        problems += name_problems(old, new, cluster_name=cluster_name)
     return problems + infra_env_problems(old, new, enabled=owned.infra_envs)
 
 
@@ -424,6 +444,14 @@ def _lenient_values(content: str) -> dict[str, object]:
         return load_values(content)
     except InvalidClusterFileError:
         return {}
+
+
+def _parses(content: str) -> bool:
+    try:
+        load_values(content)
+    except InvalidClusterFileError:
+        return False
+    return True
 
 
 def require_valid(problems: Sequence[str], *, message: str) -> None:

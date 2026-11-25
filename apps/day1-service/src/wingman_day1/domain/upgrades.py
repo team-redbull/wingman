@@ -21,6 +21,7 @@ from enum import StrEnum
 from typing import Final
 
 from wingman_core.domain.release_tags import without_arch
+from wingman_day1.domain.nodepool_names import entry_key
 
 UPGRADE_WORKFLOW_PREFIX: Final = "upgrade-cluster-"
 """A cluster's upgrade run is ``upgrade-cluster-<file stem>``; the next upgrade reuses it."""
@@ -253,9 +254,9 @@ def version_problems(old: Mapping[str, object], new: Mapping[str, object]) -> li
         )
     before = _workertags(old.get("nodepool"))
     follows = new.get("workertag") or new.get("mastertag")
-    for name, tag in _workertags(new.get("nodepool")).items():
-        if name in before:
-            changed = before[name] != tag
+    for key, (name, tag) in _workertags(new.get("nodepool")).items():
+        if key in before:
+            changed = before[key][1] != tag
         else:
             changed = tag is not None and _bare(tag) != _bare(follows)
         if changed:
@@ -263,16 +264,19 @@ def version_problems(old: Mapping[str, object], new: Mapping[str, object]) -> li
     return problems
 
 
-def _workertags(pools: object) -> dict[str, object]:
-    """Each NodePool's ``workertag`` (``None``: none), by its name, else its InfraEnv."""
-    tags: dict[str, object] = {}
+def _workertags(pools: object) -> dict[str, tuple[str, object]]:
+    """Each NodePool's label and ``workertag`` (``None``: none), by ``nodepool_names.entry_key``.
+
+    The label is its name, else its InfraEnv.
+    """
+    tags: dict[str, tuple[str, object]] = {}
     if not isinstance(pools, Sequence) or isinstance(pools, str):
         return tags
     for index, pool in enumerate(pools):
         if not isinstance(pool, Mapping):
             continue
-        key = pool.get("name") or pool.get("infraEnvName") or f"#{index}"
-        tags.setdefault(str(key), pool.get("workertag"))
+        label = str(pool.get("name") or pool.get("infraEnvName") or f"#{index}")
+        tags.setdefault(entry_key(index, pool), (label, pool.get("workertag")))
     return tags
 
 

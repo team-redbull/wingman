@@ -133,7 +133,7 @@ chart values.yaml
 | Key | Default |
 |---|---|
 | `infraEnvName` | **required on agent**. It is the value of label `infraenvs.agent-install.openshift.io`. Legacy form: `agentLabelSelector: {nodeLabelKey, nodeLabelValue}`; a disagreement fails the render |
-| `name` | `<clusterName>-<infraEnvName>`. **Required** when two pools share an InfraEnv (zones) |
+| `name` | `<clusterName>-<infraEnvName>`. **Required** when two pools share an InfraEnv (zones). Wingman writes it on every NodePool it adds, `<infraEnvName>[-<suffix>]` (ADR-0071); an existing NodePool keeps its name |
 | `additionalInfraEnvNames` | **Parked** (2026-11-23, ADR-0064's amendment): the team runs no such NodePool for now, so neither the chart (upstream main ignores the key and selects `infraEnvName` alone; §2.6 has no patch for it) nor the specs template carries it, and `DAY1_MULTI_INFRAENV_NODEPOOLS` stays off. More InfraEnvs the NodePool may draw Agents from: the selector becomes `matchExpressions: [{key: infraenvs.agent-install.openshift.io, operator: In, values: [infraEnvName, ...these]}]` instead of `matchLabels`; the name still derives from `infraEnvName`. Agent only: Wingman refuses it on KubeVirt and with the legacy `agentLabelSelector.nodeLabelKey` (the chart does not check). Wingman writes it only with `DAY1_MULTI_INFRAENV_NODEPOOLS` (ADR-0064) |
 | `annotations` | **Needs chart patch 0001** (§2.6; upstream main ignores the key). Rendered onto the NodePool's `metadata.annotations` as written (`toYaml`), after the chart's own `argocd.argoproj.io/sync-wave`; values must be strings. Scale reads `redbull.io/scale-down-policy` (`fewest-pods`, `least-requested`, `least-utilized`) from it, and Wingman writes that key from a nodepool's `scale_down_policy`; the chart does not refuse an entry's own sync-wave, Wingman's edits do (ADR-0062) |
 | `excludeAgentLabels` | **Needs chart patch 0002** (§2.6). Agent label keys the NodePool never takes an Agent with: its selector keeps `matchLabels` and gains `matchExpressions`, one `{key: <key>, operator: DoesNotExist}` for each. Agent only: Wingman writes none on KubeVirt. Wingman writes it from `DAY1_EXCLUDED_AGENT_LABELS` (ADR-0065) |
@@ -412,7 +412,7 @@ There is **no Day1/create-cluster workflow** in the workflows API (OpenAPI: segm
 - Post-merge status: read these from the MCE.
   - The tier-3 Argo Application `<file stem>` (sync, health).
   - `HostedCluster openshift-<clusterName>` in `hcp-<clusterName>`.
-  - NodePools `<clusterName>-<infraEnvName>` (or explicit names).
+  - NodePools `<clusterName>-<infraEnvName>` (or explicit names; Wingman's new ones are `<infraEnvName>[-<suffix>]`, ADR-0071).
   - herzi gauges for each InfraEnv (`herzi_pool_need`, `_blocked`, `_probe_mode`) to explain "waiting for hardware".
   - The orchestrator's `add-server-to-mce-<mce>_<infraEnv>_*` runs.
 - Upgrades: write `mastertag` plus a top-level `workertag` in one commit (masters first), or better, delegate to the existing `cluster-upgrade` workflow API.

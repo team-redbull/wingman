@@ -76,18 +76,18 @@ def test_adding_or_changing_paused_until_is_refused_and_removing_it_is_not() -> 
 
 def test_everything_else_and_a_new_pool_at_the_cluster_version_stay_editable() -> None:
     assert problems(FILE.replace("replicas: 3", "replicas: 5")) == []
-    new_pool = "- infraEnvName: cisco\n  replicas: 1\n  workertag: 4.18.22-x86_64\n"
+    new_pool = "- infraEnvName: cisco\n  name: cisco\n  replicas: 1\n  workertag: 4.18.22-x86_64\n"
     assert problems(FILE + new_pool) == []
     assert problems(FILE + new_pool.replace("4.18.22-x86_64", "4.18.22")) == []
     assert problems(FILE + new_pool.replace("x86_64", "multi")) == [], "the same release"
-    assert problems(FILE + "- infraEnvName: cisco\n  replicas: 1\n") == []
+    assert problems(FILE + "- infraEnvName: cisco\n  name: cisco\n  replicas: 1\n") == []
     removed = FILE.replace("- infraEnvName: hp\n  replicas: 2\n", "")
     assert problems(removed) == [], "removing a NodePool is not a version change"
 
 
 @pytest.mark.parametrize("workertag", ["4.17.58-x86_64", "4.18.22-rc.1-x86_64"])
 def test_a_new_pool_at_another_version_is_refused(workertag: str) -> None:
-    new_pool = f"- infraEnvName: cisco\n  replicas: 1\n  workertag: {workertag}\n"
+    new_pool = f"- infraEnvName: cisco\n  name: cisco\n  replicas: 1\n  workertag: {workertag}\n"
     assert problems(FILE + new_pool) == [f"nodepool cisco workertag: {VERSIONS_BY_UPGRADE}"]
 
 

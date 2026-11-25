@@ -25,6 +25,7 @@ from dataclasses import dataclass, replace
 from typing import Final, cast
 
 from wingman_day1.domain.locks import MISSING, Lock, cluster_file_key
+from wingman_day1.domain.nodepool_names import infra_env_of, rendered_name
 from wingman_day1.domain.replicas_ownership import replicas_changes
 from wingman_day1.domain.scale_down_policy import policy_of
 from wingman_day1.domain.value_drift import ValueDrift, show_value
@@ -207,25 +208,14 @@ class FileNodePool:
         )
 
 
-def infra_env_of(entry: Mapping[str, object]) -> str | None:
-    """The InfraEnv an entry takes Agents from: ``infraEnvName``, else its selector's label."""
-    selector = entry.get("agentLabelSelector")
-    label = None
-    if isinstance(selector, Mapping):
-        label = cast("Mapping[str, object]", selector).get("nodeLabelValue")
-    found = entry.get("infraEnvName") or label
-    return str(found) if found else None
-
-
 def scale_name(entry: Mapping[str, object], *, cluster_name: str) -> str | None:
     """The NodePool the chart renders: ``name``, else ``<clusterName>-<InfraEnv>``, else ``None``.
 
-    The rule update-nodepool matches a day1 entry with the MCE's NodePool by.
+    The rule update-nodepool matches a day1 entry with the MCE's NodePool by
+    (``nodepool_names.rendered_name``): both shapes, an older file's derived
+    name and a newer one's ``<InfraEnv>[-<suffix>]`` (ADR-0071).
     """
-    if entry.get("name"):
-        return str(entry["name"])
-    infra_env = infra_env_of(entry)
-    return f"{cluster_name}-{infra_env}" if infra_env else None
+    return rendered_name(entry, cluster_name=cluster_name)
 
 
 def replicas_locks(locks: Sequence[Lock]) -> dict[int, int]:

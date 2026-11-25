@@ -1,12 +1,14 @@
 """A nodepool that draws Agents from several InfraEnvs (ADR-0064).
 
-An agent nodepool names its InfraEnv in ``infraEnvName``: the chart derives the
-NodePool's name from it (``<clusterName>-<infraEnvName>``) and the team's
-workflows read it. ``additionalInfraEnvNames`` lists more InfraEnvs it may draw
-from; the chart then selects ``infraenvs.agent-install.openshift.io In`` the
-first and these, in that order. A new Machine takes the first free Agent of
-any of them, with no preference. Without the key the file, and the NodePool,
-are what they always were. The template input is ``additional_infra_envs``.
+An agent nodepool names its InfraEnv in ``infraEnvName``: the NodePool is named
+after it (``<infraEnvName>[-<suffix>]`` since ADR-0071; the chart derives
+``<clusterName>-<infraEnvName>`` for an older file's nodepool without a
+``name``) and the team's workflows read it. ``additionalInfraEnvNames`` lists
+more InfraEnvs it may draw from; the chart then selects
+``infraenvs.agent-install.openshift.io In`` the first and these, in that
+order. A new Machine takes the first free Agent of any of them, with no
+preference. Without the key the file, and the NodePool, are what they always
+were. The template input is ``additional_infra_envs``.
 
 ``DAY1_MULTI_INFRAENV_NODEPOOLS`` turns it on (off by default): a
 hostedclusters-setup chart that does not render the key selects the first
@@ -24,8 +26,9 @@ Two rules keep the running nodes where they are, whatever the setting:
   Replace`` a changed selector rolls every node; on ``InPlace`` (the chart's
   default) it touches none, and only Machines created afterwards follow it.
 
-Each nodepool is matched with the file before the edit by ``name``, else
-``infraEnvName``, as the replicas and version rules match them.
+Each nodepool is matched with the file before the edit by its NodePool:
+``name``, else the ``<clusterName>-<infraEnvName>`` the chart derives
+(``nodepool_names.entry_key``), as the replicas and version rules match them.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from typing import Final, cast
 
 from wingman_day1.domain.errors import RenderError
 from wingman_day1.domain.names import dns_label_problems
+from wingman_day1.domain.nodepool_names import entry_key, nodepool_entries
 from wingman_day1.domain.template import TemplateField, analyze_template
 
 FILE_KEY: Final = "additionalInfraEnvNames"
@@ -69,19 +73,6 @@ def additional_of(entry: Mapping[str, object]) -> tuple[str, ...]:
     if not isinstance(raw, list):
         return ()
     return tuple(str(item) for item in cast("list[object]", raw) if item is not None)
-
-
-def nodepool_entries(
-    values: Mapping[str, object], key: str
-) -> list[tuple[int, Mapping[str, object]]]:
-    """The mappings of the list at ``key`` (``nodepools`` or ``nodepool``), with their positions."""
-    pools = values.get(key)
-    if not isinstance(pools, (list, tuple)):
-        return []
-    items = cast("Sequence[object]", pools)
-    return [
-        (i, cast("Mapping[str, object]", p)) for i, p in enumerate(items) if isinstance(p, Mapping)
-    ]
 
 
 def infra_envs_of(first: str | None, additional: Iterable[str]) -> tuple[str, ...]:
@@ -215,7 +206,13 @@ def rendered_problems(inputs: Mapping[str, object], rendered: Mapping[str, objec
 class _Pool:
     index: int
     key: str
+    """Its NodePool, which matches it across the edit (``nodepool_names.entry_key``)."""
     entry: Mapping[str, object]
+
+    @property
+    def label(self) -> str:
+        """How a problem names it: its ``name``, else its ``infraEnvName``."""
+        return str(self.entry.get("name") or self.entry.get("infraEnvName") or f"#{self.index}")
 
     @property
     def named(self) -> bool:
@@ -237,7 +234,7 @@ class _Pool:
 
 def _pools(values: Mapping[str, object]) -> list[_Pool]:
     return [
-        _Pool(index, str(entry.get("name") or entry.get("infraEnvName") or f"#{index}"), entry)
+        _Pool(index, entry_key(index, entry), entry)
         for index, entry in nodepool_entries(values, "nodepool")
     ]
 
@@ -263,7 +260,7 @@ def edit_problems(
             )
         if was is not None and _rolls(was, pool):
             problems.append(
-                f"{where}: NodePool {pool.key} is upgradeType Replace, so a change to the "
+                f"{where}: NodePool {pool.label} is upgradeType Replace, so a change to the "
                 "InfraEnvs it draws from would replace every node; leave them as they are"
             )
     return problems + _renamed(before, after)

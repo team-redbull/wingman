@@ -208,7 +208,8 @@ def test_on_an_edit_adds_and_removes_infraenvs_of_an_in_place_nodepool() -> None
     assert edit(entry(DELL), entry(DELL, HP, DELL7)) == []
     assert edit(entry(DELL, HP, DELL7), entry(DELL, DELL7)) == []
     assert edit(entry(DELL, HP), entry(DELL)) == []
-    assert edit(entry(DELL), f"{entry(DELL)}\n{entry(HP, DELL7)}") == [], "a new nodepool"
+    new = entry(HP, DELL7, name=HP)  # named after its own InfraEnv (ADR-0071)
+    assert edit(entry(DELL), f"{entry(DELL)}\n{new}") == [], "a new nodepool"
 
 
 def test_on_the_new_names_are_checked_as_the_chart_checks_them() -> None:
@@ -223,7 +224,7 @@ def test_on_the_new_names_are_checked_as_the_chart_checks_them() -> None:
 
 
 def test_making_another_infraenv_first_would_replace_the_nodepool_and_is_refused() -> None:
-    (problem,) = edit(entry(DELL, HP, DELL7), entry(HP, DELL7))
+    (problem,) = edit(entry(DELL, HP, DELL7), entry(HP, DELL7, name=HP))
     assert problem.startswith(
         f"nodepool[0]: its first InfraEnv is {HP}, but the NodePool it replaces is named after "
         f"{DELL}"
@@ -239,7 +240,8 @@ def test_an_explicit_name_keeps_the_nodepool_whatever_comes_first() -> None:
 
 
 def test_replacing_a_single_infraenv_nodepool_by_another_is_still_a_person_s_choice() -> None:
-    assert edit(entry(DELL), entry(HP)) == [], "no other InfraEnv: today's edit, a new NodePool"
+    new = entry(HP, name=HP)  # a new NodePool, named by ADR-0071's rule
+    assert edit(entry(DELL), new) == [], "no other InfraEnv: today's edit, a new NodePool"
     assert edit(f"{entry(DELL)}\n{entry(HP)}", entry(HP, DELL)) == [], "the old HP pool kept"
 
 

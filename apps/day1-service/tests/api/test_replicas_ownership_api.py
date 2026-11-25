@@ -173,7 +173,9 @@ async def test_on_an_edit_may_add_a_nodepool_with_replicas_or_remove_one(
         on,
         alice,
         lambda y: y.replace(
-            "vlanId: 1412", "- infraEnvName: hp-gen11-site1-64c\n  replicas: 6\n\nvlanId: 1412"
+            "vlanId: 1412",
+            "- infraEnvName: hp-gen11-site1-64c\n  name: hp-gen11-site1-64c\n  replicas: 6\n\n"
+            "vlanId: 1412",
         ),
     )
     assert added.status_code == 200, added.text

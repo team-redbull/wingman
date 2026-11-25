@@ -17,6 +17,9 @@
     excluded_agent_labels      the deployment's DAY1_EXCLUDED_AGENT_LABELS, the
                                same for every agent cluster; [] on KubeVirt
                                and when unset (no form widget, ADR-0065)
+    nodepools[].nodepool_name  the NodePool's name, <infra_env>[-<suffix>]:
+                               Wingman composes it from the form's suffix
+                               (ADR-0071); the template writes it as name
 
   Never render these keys. Other owners write them:
     clusterName, site, mce     ArgoCD passes them from the file path
@@ -93,8 +96,12 @@ nodepool:
     additionalInfraEnvNames: {{ np.additional_infra_envs | tojson }}
 {% endif %}
 {% if np.nodepool_name | default("") %}
-    # Needed only when two nodepools share an InfraEnv; otherwise the chart
-    # derives <clusterName>-<infraEnvName>.
+    {#- The NodePool's name: <InfraEnv> or <InfraEnv>-<suffix> (ADR-0071).
+        Wingman passes it for every agent nodepool; a person adds only the
+        suffix, so several nodepools may draw from one InfraEnv. No cluster
+        prefix: each cluster's NodePools sit in its own hcp-<clusterName>.
+        Without it the chart derives <clusterName>-<infraEnvName>, as older
+        files have. #}
     name: {{ np.nodepool_name }}
 {% endif %}
     replicas: {{ np.replicas | default(2) }}

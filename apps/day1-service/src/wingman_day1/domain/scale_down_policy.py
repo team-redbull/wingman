@@ -38,7 +38,7 @@ from enum import StrEnum
 from typing import Final, cast
 
 from wingman_day1.domain.errors import RenderError
-from wingman_day1.domain.nodepool_infra_envs import nodepool_entries
+from wingman_day1.domain.nodepool_names import entry_key, nodepool_entries
 from wingman_day1.domain.template import analyze_template
 
 SCALE_DOWN_POLICY: Final = "redbull.io/scale-down-policy"
@@ -190,12 +190,12 @@ def edit_problems(old: Mapping[str, object], new: Mapping[str, object]) -> list[
 
     Only a policy the edit sets or changes: an unknown one the file already
     holds stays the workflow's to refuse, at its next scale-down. Nodepools
-    are matched by ``name``, else ``infraEnvName``, else position, as the
+    are matched by their NodePool (``nodepool_names.entry_key``), as the
     other edit rules match them. The chart writes the NodePool's
     ``argocd.argoproj.io/sync-wave`` itself, before the entry's annotations,
     so an entry that sets it would give the NodePool the key twice.
     """
-    before = {_key(i, p): policy_of(p) for i, p in nodepool_entries(old, "nodepool")}
+    before = {entry_key(i, p): policy_of(p) for i, p in nodepool_entries(old, "nodepool")}
     problems: list[str] = []
     for index, pool in nodepool_entries(new, "nodepool"):
         annotations = pool.get(ANNOTATIONS)
@@ -205,12 +205,8 @@ def edit_problems(old: Mapping[str, object], new: Mapping[str, object]) -> list[
                 "chart's own; remove it from the entry"
             )
         policy = policy_of(pool)
-        if policy is None or policy == before.get(_key(index, pool)):
+        if policy is None or policy == before.get(entry_key(index, pool)):
             continue
         where = f"nodepool[{index}].{ANNOTATIONS}.{SCALE_DOWN_POLICY}"
         problems += value_problems(where, policy, otherwise="or remove the annotation")
     return problems
-
-
-def _key(index: int, pool: Mapping[str, object]) -> str:
-    return str(pool.get("name") or pool.get("infraEnvName") or f"#{index}")

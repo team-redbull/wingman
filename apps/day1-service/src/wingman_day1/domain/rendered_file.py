@@ -11,7 +11,9 @@ silently, a create checks the rendered file: the values-file contract
 - each nodepool's ``scale_down_policy`` as its ``redbull.io/scale-down-policy``
   annotation (ADR-0062);
 - the deployment's ``excluded_agent_labels`` as every agent nodepool's
-  ``excludeAgentLabels`` (ADR-0065), which :func:`with_agent_labels` sets.
+  ``excludeAgentLabels`` (ADR-0065), which :func:`with_agent_labels` sets;
+- each agent nodepool's name, ``<InfraEnv>[-<suffix>]``, as its ``name``
+  (ADR-0071), which :func:`render_new_file` composes into ``nodepool_name``.
 
 A flavor that gives one of the newer inputs is also refused at its save
 while the template does not read it (``specs.rule_problems``). The newer
@@ -24,7 +26,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from wingman_day1.domain import excluded_agent_labels, nodepool_infra_envs, scale_down_policy
+from wingman_day1.domain import (
+    excluded_agent_labels,
+    nodepool_infra_envs,
+    nodepool_names,
+    scale_down_policy,
+)
 from wingman_day1.domain.cluster_file import (
     WorkflowKeys,
     load_values,
@@ -58,20 +65,23 @@ def rendered_problems(inputs: Mapping[str, object], rendered: str) -> list[str]:
         *nodepool_infra_envs.rendered_problems(inputs, written),
         *scale_down_policy.rendered_problems(inputs, written),
         *excluded_agent_labels.rendered_problems(inputs, written),
+        *nodepool_names.rendered_problems(inputs, written),
     ]
 
 
 def input_problems(inputs: Mapping[str, object], owned: WorkflowKeys) -> list[str]:
-    """Why a create's nodepools' other InfraEnvs, scale-down policies or excluded labels fail.
+    """Why a create's nodepools' other InfraEnvs, scale-down policies, labels or names fail.
 
     Other InfraEnvs need ``DAY1_MULTI_INFRAENV_NODEPOOLS`` (ADR-0064); a policy
     needs no setting (ADR-0062); the excluded Agent labels are the
-    deployment's, never sent otherwise (ADR-0065).
+    deployment's, never sent otherwise (ADR-0065); a NodePool's name is its
+    InfraEnv and an optional suffix, unique in the cluster (ADR-0071).
     """
     return [
         *nodepool_infra_envs.input_problems(inputs, enabled=owned.infra_envs),
         *scale_down_policy.input_problems(inputs),
         *excluded_agent_labels.input_problems(inputs, owned.excluded_agent_labels),
+        *nodepool_names.input_problems(inputs),
     ]
 
 
@@ -96,8 +106,8 @@ def render_new_file(
     owners, the image mirrors, the machine configs for the chart's
     ``cluster_name``, the tuning profiles and the newer nodepool inputs. The
     network config is expanded, the deployment's excluded Agent labels added
-    (ADR-0065), and the rendered text must keep the values-file contract and
-    hold every input as given.
+    (ADR-0065), each nodepool's name composed (ADR-0071), and the rendered
+    text must keep the values-file contract and hold every input as given.
     """
     found = [*problems, *owner_problems(inputs), *mirror_problems(inputs)]
     found += cluster_config_problems(inputs, catalog, cluster_name=cluster_name)
@@ -107,6 +117,7 @@ def render_new_file(
         raise InvalidInputError("the cluster's inputs are not acceptable", found)
     ready = render_inputs(expand_network_configs(inputs, cluster_name=cluster_name))
     ready = with_agent_labels(ready, owned)  # the deployment's (ADR-0065)
+    ready = nodepool_names.with_names(ready)  # <InfraEnv>[-<suffix>] (ADR-0071)
     if not template.strip():
         raise RenderError("the specs project has no cluster-template.j2")
     rendered = render_cluster_file(template, ready)

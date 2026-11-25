@@ -1,7 +1,7 @@
 # ADR-0064: A nodepool may draw from several InfraEnvs: `infraEnvName` stays and names it, the others are `additionalInfraEnvNames`, behind a setting
 
 Date: 2026-11-18
-Status: Parked 2026-11-23 (the team runs no such NodePool for now: the chart and the specs template don't carry `additionalInfraEnvNames`, and the setting stays off); Accepted, amended 2026-11-19 (the chart change the owner approved: `In [infraEnvName, ...others]`, unsorted, and no checks in the chart)
+Status: Parked 2026-11-23 (the team runs no such NodePool for now: the chart and the specs template don't carry `additionalInfraEnvNames`, and the setting stays off); Accepted, amended 2026-11-19 (the chart change the owner approved: `In [infraEnvName, ...others]`, unsorted, and no checks in the chart); amended 2026-11-25 by ADR-0071 (a new NodePool is named `<infraEnvName>[-<suffix>]`, written as its `name`; an existing one keeps the name it has, derived or written, and the edit rules match a NodePool by that name)
 
 ## Context
 

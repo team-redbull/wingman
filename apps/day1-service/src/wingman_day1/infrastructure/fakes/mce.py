@@ -156,7 +156,7 @@ class _Builder:
 
     def _pool(self, mce: str, ref: HostedClusterRef, raw: Fixture) -> None:
         infra_env = str(raw["infra_env"])
-        name = f"{ref.cluster_name}-{infra_env}"
+        name = str(raw.get("name") or f"{ref.cluster_name}-{infra_env}")  # either shape (ADR-0071)
         key = f"{ref.namespace}/{name}"
         nodes: Sequence[Fixture] = raw.get("nodes") or []
         updating: Fixture | None = raw.get("updating")
