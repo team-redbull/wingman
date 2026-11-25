@@ -4,8 +4,9 @@
  * clusters" (ADR-0037): pick with filters, a preview with every status, a
  * re-link only with its checkbox, the import request, a stale preview, and
  * the result: one MR per cluster with the clusters whose MR did not open
- * (ADR-0044). Shapes follow docs/notes/2026-11-08-flavors-v2-api-changes.md
- * §5, §6, §9-§11 and docs/notes/2026-11-12-import-mr-per-cluster.md.
+ * (ADR-0044), each with the day2 add-on MRs asked in the same click (ADR-0037's
+ * 2026-11-25 amendment). Shapes follow docs/notes/2026-11-08-flavors-v2-api-changes.md
+ * §5, §6, §9-§11 and docs/notes/2026-11-12-import-mr-per-cluster.md (§5: add-ons).
  */
 
 import { test, expect, type Page, type Route } from "@playwright/test";
@@ -654,6 +655,53 @@ test.describe("Add existing clusters: preview and import", () => {
     for (const line of problems) await expect(alert).toContainText(line);
     await expect(sheet(page).getByTestId("import-result")).toHaveCount(0);
     await expect(candidateCard(page, "ocp4-prod-heron-site1")).toBeVisible();
+  });
+
+  test("each cluster's day2 add-on MRs show under its import MR, with day2's words for the rest", async ({ page }) => {
+    const previews: unknown[] = [];
+    const roles = { addon_name: "cluster-roles", team: "redbull", reason: "missing" as const, expected_version: "main", override_values: {} };
+    const metrics = { ...roles, addon_name: "metrics", team: "orca" };
+    const title = `[Wingman/Day2] Install addon redbull/cluster-roles on ocp4-prod-heron-site1`;
+    const nothing = { missing: [], opened: [], already_open: [], failed: [], not_asked: null, not_opened: [] };
+    const result: ImportResult = {
+      spec_name: FLAVOR,
+      spec_version: "1.0.0",
+      merge_requests: [
+        { ...opened("ocp4-prod-heron-site1", 41), addons: {
+          ...nothing, missing: [roles, metrics], not_opened: [metrics],
+          opened: [{ team: "redbull", iid: 5, title, web_url: "https://gitlab.example.com/sigs/redbull/-/merge_requests/5", charts: ["cluster-roles"] }],
+          failed: ["orca: day2 refused the install (403): orca hasn't given Wingman write access to sigs/orca"],
+        } },
+        { ...opened("ocp4-prod-lark-site1", 42), addons: {
+          ...nothing, missing: [roles], not_opened: [roles], not_asked: "day2 did not answer: day2 unreachable listing its open merge requests",
+        } },
+      ],
+      failed: [],
+    };
+    await open(page, {
+      routes: async (p) => {
+        await previewRoute(previews)(p);
+        await p.route(`${base}/import`, (r) => json(r, result, 201));
+      },
+    });
+    await previewFour(page, previews);
+    await expect(sheet(page).getByTestId("import-explainer")).toContainText("asked of day2 in the same click");
+    await candidateCard(page, "ocp4-prod-lark-site1").getByRole("checkbox", { name: `Move to ${FLAVOR}` }).click();
+    await sheet(page).getByRole("button", { name: "Import 2 clusters" }).click();
+
+    const heron = page.getByTestId("import-addons-ocp4-prod-heron-site1");
+    await expect(heron).toContainText("Add-ons: 1 day2 MR opened · 1 add-on not opened");
+    await expect(heron.getByRole("link", { name: "Review redbull !5 for ocp4-prod-heron-site1" })).toHaveAttribute(
+      "href", "/approvals/day2-redbull-5"
+    );
+    await expect(heron).toContainText("Not opened in day2");
+    await expect(heron).toContainText("orca: day2 refused the install (403): orca hasn't given Wingman write access to sigs/orca");
+    await expect(heron.getByRole("link", { name: "add-ons page" })).toHaveAttribute("href", "/clusters/ocp4-prod-heron-site1/addons");
+    const lark = page.getByTestId("import-addons-ocp4-prod-lark-site1");
+    await expect(lark).toContainText("Add-ons: 1 add-on missing, day2 not asked");
+    await expect(lark).toContainText("day2 did not answer: day2 unreachable listing its open merge requests");
+    // Each import MR stays, with its own review link
+    await expect(openedRow(page, "ocp4-prod-lark-site1").getByRole("link", { name: /^Review !42/ })).toHaveAttribute("href", "/approvals/day1-42");
   });
 
   test("a file or the flavor that changed since the preview asks to preview again", async ({ page }) => {

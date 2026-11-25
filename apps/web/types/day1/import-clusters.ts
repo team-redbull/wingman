@@ -1,5 +1,6 @@
 import type { MRDetail } from "../index";
 import type { ErrorCode } from "../problem";
+import type { AddonInstalls } from "./addon-installs";
 import type { ClusterDrift } from "./drift";
 
 // ── Import existing clusters into a flavor (§11, ADR-0037) ──────────────────
@@ -61,13 +62,15 @@ export interface ImportRequest {
   clusters: ImportPick[];
 }
 
-/** A picked cluster and the day1 MR that links it to the flavor. */
+/** A picked cluster, the day1 MR that links it to the flavor, and its day2 add-on MRs. */
 export interface ImportedCluster {
   name: string;
   site: string;
   mce: string;
   path: string;
   merge_request: MRDetail;
+  /** Day2's answer for the add-ons it lacks, asked once its MR opened (absent from an older day1). */
+  addons?: AddonInstalls;
 }
 
 /** A picked cluster, checked like the others, whose MR did not open. */

@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, ExternalLink, GitPullRequest, Info } from "lucide-react";
+import { AlertTriangle, ArrowRight, ExternalLink, GitPullRequest, Info, Package } from "lucide-react";
+import { Day2Installs } from "@/components/common/day2-installs";
+import { hasDay2News, installsSummary, leftToInstall, NO_INSTALLS } from "@/lib/addon-installs";
 import { approvalHref } from "@/lib/approvals";
 import { AMBIGUOUS_WRITE_HINT } from "@/lib/write-errors";
 import { cn } from "@/lib/utils";
-import type { ImportFailure, ImportResult } from "@/types";
+import type { AddonInstalls, ImportFailure, ImportResult } from "@/types";
 
 /** What a cluster's failed MR means for the person who asked for it, by its problem code. */
 function meaning(code: string): string {
@@ -42,10 +44,37 @@ function Failure({ failure: f }: { failure: ImportFailure }) {
   );
 }
 
+/** Under a cluster's import MR: the day2 MRs day1 asked for once it opened, and what did not open. */
+function ClusterAddons({ name, installs }: { name: string; installs: AddonInstalls }) {
+  if (!hasDay2News(installs)) return null;
+  const left = leftToInstall(installs);
+  return (
+    <div className="w-full space-y-1.5 border-t pt-2" data-testid={`import-addons-${name}`}>
+      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Package className="h-3.5 w-3.5" aria-hidden />
+        Add-ons: {installsSummary(installs)}
+      </p>
+      <Day2Installs installs={installs} cluster={name} testId={`import-day2-${name}`}>
+        {left.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Install {left.map((a) => a.addon_name).join(", ")} from the cluster&apos;s{" "}
+            <Link href={`/clusters/${encodeURIComponent(name)}/addons`} className="text-primary hover:underline">
+              add-ons page
+            </Link>
+            .
+          </p>
+        )}
+      </Day2Installs>
+    </div>
+  );
+}
+
 /**
  * Step three: what the import opened (`POST /specs/{name}/import`, ADR-0044).
- * One MR per cluster, each reviewed on its own; the clusters whose MR did
- * not open are listed apart, with what that means.
+ * One MR per cluster, each reviewed on its own, with the day2 MRs day1
+ * asked for its missing add-ons once it opened (ADR-0037's 2026-11-25
+ * amendment); the clusters whose MR did not open are listed apart, with
+ * what that means, and had nothing asked of day2.
  */
 export function ResultStep({ flavor, result }: { flavor: string; result: ImportResult }) {
   const { merge_requests: opened, failed } = result;
@@ -60,13 +89,14 @@ export function ResultStep({ flavor, result }: { flavor: string; result: ImportR
           </h3>
           <p className="text-xs text-muted-foreground">
             One per cluster: each is approved, merged or rejected on its own, and a cluster follows {flavor} v
-            {result.spec_version} once its own merge request merges.
+            {result.spec_version} once its own merge request merges. The day2 MRs under a cluster install the add-ons
+            it lacks: merge them with its import MR.
           </p>
         </div>
       </div>
 
       <ul className="space-y-2" aria-label="Opened merge requests">
-        {opened.map(({ name, site, mce, merge_request: mr }) => (
+        {opened.map(({ name, site, mce, merge_request: mr, addons }) => (
           <li
             key={`${mr.repo}-${mr.iid}`}
             data-testid={`import-opened-${name}`}
@@ -101,6 +131,7 @@ export function ResultStep({ flavor, result }: { flavor: string; result: ImportR
                 <ExternalLink className="h-3 w-3" aria-hidden />
               </a>
             </div>
+            <ClusterAddons name={name} installs={addons ?? NO_INSTALLS} />
           </li>
         ))}
       </ul>

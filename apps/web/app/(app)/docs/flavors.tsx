@@ -1,6 +1,45 @@
 import { Layers } from "lucide-react";
 import { Callout, CodeBlock, InlineCode, SectionHeader, Step, TermCard } from "./docs-parts";
 
+/** "Adding existing clusters to a flavor": the import, step by step (ADR-0037, ADR-0044). */
+function AddingExistingClusters() {
+  return (
+    <>
+      <h3 className="text-base font-semibold mt-6 mb-3">Adding existing clusters to a flavor</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+        Clusters written before Wingman, or created from another flavor, can join one from the flavor&apos;s
+        page: <strong>Add existing clusters</strong> (admins).
+      </p>
+      <div className="space-y-3 mb-5">
+        <Step n={1} title="Pick">
+          Search by name and filter by site, MCE and owner numbers; pick up to 50.
+        </Step>
+        <Step n={2} title="Preview">
+          Each cluster shows whether it can join (<strong>Ready</strong>; on another flavor, which needs{" "}
+          <strong>Move to this flavor</strong>; already on it; or can&apos;t be imported, and why) and what will
+          show as drift once it has: the configs a sync would add and remove per nodepool, and the missing add-ons.
+        </Step>
+        <Step n={3} title="Import">
+          One Day1 MR per cluster writes only the flavor link (<InlineCode># specName</InlineCode>,{" "}
+          <InlineCode># specVersion</InlineCode>) into its file&apos;s header, so each cluster is approved, merged
+          or rejected on its own. Every pick is checked first: if one can&apos;t be imported, none opens. Nothing
+          changes on the clusters. The last step lists each MR, and each cluster whose MR did not open and why.
+          Once a cluster&apos;s MR merges it shows its differences as drift, and <strong>Sync to flavor</strong> on
+          its page fixes them (see Drift Detection).
+        </Step>
+        <Step n={4} title="Its add-ons, in the same click">
+          Once a cluster&apos;s import MR is open, Wingman asks Day2 for the add-ons the flavor lists and the
+          cluster lacks: one install MR per team, in your name, with the values its file records, each naming the
+          import MR (merge them together). The last step shows them under the cluster&apos;s MR, with what Day2
+          did not open in its words; a cluster whose MR did not open has nothing asked. Day2 is asked four
+          clusters at a time, and no more once it stops answering or the import has run 30 seconds: each of those
+          says so, and its add-ons are installed from the cluster&apos;s add-ons page.
+        </Step>
+      </div>
+    </>
+  );
+}
+
 /** The docs page's "Flavors" section, `#specs`. */
 export function FlavorsSection() {
   return (
@@ -159,29 +198,7 @@ spec:
         gives the lines to add.
       </Callout>
 
-      <h3 className="text-base font-semibold mt-6 mb-3">Adding existing clusters to a flavor</h3>
-      <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-        Clusters written before Wingman, or created from another flavor, can join one from the flavor&apos;s
-        page: <strong>Add existing clusters</strong> (admins).
-      </p>
-      <div className="space-y-3 mb-5">
-        <Step n={1} title="Pick">
-          Search by name and filter by site, MCE and owner numbers; pick up to 50.
-        </Step>
-        <Step n={2} title="Preview">
-          Each cluster shows whether it can join (<strong>Ready</strong>; on another flavor, which needs{" "}
-          <strong>Move to this flavor</strong>; already on it; or can&apos;t be imported, and why) and what will
-          show as drift once it has: the configs a sync would add and remove per nodepool, and the missing add-ons.
-        </Step>
-        <Step n={3} title="Import">
-          One Day1 MR per cluster writes only the flavor link (<InlineCode># specName</InlineCode>,{" "}
-          <InlineCode># specVersion</InlineCode>) into its file&apos;s header, so each cluster is approved, merged
-          or rejected on its own. Every pick is checked first: if one can&apos;t be imported, none opens. Nothing
-          changes on the clusters. The last step lists each MR, and each cluster whose MR did not open and why.
-          Once a cluster&apos;s MR merges it shows its differences as drift, and <strong>Sync to flavor</strong> on
-          its page fixes them (see Drift Detection).
-        </Step>
-      </div>
+      <AddingExistingClusters />
 
       <div className="mt-5 space-y-4">
         <Callout type="tip" title="Example comments in the template">
