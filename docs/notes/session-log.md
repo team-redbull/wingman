@@ -4,6 +4,60 @@ Newest first. Each entry is the "Where to continue right now" section of
 `CLAUDE.md` as it stood when the next unit of work started. Together with
 `git log` and the ADRs each entry names, this is the record of the work.
 
+**2026-11-24 — 3.59.0 to 3.62.0: the Infrastructure workspace, KV clusters made by Wingman, and Wingman in team-redbull.**
+- **Customer MCEs** (3.59.0, ADR-0018's 2026-11-24 amendment): no Default
+  mastertag column; a row opens its MCE's servers (`inventoryHref`,
+  `lib/inventory/view.ts`). **Create MCE is a preview**: the form works, its
+  Create is disabled with the reason, and it calls nothing; Wingman still
+  never creates an MCE.
+- **Inventory Management** (3.60.0, ADR-0057's 2026-11-24 amendment): one
+  MCE at a time (a picker by site), InfraEnvs picked by name across MCEs
+  (kept when the MCE changes, `?mce=&infraEnv=`, remembered per viewer),
+  zone/size filters, a sticky header; the Runs list stays every MCE's and
+  every InfraEnv's.
+- **Create KV cluster** (3.61.0, ADR-0069): on a seed's card, the same file
+  every time: the next free `ocp4-<lc>-kv-<site>-<zone>-<id>`, the seed's
+  version, one NodePool from its `<flavor>-mtl-<zone>` pool with its zone in
+  `nodeLabels`, owner/configs/tuning copied from the newest KV cluster,
+  through provision-cluster with `mce=<seed>`. Each zone's KV clusters show
+  their fill order (Full, Filling, Next) against `maxNodes` 40, a zone with
+  nothing Next is warned, and a KV cluster whose NodePools miss its zone is
+  flagged. A folder `ocp4-<lc>-mce-seed-<site>-<id>` is a seed too. Wingman
+  never creates KV clusters on its own: that is the KV Capacity
+  Controller's (not built).
+- **The move** (3.62.0, ADR-0070): the repo is `team-redbull/wingman`
+  (fresh, full history; `LiadYahav/wingman` is left to its owner), images
+  `ghcr.io/team-redbull/wingman-*`. The chart reads an existing Secret
+  (`secrets.existingSecret`) and may skip the OAuthClient; each release's
+  CI job `platform` writes the chart into redbull-platform
+  (`gitops/charts/wingman/`), whose ApplicationSet syncs it. The lab runs
+  that way since 3.62.0, its settings in `gitops/overrides/wingman.yaml`;
+  nobody runs `helm upgrade` there.
+
+**Next:**
+- ADR-0069's open questions: a KV cluster on a seed named
+  `ocp4-seed-<site>-<zone>` (no lifecycle) is refused; the lowest free id
+  letter can reuse a deleted cluster's; whether provision-cluster or day1 CI
+  will refuse a KV file without its zone; the owner when no KV cluster
+  exists to copy; whether to propose the vm-lifecycle-worker add-on at the
+  merge.
+- The seed name is unconfirmed (the user thinks `ocp4-<lc>-mce-seed-<site>-<id>`;
+  the convention says `ocp4-<lc>-seed-<site>-<zone>-<id>`, create-vm finds
+  only `ocp4-seed-<site>-<zone>`): the team picks one before the first seed.
+- Day1's drift reads day2 as a viewer: a tenant name two MCEs share reads as
+  unknown. An approval rollout's counts still count KV clusters.
+- The air-gap: `docs/upgrade/3.52-to-3.53.md` on through 3.61's guides
+  (generic), then `docs/upgrade/3.61-to-3.62.md` (it keeps Helm there; the
+  Secret mode is optional).
+- When herzi's retire-used-servers release runs on every MCE: step 6 of
+  `docs/upgrade/3.54-to-3.55.md`.
+- Code organisation, step 2 of `docs/ideas/code-organisation.md` (the
+  user's sequence; it starts now).
+- cluster-navigator's data on the cluster page (`docs/ideas/single-pane.md`
+  workstream 5); Flavors v2's "Left for later"; tuning: a lock per pool.
+- The team's questions: herzi, RBAC, a shared Git store, provision-cluster's
+  24 characters.
+
 **2026-11-24 — 3.58.0: a viewer reads no infrastructure (ADR-0068).**
 - **The rules, in day1 and day2** (ADR-0068 §1): a list leaves out what is
   about the infrastructure, one such item is a missing one (404), every
