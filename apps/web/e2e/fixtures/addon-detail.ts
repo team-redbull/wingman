@@ -246,7 +246,7 @@ function generatedPanel(team: string, chart: string, scope: FleetScope, catalog:
 }
 
 /** `GET /teams/{team}/addons/{addon}`, or `null` (a 404). */
-function addonDetailOf(team: string, chart: string): AddonDetail | null {
+export function addonDetailOf(team: string, chart: string): AddonDetail | null {
   const catalog = day2Catalog.find((e) => e.team === team && e.name === chart) ?? null;
   const fleet = FLEET_DEFAULTS.filter((f) => f.team === team && f.chart === chart);
   if (!catalog && fleet.length === 0) return null;
@@ -275,6 +275,7 @@ function addonDetailOf(team: string, chart: string): AddonDetail | null {
       target_revision: pin.target_revision,
       deploy_config: repoFile(team, `${op}/ocp-versions/${pin.version}/${chart}.yaml`, `targetRevision: ${pin.target_revision}\n`),
       values_file: repoFile(team, `${op}/ocp-versions/${pin.version}/values.yaml`, null),
+      last_commit_id: commitOf(team),
     })),
     scopes,
     warnings: catalog?.warnings ?? [],

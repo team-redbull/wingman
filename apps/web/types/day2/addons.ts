@@ -55,10 +55,14 @@ export interface AddonSummary {
 
 /** An `operators/<chart>/ocp-versions/<version>/` pin. */
 export interface AddonOcpVersion {
+  /** The full OpenShift version, `4.16.27`. */
   version: string;
+  /** `null`: the pin holds values only. */
   target_revision: string | null;
   deploy_config: RepoFile;
   values_file: RepoFile;
+  /** The commit the pin was read at: send it back to change or remove it (3.64.0). */
+  last_commit_id: string | null;
 }
 
 /**

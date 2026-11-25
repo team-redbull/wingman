@@ -252,13 +252,23 @@ since (ADR-0006).
 or more, checked the same (`pin-duplicate` for a version given twice) and
 written in the create's MR beside the add-on's two files.
 
+**The web.** The add-on page's **OCP-version pins** card is the editor (one
+view per thing): Add pin, and Edit and Remove on each pin, each previewed and
+confirmed as every authoring write; the version field offers the versions
+the add-on's destinations run (from the page's own read), and the revision
+field the chart repo's branches. New add-on has an **OCP-version pins**
+section with the same fields, offering the versions the team's destinations
+run (`GET /api/day2/clusters`). The web checks the same rules before
+sending. The removal is a `DELETE` with the confirmed write's JSON body, so
+the web's API client sends a body on a delete.
+
 **The footguns are said, not hidden.** A fleet default whose deploy config
 sets `targetRevision` overrides every pin's revision on its scope (layer 3
-over layer 2): each plan warns with `fleet-pin-overrides-ocp-versions`. A pin
-is read only at its exact version: each plan notes the versions the add-on
-runs on with no pin, and a pin for a version no destination runs yet says it
-waits for the first cluster day1 moves there, to be merged before that
-`mastertag` flips. A cluster's own emergency pin is not reached by the pin's
+over layer 2): each plan warns with `fleet-pin-overrides-ocp-versions`, and
+the pins card says so above the pins. A pin is read only at its exact
+version: each plan notes the versions the add-on runs on with no pin, and a
+pin for a version no destination runs yet says it waits for the first
+cluster day1 moves there, to be merged before that `mastertag` flips. A cluster's own emergency pin is not reached by the pin's
 revision, and the plan names those clusters.
 
 Verification: `tests/unit/domain/test_ocp_pins.py` (the version shape, a
@@ -266,7 +276,9 @@ property over every version a `mastertag` gives, the files),
 `tests/unit/application/test_ocp_pins.py` and
 `tests/api/test_ocp_pins_api.py` (add, change, remove, stale writes,
 a viewer and a read-only team refused, the fleet-default warning, a create
-with pins), and the
+with pins), `components/addons/ocp-pins/model.test.ts` (the same rules
+in the web), `e2e/tests/addon-ocp-pins.spec.ts` (the editor and a create
+with a pin, mocked), and the
 oracle's `test_a_pin_moves_the_destinations_at_its_version_only`:
 `render_chain.py` renders the pin Wingman writes on exactly the destinations
 at its version, with the revision and values the plan lists.

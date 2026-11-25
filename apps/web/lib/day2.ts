@@ -86,6 +86,11 @@ export const day2Api = {
   /** PUT: one env's `values-<env>.yaml` of a fleet default. */
   envValues: (team: string, chart: string, scope: FleetScope, env: string, dryRun = false) =>
     `${addon(team, chart)}/defaults/${encodeURIComponent(scope)}/envs/${encodeURIComponent(env)}/values${dry(dryRun)}`,
+  /** POST: a new OCP-version pin of the add-on (ADR-0043's 2026-11-25 amendment). */
+  ocpPins: (team: string, chart: string, dryRun = false) => `${addon(team, chart)}/ocp-versions${dry(dryRun)}`,
+  /** PUT: change one pin; DELETE (with a JSON body): remove it. */
+  ocpPin: (team: string, chart: string, version: string, dryRun = false) =>
+    `${addon(team, chart)}/ocp-versions/${encodeURIComponent(version)}${dry(dryRun)}`,
   /** POST: deploy the add-on on specific MCEs, one install MR per MCE (ADR-0053's amendment). */
   mceInstalls: (team: string, chart: string, dryRun = false) => `${addon(team, chart)}/mce-installs${dry(dryRun)}`,
 };

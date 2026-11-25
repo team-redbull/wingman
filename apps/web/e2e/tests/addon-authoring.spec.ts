@@ -257,13 +257,6 @@ test.describe("Edit add-on", () => {
     await preview(page);
     expect(dryRuns()[0].body).toEqual({ last_commit_id: "observability-catalog-1", target_revision: null });
   });
-
-  test("its OCP-version pins are listed, read-only", async ({ page }) => {
-    await go(page, "/addons/observability/prometheus");
-    const pins = page.getByRole("region", { name: "OCP-version pins" });
-    await expect(pins.getByTestId("ocp-pin-4.18.22")).toContainText("targetRevision 2.44.0");
-    await expect(pins.getByRole("button", { name: /Edit/ })).toHaveCount(0);
-  });
 });
 
 test.describe("Fleet defaults", () => {

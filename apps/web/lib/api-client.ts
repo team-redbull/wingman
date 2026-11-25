@@ -198,7 +198,8 @@ export const api = {
     request<T>(path, withBody("POST", body, options)),
   put: <T>(path: string, body?: unknown) => request<T>(path, withBody("PUT", body)),
   patch: <T>(path: string, body?: unknown) => request<T>(path, withBody("PATCH", body)),
-  del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  /** A delete; with `body`, its JSON (a confirmed write's, as an OCP-version pin's removal). */
+  del: <T>(path: string, body?: unknown) => request<T>(path, withBody("DELETE", body)),
 };
 
 export { getToken, setToken, clearToken };

@@ -344,7 +344,7 @@ export function useAuthoringWrite<B extends object>({
   url,
   onOpened,
 }: {
-  method: "post" | "put";
+  method: "post" | "put" | "delete";
   url: (dryRun: boolean) => string;
   onOpened: (change: AuthoringChange) => void;
 }) {
@@ -358,7 +358,7 @@ export function useAuthoringWrite<B extends object>({
   const [previewError, setPreviewError] = useState<unknown>(null);
   const [submitError, setSubmitError] = useState<unknown>(null);
 
-  const send = <T,>(path: string, payload: unknown) => (method === "post" ? api.post<T>(path, payload) : api.put<T>(path, payload));
+  const send = <T,>(path: string, payload: unknown) => (method === "post" ? api.post<T>(path, payload) : method === "put" ? api.put<T>(path, payload) : api.del<T>(path, payload));
 
   function show(next: AuthoringPlan, body: B, again: boolean) {
     setPlan(next);
@@ -544,7 +544,7 @@ export function AuthoringDialogs<B extends object>({
   readOnlyReason?: string | null;
   /** The request body, built when Preview is pressed. */
   body: () => B;
-  method: "post" | "put";
+  method: "post" | "put" | "delete";
   url: (dryRun: boolean) => string;
   confirmLabel?: string;
   /** A wider form (a values editor with its previews). */
