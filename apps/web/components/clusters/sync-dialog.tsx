@@ -14,13 +14,15 @@ import { YamlDiffViewer } from "@/components/common/yaml-diff-viewer";
 import { isApiError } from "@/lib/api-client";
 import { day1Api, day1Keys } from "@/lib/api/day1";
 import { defaultHardware, hardwareOptions as hardwareOptionsOf, useMachineConfigs } from "@/lib/machine-configs";
+import { hasDay2News, syncInstalls } from "@/lib/addon-installs";
 import { toastMrOpened } from "@/lib/mr-toast";
 import { writeErrorTitle } from "@/lib/write-errors";
 import { cn } from "@/lib/utils";
 import { SyncRolling, SyncSection as Section, TuningRebootNote } from "./sync-rolling";
+import { SyncResultDialog } from "./sync-result";
 import { SyncHeldReplicas } from "./scale/restore-replicas";
 import type {
-  AddonDrift, ConfigRemoval, HardwareChoice, MRDetail, NodepoolRef, SyncPreview, SyncPreviewRequest, SyncRequest,
+  AddonDrift, ConfigRemoval, HardwareChoice, NodepoolRef, SyncPreview, SyncPreviewRequest, SyncRequest, SyncResult,
 } from "@/types";
 
 /** A nodepool whose network hardware a person chooses, and what they chose. */
@@ -48,8 +50,9 @@ function PreviewSkeleton() {
  * cluster file does not hold and moves its header to the flavor's version.
  * The preview is read first, and again for each hardware choice; every
  * config the sync removes is confirmed on its own; how merging rolls each
- * nodepool's nodes is stated. Missing add-ons are not in that MR: once it is
- * open they are offered through day2, as the drift tab's Fix all does.
+ * nodepool's nodes is stated. Missing add-ons are not in that MR: the same
+ * action asks day2 for them once it is open, and the result shows both
+ * (ADR-0037's 2026-11-25 amendment; `SyncResultDialog`).
  *
  * Mount it while open: its state is one sync's.
  */
@@ -75,10 +78,8 @@ export function SyncDialog({
   const [confirmed, setConfirmed] = useState<Set<string>>(() => new Set());
   /** A sync was refused as stale (409): the preview was read again. */
   const [stale, setStale] = useState(false);
-  /** The MR is open; what is left is day2's. */
-  const [opened, setOpened] = useState<{ mr: MRDetail; preview: SyncPreview } | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const [installError, setInstallError] = useState<unknown>(null);
+  /** The MR is open: what day2 answered, and what is left. */
+  const [opened, setOpened] = useState<{ mr: SyncResult; preview: SyncPreview } | null>(null);
 
   const hardware = useMemo<HardwareChoice[]>(
     () =>
@@ -112,8 +113,10 @@ export function SyncDialog({
     onSuccess: (mr, p) => {
       toastMrOpened(mr, router.push, "Sync MR");
       queryClient.invalidateQueries({ queryKey: day1Keys.approvals.all });
-      // What is left: day2's add-ons, and replicas only update-nodepool restores (ADR-0062)
-      if (p.addons_to_install.length > 0 || p.addons_error || (p.held_replicas?.length ?? 0) > 0) setOpened({ mr, preview: p });
+      queryClient.invalidateQueries({ queryKey: day1Keys.clusters.drift(name) });
+      // Shown with the MR: day2's answer, and replicas only update-nodepool restores (ADR-0062)
+      const held = (mr.held_replicas ?? p.held_replicas ?? []).length > 0;
+      if (hasDay2News(syncInstalls(mr.addons, p)) || held) setOpened({ mr, preview: p });
       else onClose();
     },
     onError: (e) => {
@@ -201,77 +204,17 @@ export function SyncDialog({
   const headerMoves = data && data.file_spec_version !== data.spec_version;
   const title = data ? `Sync ${data.cluster} to ${data.spec_name} v${data.spec_version}` : `Sync ${name} to its flavor`;
 
-  const install = async (entries: AddonDrift[]) => {
-    setInstalling(true);
-    setInstallError(null);
-    try {
-      await onInstallAddons(entries);
-      onClose();
-    } catch (e) {
-      setInstallError(e);
-    } finally {
-      setInstalling(false);
-    }
-  };
-
-  // ── After the MR: the add-ons are day2's ──
+  // ── After the MR: the day1 MR and what day2 answered ──
   if (opened) {
-    const { mr, preview: done } = opened;
-    const entries = done.addons_to_install;
     return (
-      <Dialog open onOpenChange={(open) => { if (!open && !installing) onClose(); }}>
-        <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Sync MR !{mr.iid} opened</DialogTitle>
-            <DialogDescription>
-              It changes only the cluster file, and nothing changes on the cluster until it is merged.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3" data-testid="sync-addons-offer">
-            {entries.length > 0 && (
-              <Section title="Add-ons still missing" icon={Package} testId="sync-addons-missing">
-                <p className="text-sm">
-                  {done.spec_name} lists {entries.length} add-on{entries.length !== 1 ? "s" : ""} this cluster does not
-                  have. Day1 never writes day2, so {entries.length !== 1 ? "they are" : "it is"} installed there: one MR
-                  each, at the team&apos;s default version, with the values requested at create.
-                </p>
-                <ul className="divide-y text-sm">
-                  {entries.map((e) => (
-                    <li key={`${e.team}/${e.addon_name}`} className="flex items-center gap-2 py-1.5">
-                      <span className="font-mono font-medium">{e.addon_name}</span>
-                      <span className="text-xs text-muted-foreground">{e.team}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-            )}
-            <SyncHeldReplicas name={name} where={where} held={done.held_replicas} />
-            {done.addons_error && (
-              <p className="flex items-start gap-1.5 text-sm text-status-warning-fg">
-                <TriangleAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
-                <span className="break-words">
-                  Day2 did not answer, so whether add-ons are missing is unknown ({done.addons_error}). Check the
-                  Drift tab once it answers.
-                </span>
-              </p>
-            )}
-            {Boolean(installError) && (
-              <ProblemList error={installError} title={writeErrorTitle(installError, "An install failed")} />
-            )}
-          </div>
-          <DialogFooter>
-            <button onClick={onClose} disabled={installing} className={buttonVariants({ variant: "outline" })}>
-              {entries.length > 0 ? "Not now" : "Close"}
-            </button>
-            {entries.length > 0 && (
-              <button onClick={() => install(entries)} disabled={installing} className={buttonVariants()}>
-                {installing && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
-                {installing ? "Opening install MRs…" : `Install ${entries.length} add-on${entries.length !== 1 ? "s" : ""}`}
-              </button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SyncResultDialog
+        name={name}
+        where={where}
+        result={opened.mr}
+        preview={opened.preview}
+        onClose={onClose}
+        onInstallAddons={onInstallAddons}
+      />
     );
   }
 
@@ -422,13 +365,14 @@ export function SyncDialog({
                 )}
 
                 {(data.addons_to_install.length > 0 || data.addons_error) && (
-                  <Section title="Not in this MR: add-ons" icon={Package} testId="sync-addons">
+                  <Section title="Opened with the sync: add-ons in day2" icon={Package} testId="sync-addons">
                     {data.addons_to_install.length > 0 && (
                       <p className="text-sm">
                         {data.addons_to_install.length} add-on{data.addons_to_install.length !== 1 ? "s" : ""} the flavor
                         lists {data.addons_to_install.length !== 1 ? "are" : "is"} missing (
                         <span className="font-mono">{data.addons_to_install.map((a) => a.addon_name).join(", ")}</span>).
-                        Day2 installs them; once the sync MR is open you can install them from here.
+                        They are not in the day1 MR: once it is open, the same click asks day2 to install them, one MR
+                        per team, and both are shown here.
                       </p>
                     )}
                     {data.addons_error && (
@@ -473,7 +417,7 @@ export function SyncDialog({
             disabled={!canSubmit}
             className={buttonVariants()}
           >
-            {sync.isPending ? "Creating MR…" : "Open sync MR"}
+            {sync.isPending ? "Creating MRs…" : data && data.addons_to_install.length > 0 ? "Open sync MR and add-on MRs" : "Open sync MR"}
           </button>
         </DialogFooter>
       </DialogContent>

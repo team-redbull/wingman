@@ -4,16 +4,17 @@
  * beside its missing add-ons (ADR-0036); "Sync to flavor" previews one day1 MR,
  * asks for a nodepool's hardware where Wingman can't read it, has every removed
  * config confirmed, says how merging rolls the nodes, and sends exactly what the
- * preview showed (ADR-0037); the missing add-ons are offered through day2 once
- * the MR is open; a stale preview (409) is read again. The cluster list filters
- * and groups by owner numbers.
+ * preview showed (ADR-0037); the same click asks day2 for the missing add-ons
+ * once the MR is open, and the result shows both MRs and what day2 did not open
+ * (ADR-0037's 2026-11-25 amendment); a stale preview (409) is read again. The
+ * cluster list filters and groups by owner numbers.
  */
 
 import { test, expect, type Page, type Route, type Request } from "@playwright/test";
 import { anyQuery, fulfillProblem, go, injectAdminAuth, injectViewerAuth, json, mockDashboardApis, mockMachineConfigsWithGeneric, mockMR } from "../fixtures/api-handlers";
 import type {
-  AddonDrift, ClusterDetail, ClusterDrift, ClusterStatus, DestinationCharts, DriftSummaryItem, MachineConfigs, Rebooting,
-  SyncPreview, ValueDrift,
+  AddonDrift, AddonInstalls, ClusterDetail, ClusterDrift, ClusterStatus, DestinationCharts, DriftSummaryItem, MachineConfigs,
+  Rebooting, SyncPreview, ValueDrift,
 } from "../../types";
 
 const SITE = "site1";
@@ -189,8 +190,15 @@ async function mockSync(page: Page, answer: (route: Route) => Promise<void>) {
   return requests;
 }
 
-const openedMR = (r: Route) =>
-  json(r, mockMR({ iid: 61, title: `[Wingman/Day1] Sync cluster ${NAME} to spec ${FLAVOR} v1.1.0`, labels: ["wingman", "sync"] }), 201);
+const NOTHING: AddonInstalls = { missing: [], opened: [], already_open: [], failed: [], not_asked: null, not_opened: [] };
+const SYNC_MR = mockMR({ iid: 61, title: `[Wingman/Day1] Sync cluster ${NAME} to spec ${FLAVOR} v1.1.0`, labels: ["wingman", "sync"] });
+/** The sync's answer: its MR, and what day2 answered for the missing add-ons. */
+const openedMR = (r: Route, addons: Partial<AddonInstalls> = {}) => json(r, { ...SYNC_MR, addons: { ...NOTHING, ...addons } }, 201);
+const METRICS: AddonDrift = { ...CLUSTER_ROLES, addon_name: "metrics", team: "orca", override_values: {} };
+const REDBULL_INSTALL = {
+  team: "redbull", iid: 9, title: `[Wingman/Day2] Install addon redbull/cluster-roles on ${NAME}`,
+  web_url: "https://gitlab.example.com/sigs/redbull/-/merge_requests/9", charts: ["cluster-roles"],
+};
 
 test.describe("Cluster drift on locked values", () => {
   test("the panel shows each locked value that differs beside the missing add-ons", async ({ page }) => {
@@ -444,41 +452,91 @@ test.describe("Sync to flavor", () => {
     await expect(dialog.getByRole("button", { name: "Open sync MR" })).toBeEnabled();
   });
 
-  test("once the MR is open, the missing add-ons are offered through day2", async ({ page }) => {
+  test("one click opens the sync MR and the day2 MRs, shown together", async ({ page }) => {
     await openDetail(page, drift({ addon_drift: [CLUSTER_ROLES] }), [preview({ removals: [], addons_to_install: [CLUSTER_ROLES] })]);
-    await mockSync(page, openedMR);
-    const install = page.waitForRequest((req: Request) => req.method() === "POST" && req.url().includes("/addons/redbull/cluster-roles"));
-    await page.route(`**/api/day2/clusters/${encodeURIComponent(HOSTED_ID)}/addons/redbull/cluster-roles`, (r: Route) =>
-      json(r, mockMR({ iid: 9, repo: "day2", team: "redbull" }), 201)
-    );
+    const syncs = await mockSync(page, (r) => openedMR(r, { missing: [CLUSTER_ROLES], opened: [REDBULL_INSTALL] }));
+    const installs: string[] = [];
+    page.on("request", (req) => { if (req.method() === "POST" && req.url().includes("/api/day2/")) installs.push(req.url()); });
 
     await page.getByRole("button", { name: "Sync to flavor" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByTestId("sync-addons")).toContainText("1 add-on the flavor lists is missing (cluster-roles)");
-    await dialog.getByRole("button", { name: "Open sync MR" }).click();
+    await expect(dialog.getByTestId("sync-addons")).toContainText("the same click asks day2 to install them, one MR per team");
+    await dialog.getByRole("button", { name: "Open sync MR and add-on MRs" }).click();
 
-    await expect(page.getByText("Sync MR !61 opened").first()).toBeVisible();
-    const offer = page.getByRole("dialog").getByTestId("sync-addons-offer");
-    await expect(offer).toContainText(`${FLAVOR} lists 1 add-on this cluster does not have`);
+    // Day1 asked day2 itself: the browser sent the sync only
+    await expect(page.getByRole("heading", { name: "Sync MR !61 opened with 1 add-on MR in day2" })).toBeVisible();
+    expect(syncs).toHaveLength(1);
+    const result = page.getByRole("dialog").getByTestId("sync-result");
+    await expect(result.getByTestId("sync-result-day1").getByRole("link", { name: "Review" })).toHaveAttribute("href", "/approvals/day1-61");
+    const day2 = result.getByTestId("sync-addons-offer");
+    await expect(day2).toContainText(`${FLAVOR} lists 1 add-on this cluster does not have (cluster-roles)`);
+    await expect(day2).toContainText("Day2 opened 1 install MR, one per team");
+    await expect(day2.getByRole("link", { name: `Review redbull !9 for ${NAME}` })).toHaveAttribute("href", "/approvals/day2-redbull-9");
+    await expect(day2.getByRole("link", { name: `Open redbull !9 for ${NAME} in GitLab` })).toHaveAttribute("href", REDBULL_INSTALL.web_url);
+    await expect(page.getByRole("dialog").getByRole("button", { name: /^Install/ })).toHaveCount(0);
+    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(installs).toEqual([]);
+  });
+
+  test("a team day2 refuses: the sync MR stays, day2's words are shown, and the rest is installed by hand", async ({ page }) => {
+    await openDetail(page, drift({ addon_drift: [CLUSTER_ROLES, METRICS] }), [preview({ removals: [], addons_to_install: [CLUSTER_ROLES, METRICS] })]);
+    await mockSync(page, (r) => openedMR(r, {
+      missing: [CLUSTER_ROLES, METRICS], opened: [REDBULL_INSTALL],
+      failed: ["orca: day2 refused the install (403): orca hasn't given Wingman write access to sigs/orca"], not_opened: [METRICS],
+    }));
+    const install = page.waitForRequest((req: Request) => req.method() === "POST" && req.url().includes("/addons/orca/metrics"));
+    await page.route(`**/api/day2/clusters/${encodeURIComponent(HOSTED_ID)}/addons/orca/metrics`, (r: Route) =>
+      json(r, mockMR({ iid: 3, repo: "day2", team: "orca" }), 201)
+    );
+
+    await page.getByRole("button", { name: "Sync to flavor" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Open sync MR and add-on MRs" }).click();
+
+    const day2 = page.getByRole("dialog").getByTestId("sync-addons-offer");
+    await expect(day2.getByRole("link", { name: `Review redbull !9 for ${NAME}` })).toBeVisible();
+    await expect(day2).toContainText("Not opened in day2");
+    await expect(day2).toContainText("orca: day2 refused the install (403): orca hasn't given Wingman write access to sigs/orca");
+    await expect(day2.getByTestId("sync-addons-left")).toContainText("1 add-on has no install MR (metrics)");
     await page.getByRole("dialog").getByRole("button", { name: "Install 1 add-on" }).click();
 
     // As the drift tab's Fix all: the id day2 resolved the name to, the values requested at create
     const request = await install;
-    expect(new URL(request.url()).pathname).toBe(`/api/day2/clusters/${encodeURIComponent(HOSTED_ID)}/addons/redbull/cluster-roles`);
-    expect(request.postDataJSON()).toEqual({ override_values: { replicas: 2 } });
+    expect(new URL(request.url()).pathname).toBe(`/api/day2/clusters/${encodeURIComponent(HOSTED_ID)}/addons/orca/metrics`);
+    expect(request.postDataJSON()).toEqual({ override_values: {} });
     await expect(page.getByText("1 fix MR opened")).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("when day2 did not answer, the MR still opens and says add-ons are unknown", async ({ page }) => {
+  test("day2 unreachable after the sync MR opened: not asked, said so, and offered by hand", async ({ page }) => {
+    await openDetail(page, drift({ addon_drift: [CLUSTER_ROLES] }), [preview({ removals: [], addons_to_install: [CLUSTER_ROLES] })]);
+    await mockSync(page, (r) => openedMR(r, {
+      missing: [CLUSTER_ROLES], not_asked: "day2 did not answer: day2 unreachable listing its open merge requests: ConnectError",
+      not_opened: [CLUSTER_ROLES],
+    }));
+
+    await page.getByRole("button", { name: "Sync to flavor" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Open sync MR and add-on MRs" }).click();
+
+    await expect(page.getByRole("heading", { name: "Sync MR !61 opened", exact: true })).toBeVisible();
+    const day2 = page.getByRole("dialog").getByTestId("sync-addons-offer");
+    await expect(day2).toContainText("Day2 was not asked");
+    await expect(day2).toContainText("day2 did not answer: day2 unreachable listing its open merge requests: ConnectError");
+    await expect(page.getByRole("dialog").getByRole("button", { name: "Install 1 add-on" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Not now" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("when day2 did not say what is installed, the MR still opens and says add-ons are unknown", async ({ page }) => {
     await openDetail(page, drift(), [preview({ removals: [], addons_error: "day2 did not answer: timeout" })]);
-    await mockSync(page, openedMR);
+    await mockSync(page, (r) => openedMR(r, { not_asked: "day2 did not answer: timeout" }));
 
     await page.getByRole("button", { name: "Sync to flavor" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Open sync MR" }).click();
 
     const offer = page.getByRole("dialog").getByTestId("sync-addons-offer");
-    await expect(offer).toContainText("Day2 did not answer, so whether add-ons are missing is unknown (day2 did not answer: timeout)");
+    await expect(offer).toContainText("Whether add-ons are missing is unknown, so day2 was not asked (day2 did not answer: timeout)");
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });

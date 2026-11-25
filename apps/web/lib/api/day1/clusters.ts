@@ -26,6 +26,7 @@ import type {
   SyncPreview,
   SyncPreviewRequest,
   SyncRequest,
+  SyncResult,
 } from "@/types";
 
 const CLUSTERS = "/api/day1/clusters";
@@ -70,5 +71,6 @@ export const clustersApi = {
     ),
   syncPreview: (name: string, where: string, body: SyncPreviewRequest) =>
     api.post<SyncPreview>(`${clusterPath(name)}/sync/preview${where}`, body),
-  sync: (name: string, where: string, body: SyncRequest) => api.post<MRDetail>(`${clusterPath(name)}/sync${where}`, body),
+  /** The sync MR, and day2's answer for the missing add-ons it asked for once the MR was open. */
+  sync: (name: string, where: string, body: SyncRequest) => api.post<SyncResult>(`${clusterPath(name)}/sync${where}`, body),
 };
