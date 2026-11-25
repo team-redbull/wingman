@@ -61,7 +61,7 @@ export interface AddonOcpVersion {
   target_revision: string | null;
   deploy_config: RepoFile;
   values_file: RepoFile;
-  /** The commit the pin was read at: send it back to change or remove it (3.64.0). */
+  /** The commit the pin was read at: send it back to change or remove it (3.65.0). */
   last_commit_id: string | null;
 }
 

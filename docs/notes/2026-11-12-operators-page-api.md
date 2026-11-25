@@ -66,7 +66,7 @@ One add-on: its files, its OCP-version pins, and one panel per scope.
   "ocp_versions": [
     { "version": "4.16.27", "target_revision": "release-4.16",
       "deploy_config": File, "values_file": File,
-      "last_commit_id": "9f1c…" }                // since 3.64.0: send it back to change or remove the pin
+      "last_commit_id": "9f1c…" }                // since 3.65.0: send it back to change or remove the pin
   ],
   "scopes": [ScopePanel, ScopePanel, ScopePanel, ScopePanel],  // hosted-clusters, mces, hub, upi
   "warnings": [Finding]

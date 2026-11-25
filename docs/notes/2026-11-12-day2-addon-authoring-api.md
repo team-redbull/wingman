@@ -181,7 +181,7 @@ What the New add-on form starts from, read from the team's own files:
   `defaults/<scope>/<name>/values.yaml`. As §5, including clusters that
   already have a folder of that name, which `confirm_changes` confirms as
   there.
-- `ocp_versions` (since 3.64.0): zero or more OCP-version pins,
+- `ocp_versions` (since 3.65.0): zero or more OCP-version pins,
   `[{"version": "4.20.9", "target_revision": "2.1.5-hotfix", "values": {}}]`,
   each checked as §8's `POST` (a full version, a branch of the chart repo)
   and a version given twice refused (422 `pin-duplicate`). Each is written in
@@ -429,7 +429,7 @@ pin's revision on its scope; §8).
 
 Body validation (a wrong type, an unknown field) is 422 as everywhere.
 
-## 8. OCP-version pins (3.64.0)
+## 8. OCP-version pins (3.65.0)
 
 ADR-0043's 2026-11-25 amendment. A pin is
 `operators/<addon>/ocp-versions/<version>/` in the team repo: layer 2 of both
