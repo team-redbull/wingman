@@ -33,8 +33,10 @@ flowchart LR
 | day2 | 8002 | `wingman_day2`: add-ons on the hub, MCEs, hosted and UPI clusters (ADR-0020), through the team projects in the sigs group; it reads the day1 project, never writes it. |
 
 day1 calls day2 over HTTP (`DAY2_SERVICE_URL`) for a cluster's installed
-add-ons (drift) and for a flavor rollout's install MRs (ADR-0016, ADR-0044),
-with a short-lived session token of its own (`infrastructure/day2/adapter.py`).
+add-ons (drift) and for the install MRs a flavor rollout, a sync or an import
+needs (ADR-0016, ADR-0044, ADR-0037), with a short-lived session token of its
+own, issued for day1 itself, the rollout, or the admin who synced or imported
+(`infrastructure/day2/adapter.py`).
 day2 calls nothing but GitLab. Health (`/health/live`, `/health/ready`) and
 `/metrics` are on each service's own port, which nginx does not route, so they
 are reachable inside the cluster only (ADR-0010, ADR-0054). The chart

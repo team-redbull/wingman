@@ -654,7 +654,7 @@ sigs/<team>/
 
 - **Spec**: A preset for the create form (nodepool shape, preset template inputs, the Day2 addons its clusters should get); every spec fills the one shared `cluster-template.j2`
 - **Cluster**: An actual cluster instance, optionally linked to a spec
-- **Drift**: A value the cluster's flavor locks that its file does not hold, or an add-on the flavor lists that is not installed (ADR-0036); a different version is reported, not drift (ADR-0025). Sync to flavor fixes the values in one MR (ADR-0037)
+- **Drift**: A value the cluster's flavor locks that its file does not hold, or an add-on the flavor lists that is not installed (ADR-0036); a different version is reported, not drift (ADR-0025). Sync to flavor fixes the values in one MR and, in the same action, opens the missing add-ons' day2 MRs, one per team (ADR-0037)
 
 ### Addon Layers
 
