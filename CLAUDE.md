@@ -198,56 +198,48 @@ Then the step no command covers: re-read the docs your change made wrong.
 you finish yours, move this entry to the top of `docs/notes/session-log.md`
 and write yours here.
 
-**2026-11-24 — 3.59.0 to 3.62.0: the Infrastructure workspace, KV clusters made by Wingman, and Wingman in team-redbull.**
-- **Customer MCEs** (3.59.0, ADR-0018's 2026-11-24 amendment): no Default
-  mastertag column; a row opens its MCE's servers (`inventoryHref`,
-  `lib/inventory/view.ts`). **Create MCE is a preview**: the form works, its
-  Create is disabled with the reason, and it calls nothing; Wingman still
-  never creates an MCE.
-- **Inventory Management** (3.60.0, ADR-0057's 2026-11-24 amendment): one
-  MCE at a time (a picker by site), InfraEnvs picked by name across MCEs
-  (kept when the MCE changes, `?mce=&infraEnv=`, remembered per viewer),
-  zone/size filters, a sticky header; the Runs list stays every MCE's and
-  every InfraEnv's.
-- **Create KV cluster** (3.61.0, ADR-0069): on a seed's card, the same file
-  every time: the next free `ocp4-<lc>-kv-<site>-<zone>-<id>`, the seed's
-  version, one NodePool from its `<flavor>-mtl-<zone>` pool with its zone in
-  `nodeLabels`, owner/configs/tuning copied from the newest KV cluster,
-  through provision-cluster with `mce=<seed>`. Each zone's KV clusters show
-  their fill order (Full, Filling, Next) against `maxNodes` 40, a zone with
-  nothing Next is warned, and a KV cluster whose NodePools miss its zone is
-  flagged. A folder `ocp4-<lc>-mce-seed-<site>-<id>` is a seed too. Wingman
-  never creates KV clusters on its own: that is the KV Capacity
-  Controller's (not built).
-- **The move** (3.62.0, ADR-0070): the repo is `team-redbull/wingman`
-  (fresh, full history; `LiadYahav/wingman` is left to its owner), images
-  `ghcr.io/team-redbull/wingman-*`. The chart reads an existing Secret
-  (`secrets.existingSecret`) and may skip the OAuthClient; each release's
-  CI job `platform` writes the chart into redbull-platform
-  (`gitops/charts/wingman/`), whose ApplicationSet syncs it. The lab runs
-  that way since 3.62.0, its settings in `gitops/overrides/wingman.yaml`;
-  nobody runs `helm upgrade` there.
+**2026-11-25 — 3.63.0 to 3.66.0: the install picker, day2 with Sync and Import, OCP-version pins, NodePool names.**
+- **Install servers' Choose servers** (3.63.0, ADR-0057's 2026-11-25
+  amendment): a search on name, hardware or problem, Status and Hardware
+  filters, Chosen only, "Pick the n shown" (never past 20, never a server
+  not offered); the dialog is wide. One search field,
+  `components/common/search-box.tsx`, shared with the pool filters.
+- **Sync and Import open the day2 MRs** (3.64.0, ADR-0037's 2026-11-25
+  amendment): day1 opens its MR first, then asks day2 for the missing
+  add-ons, one MR per team, in the admin's name; a day2 failure is reported,
+  never retried, and the day1 MR stays. Rollouts share the same helper
+  (`application/addon_installs.py`).
+- **OCP-version pins** (3.65.0, ADR-0043's 2026-11-25 amendment):
+  `operators/<chart>/ocp-versions/<X.Y.Z>/` added, changed and removed from
+  the add-on page, and set on New add-on, each by MR to the team's repo
+  (`application/ocp_pins.py`); a fleet default's `targetRevision` that
+  overrides the pins is warned.
+- **NodePool names** (3.66.0, ADR-0071): a new NodePool is `<InfraEnv>` or
+  `<InfraEnv>-<suffix>` (no cluster prefix: NodePools live in
+  `hcp-<cluster>`), at most 63 characters, unique in the cluster; existing
+  NodePools keep their names (a rename recreates the nodes). Every path that
+  writes a new NodePool follows it; everything that finds one by name reads
+  both shapes (`rendered_name`). The specs template must read
+  `nodepool_name` (`docs/upgrade/3.65-to-3.66.md`).
+- The lab deploys itself: each merge releases, CI writes the chart into
+  redbull-platform, Argo syncs it (ADR-0070).
 
 **Next:**
-- ADR-0069's open questions: a KV cluster on a seed named
-  `ocp4-seed-<site>-<zone>` (no lifecycle) is refused; the lowest free id
-  letter can reuse a deleted cluster's; whether provision-cluster or day1 CI
-  will refuse a KV file without its zone; the owner when no KV cluster
-  exists to copy; whether to propose the vm-lifecycle-worker add-on at the
-  merge.
-- The seed name is unconfirmed (the user thinks `ocp4-<lc>-mce-seed-<site>-<id>`;
-  the convention says `ocp4-<lc>-seed-<site>-<zone>-<id>`, create-vm finds
-  only `ocp4-seed-<site>-<zone>`): the team picks one before the first seed.
-- Day1's drift reads day2 as a viewer: a tenant name two MCEs share reads as
-  unknown. An approval rollout's counts still count KV clusters.
-- The air-gap: `docs/upgrade/3.52-to-3.53.md` on through 3.61's guides
-  (generic), then `docs/upgrade/3.61-to-3.62.md` (it keeps Helm there; the
-  Secret mode is optional).
-- When herzi's retire-used-servers release runs on every MCE: step 6 of
-  `docs/upgrade/3.54-to-3.55.md`.
-- Code organisation, step 2 of `docs/ideas/code-organisation.md` (the
-  user's sequence; it starts now).
-- cluster-navigator's data on the cluster page (`docs/ideas/single-pane.md`
-  workstream 5); Flavors v2's "Left for later"; tuning: a lock per pool.
+- The specs repo's `cluster-template.j2` comment above `name:` still says
+  "needed only when two nodepools share an InfraEnv" (rendered into every
+  file): an MR to the user's GitLab, when the user says so.
+- The team: the platform's acceptance tests name NodePools
+  `<cluster>-<InfraEnv>` (kubevirt-workflows Acceptance Tests §3); Wingman's
+  new ones are `<InfraEnv>[-<suffix>]`.
+- InfraEnvs on production MCEs need `spec.agentLabels` `redbull.io/flavor`,
+  `redbull.io/size`, `redbull.io/site` for a pool draw (workflows
+  `add_server_to_mce.py` `_POOL_LABELS`); nothing sets them today.
+- Code organisation is paused (the user, 2026-11-25): PR #4 (day2's big
+  services split, open) and the create-page split (an unpushed local branch,
+  stopped mid-rebase) wait; then steps 3 to 5 of
+  `docs/ideas/code-organisation.md`.
+- ADR-0069's open questions (KV create), the seed name to confirm with the
+  team, the drift tab's Install still one chart per MR, the air-gap's
+  upgrade path (`docs/upgrade/`, through 3.65-to-3.66).
 - The team's questions: herzi, RBAC, a shared Git store, provision-cluster's
   24 characters.
