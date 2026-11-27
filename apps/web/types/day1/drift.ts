@@ -97,12 +97,12 @@ export interface ClusterDrift {
   version_differences: VersionDifference[];
   error: string | null;
   update: FlavorUpdate | null;
-  /** NodePools whose InfraEnv names a zone their Nodes are not labelled with: the next sync adds it, never drift (ADR-0072). */
-  zone_labels?: ZoneLabelAdded[];
+  /** NodePools whose InfraEnv names a zone their Nodes are not labelled with: made before Wingman labelled zones, never drift, never synced (ADR-0072). */
+  missing_zone_labels?: MissingZoneLabel[];
 }
 
-/** A zone label a sync adds to a NodePool: `topology.kubernetes.io/zone`, the naming convention's. */
-export interface ZoneLabelAdded {
+/** A NodePool without `topology.kubernetes.io/zone` in its `nodeLabels`, and its InfraEnv's zone. */
+export interface MissingZoneLabel {
   nodepool: { index: number; name: string };
   zone: string;
 }

@@ -256,14 +256,19 @@ test.describe("A logical nodepool on the cluster page", () => {
     await expect(page.getByTestId("nodepool-row-1")).toContainText("r760-mtl · az2");
   });
 
-  test("the drift tab names the zone labels the next sync adds, never as drift", async ({ page }) => {
-    const zoneLabels = AZ.map((z, index) => ({ nodepool: { index, name: `${z}-gpu` }, zone: z.slice(-3) }));
-    await openCluster(page, { ...NOT_LINKED, state: "in_sync", spec_name: "zoned", spec_version: "1.0.0", current_spec_version: "1.0.0", zone_labels: zoneLabels });
+  test("the drift tab says which NodePools' Nodes carry no zone label, and that a new NodePool is the way", async ({ page }) => {
+    const missing = AZ.map((z, index) => ({ nodepool: { index, name: `${z}-gpu` }, zone: z.slice(-3) }));
+    await openCluster(page, { ...NOT_LINKED, state: "in_sync", spec_name: "zoned", spec_version: "1.0.0", current_spec_version: "1.0.0", missing_zone_labels: missing });
     await page.getByRole("tab", { name: "Drift" }).click();
     await expect(page.getByText("The cluster holds every value", { exact: false })).toBeVisible();
-    await expect(page.getByTestId("drift-zone-labels")).toContainText(
-      `the next Sync to flavor adds it to ${AZ.map((z) => `${z}-gpu (${z.slice(-3)})`).join(", ")}`
+    const notice = page.getByTestId("drift-missing-zone-labels");
+    await expect(notice).toContainText("No zone label on these NodePools' Nodes");
+    await expect(notice).toContainText(
+      `${AZ.map((z) => `${z}-gpu (${z.slice(-3)})`).join(", ")} were made before Wingman labelled zones, so their Nodes carry no topology.kubernetes.io/zone.`
     );
+    await expect(notice).toContainText("Not drift: a sync never changes an existing NodePool.");
+    await expect(notice).toContainText("To get Nodes labelled with their zone, add a new NodePool in Edit cluster");
+    await expect(page.getByText("adds it to", { exact: false })).toHaveCount(0);
   });
 
   test("is shown in Edit cluster, and a zone whose configuration differs is said", async ({ page }) => {
