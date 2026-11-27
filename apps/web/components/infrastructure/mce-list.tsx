@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { ProblemList } from "@/components/common/problem-list";
 import { Skeleton } from "@/components/ui/skeleton";
 import { customerMcesBySite } from "@/lib/infrastructure";
+import { clustersHref } from "@/lib/clusters";
 import { inventoryHref } from "@/lib/inventory/view";
 import { plural } from "@/lib/utils";
 import type { Mce } from "@/types";
@@ -39,9 +40,39 @@ function MceProblems({ mce }: { mce: Mce }) {
 }
 
 /**
+ * The MCE's hosted clusters, on the clusters list filtered to it
+ * (`/clusters?site=&mce=`). Above the row's stretched link, so it opens the
+ * list, not Inventory, with a hit area taller than it looks for a finger; on
+ * a phone only the count shows, under the column's heading. Quiet, and no
+ * link, while the MCE has no cluster.
+ */
+function ClustersLink({ mce }: { mce: Mce }) {
+  const count = mce.cluster_count;
+  const words = <span className="hidden sm:inline">{count === 1 ? " cluster" : " clusters"}</span>;
+  if (count === 0) {
+    return (
+      <span className="px-2.5 text-xs tabular-nums text-muted-foreground" data-testid="mce-clusters-none">
+        0{words}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={clustersHref({ site: mce.site, mce: mce.name })}
+      aria-label={`${plural(count, "cluster")} on ${mce.name}`}
+      className="relative z-10 inline-block rounded-full border bg-card px-2.5 py-1 text-xs font-medium tabular-nums text-foreground transition-colors before:absolute before:-inset-x-1.5 before:-inset-y-2 hover:border-primary/50 hover:text-primary active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      data-testid="mce-clusters-link"
+    >
+      {count}{words}
+    </Link>
+  );
+}
+
+/**
  * One Customer MCE. The whole row opens its servers in Inventory Management:
  * the name is the link, stretched over the row, so a click anywhere, a
- * middle-click and the keyboard all reach the same place.
+ * middle-click and the keyboard all reach the same place. Its cluster count
+ * is a link of its own, to its hosted clusters.
  */
 function MceRow({ mce }: { mce: Mce }) {
   return (
@@ -71,7 +102,7 @@ function MceRow({ mce }: { mce: Mce }) {
       </td>
       <td className={`${CELL} ${WIDE}`}>{mce.env ? <Chip>{mce.env}</Chip> : NONE}</td>
       <td className={`${CELL} ${WIDE} font-mono text-xs`}>{mce.hub_version ?? NONE}</td>
-      <td className={`${CELL} text-right tabular-nums font-semibold`}>{mce.cluster_count}</td>
+      <td className={`${CELL} text-right`}><ClustersLink mce={mce} /></td>
       <td className="py-2.5 pr-3 align-middle">
         <ChevronRight
           aria-hidden
@@ -94,7 +125,7 @@ function SiteMces({ site, mces }: { site: string; mces: Mce[] }) {
               <th scope="col" className="px-4 py-2 font-medium">MCE</th>
               <th scope="col" className={`${WIDE} w-[14%] px-4 py-2 font-medium`}>Env</th>
               <th scope="col" className={`${WIDE} w-[24%] px-4 py-2 font-medium`} title="version.yaml: the hub's own OpenShift version">Hub version</th>
-              <th scope="col" className="w-24 px-4 py-2 text-right font-medium">Clusters</th>
+              <th scope="col" className="w-20 px-4 py-2 text-right font-medium sm:w-32">Clusters</th>
               <th scope="col" className="w-9"><span className="sr-only">Servers</span></th>
             </tr>
           </thead>
@@ -134,7 +165,8 @@ function Body() {
 /**
  * Customer MCEs (ADR-0067, ADR-0018): the hubs of the customers' hosted
  * clusters, by site, as the day1 repo's folders say them, each opening its
- * servers in Inventory Management. Read only: Wingman never creates or
+ * servers in Inventory Management, and its cluster count its hosted clusters
+ * (ADR-0018's 2026-11-27 amendment). Read only: Wingman never creates or
  * changes an MCE, and Create MCE is a preview of how one will be made
  * (ADR-0018's 2026-11-24 amendment). The seeds are on their own page.
  */
@@ -144,7 +176,7 @@ export function MceList() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Customer MCEs"
-        subtitle="The hubs of the customers' hosted clusters, by site, as the day1 repo has them; each opens its servers in Inventory Management. Placement picks among them for a new cluster."
+        subtitle="The hubs of the customers' hosted clusters, by site, as the day1 repo has them; each opens its servers in Inventory Management, and its cluster count its hosted clusters. Placement picks among them for a new cluster."
       >
         <CreateMcePreview mces={mces.data ?? []} />
       </PageHeader>

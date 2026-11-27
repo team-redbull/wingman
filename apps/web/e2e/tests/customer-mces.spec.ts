@@ -1,7 +1,8 @@
 /**
  * Customer MCEs (mocked; ADR-0067, ADR-0018 and its 2026-11-24 amendment):
  * each site's Customer MCEs, no default mastertag, each row opening its MCE's
- * servers in Inventory Management; and Create MCE, a preview of the vision.
+ * servers in Inventory Management (its cluster count opens its clusters:
+ * clusters-mce-filter.spec.ts); and Create MCE, a preview of the vision.
  * Its inputs work, the name, zones and steps follow them, and Create stays
  * disabled with its reason: nothing is sent or written.
  */
@@ -46,9 +47,10 @@ test.describe("Customer MCEs", () => {
     const row = page.locator(`[data-mce="${SITE1_A}"]`);
     const link = row.getByRole("link", { name: `${SITE1_A}: its servers in Inventory Management` });
     await expect(link).toHaveAttribute("href", `/inventory?mce=${SITE1_A}`);
-    // Anywhere on the row: here by its clusters count, far from the name
+    // Anywhere on the row but its cluster count (a link of its own): here its hub version, far from the name
     const box = (await row.boundingBox())!;
-    await row.click({ position: { x: box.width - 80, y: box.height / 2 } });
+    const hub = (await row.getByRole("cell").nth(2).boundingBox())!;
+    await row.click({ position: { x: hub.x - box.x + hub.width / 2, y: box.height / 2 } });
     await expect(page).toHaveURL(new RegExp(`/inventory\\?mce=${SITE1_A}$`));
   });
 
