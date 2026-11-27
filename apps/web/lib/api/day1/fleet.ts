@@ -1,6 +1,6 @@
 /**
  * What the platform has, as day1 reads it: sites and MCEs (read-only in
- * Wingman), an MCE's InfraEnvs and OpenShift versions (ADR-0034), MCE
+ * Wingman), an MCE's InfraEnvs, node types (ADR-0072) and OpenShift versions (ADR-0034), MCE
  * placement for a new cluster (ADR-0050), the machine configs a nodepool can
  * name (ADR-0027), its tuning profiles (ADR-0061), Quick Links (ADR-0052) and
  * the systems beside Wingman that Infrastructure's sidebar links to (ADR-0066).
@@ -8,14 +8,14 @@
 
 import { api } from "@/lib/api-client";
 import type { PlacementQuery } from "@/lib/placement";
-import type { MachineConfigs, Mce, OpenShiftVersions, Placement, Platforms, QuickLinks, TuningProfiles } from "@/types";
+import type { MachineConfigs, Mce, NodeType, OpenShiftVersions, Placement, Platforms, QuickLinks, TuningProfiles } from "@/types";
 
 const mcePath = (mce: string) => `/api/day1/mces/${encodeURIComponent(mce)}`;
 
 /**
  * `/api/day1/placement?...` for `query`; empty parameters are left out, each
  * need is one `need`. With no need, an empty `need=` tells day1 the nodepools
- * name no node type yet, so it does not fall back to the flavor's presets.
+ * name no server pool yet, so it does not fall back to the flavor's presets.
  */
 function placementPath(query: PlacementQuery): string {
   const params = new URLSearchParams();
@@ -32,6 +32,8 @@ export const fleetApi = {
   mcesAt: (site: string) => api.get<Mce[]>(`/api/day1/mces?site=${encodeURIComponent(site)}`),
   /** The InfraEnvs on the MCE hub (501 FEATURE_DISABLED when live status is off). */
   infraEnvs: (mce: string) => api.get<string[]>(`${mcePath(mce)}/infraenvs`),
+  /** The MCE's node types, each with its zones' InfraEnvs (ADR-0072; 501 FEATURE_DISABLED when live status is off). */
+  nodeTypes: (mce: string) => api.get<NodeType[]>(`${mcePath(mce)}/node-types`),
   /** The versions from the day1 repo's upgrade ladder for the MCE. */
   openshiftVersions: (mce: string) => api.get<OpenShiftVersions>(`${mcePath(mce)}/openshift-versions`),
   placement: (query: PlacementQuery) => api.get<Placement>(placementPath(query)),

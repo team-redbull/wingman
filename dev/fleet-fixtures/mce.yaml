@@ -49,8 +49,9 @@ agent_namespace: inventory
 # name its servers, `ocp-<flavor>-<size>-<site>-<serial>`
 # (dev/fleet-fixtures/inventory.yaml has them). The other InfraEnvs come from
 # the clusters' NodePools and the free Agents above, with no agentLabels:
-# Inventory Management says a pool draw into one would be refused. -a's two
-# r760 zones draw from the same servers (the zone is in no server's name);
+# Inventory Management says a pool draw into one would be refused. -a's three
+# r760 zones draw from the same servers (the zone is in no server's name), and
+# are node type r760-mtl in zones az1 to az3 on the create form (ADR-0072);
 # -b's r650 InfraEnv lacks its site label, as an InfraEnv made before the
 # convention may.
 hubs:
@@ -71,6 +72,8 @@ hubs:
         {redbull.io/flavor: r760, redbull.io/size: mtl, redbull.io/site: site1, topology.kubernetes.io/zone: az1}
       r760-mtl-az2:
         {redbull.io/flavor: r760, redbull.io/size: mtl, redbull.io/site: site1, topology.kubernetes.io/zone: az2}
+      r760-mtl-az3:
+        {redbull.io/flavor: r760, redbull.io/size: mtl, redbull.io/site: site1, topology.kubernetes.io/zone: az3}
       r650-mtl-az1:
         {redbull.io/flavor: r650, redbull.io/size: mtl, redbull.io/site: site1, topology.kubernetes.io/zone: az1}
       g12-mtl-az1:

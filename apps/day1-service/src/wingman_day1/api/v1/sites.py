@@ -1,4 +1,4 @@
-"""Sites and MCEs (read-only, ADR-0018), the releases an MCE offers, its hub's InfraEnvs.
+"""Sites and MCEs (read-only, ADR-0018), the releases an MCE offers, its InfraEnvs and node types.
 
 ``POST /api/day1/sites`` and ``POST /api/day1/sites/{site}/mces`` are gone:
 Wingman no longer creates sites or MCEs (they answer 405). Every read here is
@@ -15,7 +15,7 @@ from fastapi import APIRouter, Path, Query
 
 from wingman_core.web.auth import AdminUser
 from wingman_day1.api.deps import Context, Status
-from wingman_day1.api.v1.sites_schemas import MceOut, OpenShiftVersionsOut
+from wingman_day1.api.v1.sites_schemas import MceOut, NodeTypeOut, OpenShiftVersionsOut
 
 sites_router = APIRouter(prefix="/api/day1/sites", tags=["sites"])
 mces_router = APIRouter(prefix="/api/day1/mces", tags=["mces"])
@@ -61,3 +61,13 @@ async def list_openshift_versions(
 async def list_infraenvs(mce: Name, user: AdminUser, status: Status) -> list[str]:
     """InfraEnv names on the MCE hub (501 when live status is off)."""
     return await status.infra_envs(mce)
+
+
+@mces_router.get("/{mce}/node-types")
+async def list_node_types(mce: Name, user: AdminUser, status: Status) -> list[NodeTypeOut]:
+    """The MCE's node types, each with its zones' InfraEnvs (ADR-0072; 501 when live status is off).
+
+    ``r760-mtl-az1`` and ``r760-mtl-az2`` are node type ``r760-mtl`` in zones
+    ``az1`` and ``az2``; a name off the naming convention is its own node type.
+    """
+    return [NodeTypeOut.of(t) for t in await status.node_types(mce)]

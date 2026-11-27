@@ -49,6 +49,12 @@ do. Paths are relative to the day1 service (`/api/day1`, `/api/auth`,
    MCE's `values.yaml`) is a good default for the create form's OCP version;
    `stray_files` are files in `hostedClusters/` that break the MCE's
    ApplicationSet.
+9a. **New (2026-11-27, ADR-0072): `GET /mces/{mce}/node-types`** →
+   `[{name, zones: [{zone, infra_env}]}]`: the MCE's InfraEnvs as node types
+   (`r760-mtl`) and their zones (the `topology.kubernetes.io/zone` label,
+   else the name's; `null` unnamed); admins only, 501 when live status is
+   off. In `GET /placement`, each candidate's `node_types` is now
+   `server_pools` (the same objects).
 
 ## Clusters (`/clusters`)
 

@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from wingman_day1.application.sites import MceView
+from wingman_day1.domain.node_types import NodeType
 from wingman_day1.domain.openshift_versions import OpenShiftVersions
 
 
@@ -63,4 +64,27 @@ class OpenShiftVersionsOut(BaseModel):
         """From the domain result."""
         return cls(
             mce=offered.mce, versions=list(offered.versions), problems=list(offered.problems)
+        )
+
+
+class ZoneOut(BaseModel):
+    """One zone of a node type: the InfraEnv that serves it."""
+
+    zone: str | None
+    """Its ``topology.kubernetes.io/zone`` label, else its name's zone; ``None``: unnamed."""
+    infra_env: str
+
+
+class NodeTypeOut(BaseModel):
+    """A node type on an MCE, ``r760-mtl``: InfraEnvs that differ only by zone (ADR-0072)."""
+
+    name: str
+    zones: list[ZoneOut]
+
+    @classmethod
+    def of(cls, node_type: NodeType) -> NodeTypeOut:
+        """From the domain's node type."""
+        return cls(
+            name=node_type.name,
+            zones=[ZoneOut(zone=z.zone, infra_env=z.infra_env) for z in node_type.zones],
         )

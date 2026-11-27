@@ -25,6 +25,7 @@ STATUS_ROUTES: list[tuple[str, str, dict[str, Any] | None]] = [
     ("GET", f"/api/day1/clusters/{HERZI}/status/stream?mce={MCE}", None),
     ("POST", "/api/day1/clusters/bulk-status", {"clusters": [{"name": HERZI, "mce": MCE}]}),
     ("GET", f"/api/day1/mces/{MCE}/infraenvs", None),
+    ("GET", f"/api/day1/mces/{MCE}/node-types", None),
 ]
 
 
@@ -154,6 +155,35 @@ async def test_infraenvs_list_and_an_unconfigured_mce(
         "/api/day1/mces/ocp4-prod-mce-site9-a/infraenvs", headers=headers
     )
     assert (unconfigured.status_code, unconfigured.json()["code"]) == (422, "VALIDATION_ERROR")
+
+
+async def test_node_types_group_an_mces_infra_envs_by_zone(
+    support: Any, gitlab: Any, identity: Any, clock: Any, auth: Auth
+) -> None:
+    labels = {"r760-mtl-az2": {"topology.kubernetes.io/zone": "az2"}}
+    names = ["r760-mtl-az2", "r760-mtl-az1", "dell-r660-site1-128c-1024gb-5tb"]
+    hub = FakeHubApi(infra_envs={MCE: {"inventory": names}}, agent_labels={MCE: labels})
+    app = support.build_app(
+        gitlab=gitlab, hub=hub, identity=identity, day2=FakeDay2Addons(), clock=clock
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://day1.test") as client:
+        listed = await client.get(f"/api/day1/mces/{MCE}/node-types", headers=auth(support.ALICE))
+        viewer = await client.get(f"/api/day1/mces/{MCE}/node-types", headers=auth(support.VIEWER))
+    assert listed.json() == [
+        {
+            "name": "dell-r660-site1-128c-1024gb-5tb",
+            "zones": [{"zone": None, "infra_env": "dell-r660-site1-128c-1024gb-5tb"}],
+        },
+        {
+            "name": "r760-mtl",
+            "zones": [
+                {"zone": "az1", "infra_env": "r760-mtl-az1"},
+                {"zone": "az2", "infra_env": "r760-mtl-az2"},
+            ],
+        },
+    ]
+    assert viewer.status_code == 403, "an MCE's node types are an admin's read (ADR-0067)"
 
 
 async def first_event(app: FastAPI, path: str, query: str, headers: dict[str, str]) -> str:

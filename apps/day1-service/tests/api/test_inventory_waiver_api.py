@@ -108,10 +108,9 @@ async def test_a_pool_says_what_is_ready_what_needs_a_fix_and_its_total(
     assert "drawable" not in r650
     none = pools[None]
     assert (none["ready"], none["needs_fix"], none["total"]) == (None, None, none["available"])
-    named = [
-        p for p in site1_a["pools"] if p["ready"] is not None and p["infra_env"] != "r760-mtl-az2"
-    ]
-    assert site1_a["ready"] == sum(p["ready"] for p in named), "az2 shares az1's servers"
+    shared = {"r760-mtl-az2", "r760-mtl-az3"}
+    named = [p for p in site1_a["pools"] if p["ready"] is not None and p["infra_env"] not in shared]
+    assert site1_a["ready"] == sum(p["ready"] for p in named), "az2 and az3 share az1's servers"
     assert site1_a["needs_fix"] == sum(p["needs_fix"] for p in named)
     assert site1_a["total"] == site1_a["available"] + site1_a["ready"] + site1_a["needs_fix"]
 

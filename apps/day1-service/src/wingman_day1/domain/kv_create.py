@@ -22,7 +22,6 @@ Pure: the application reads the tree, the files and the InfraEnvs.
 
 from __future__ import annotations
 
-import re
 import string
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -33,6 +32,7 @@ from wingman_day1.domain.kind_names import describe_kv_cluster
 from wingman_day1.domain.kv_clusters import MAX_KV_WORKERS, ZONE_LABEL
 from wingman_day1.domain.machine_configs import GENERIC_HARDWARE, NETWORK_CONFIG
 from wingman_day1.domain.names import Env, HostedClusterNaming, create_length_problems
+from wingman_day1.domain.node_types import BARE_METAL, parse
 from wingman_day1.domain.openshift_versions import bare_release
 from wingman_day1.domain.owners import OWNER_INPUTS
 from wingman_day1.domain.paths import ClusterRef
@@ -44,14 +44,14 @@ STANDBY_WORKERS: Final = (1, 5)
 OWNER_FIELDS: Final = tuple(name.removeprefix("owner_") for name in OWNER_INPUTS)
 """``merkaz``, ``anaf``, ``mador``: the file's ``owner`` keys."""
 
-_POOL = re.compile(r"^(?P<flavor>[a-z0-9]+)-mtl-(?P<zone>[a-z0-9]+)$")
-"""A bare-metal InfraEnv by the naming convention: ``<flavor>-mtl-<zone>``."""
-
 
 def pool_zone(infra_env: str) -> str | None:
-    """The zone of a bare-metal InfraEnv ``<flavor>-mtl-<zone>``; ``None`` for any other name."""
-    found = _POOL.match(infra_env)
-    return found["zone"] if found else None
+    """The zone of a bare-metal InfraEnv ``<flavor>-mtl-<zone>``; ``None`` for any other name.
+
+    The convention's one parser is ``node_types.parse`` (ADR-0072).
+    """
+    found = parse(infra_env)
+    return found.zone if found is not None and found.size == BARE_METAL else None
 
 
 def zones_of(infra_envs: Iterable[str]) -> tuple[str, ...]:

@@ -73,6 +73,7 @@ const cases: [string, readonly unknown[], unknown[]][] = [
   ["fleet.mcesAt", day1Keys.fleet.mcesAt("site1"), ["mces", "site1"]],
   ["fleet.allMces", day1Keys.fleet.allMces, ["mces", "all"]],
   ["fleet.infraEnvs", day1Keys.fleet.infraEnvs("mce-prod-1"), ["mce-infraenvs", "mce-prod-1"]],
+  ["fleet.nodeTypes", day1Keys.fleet.nodeTypes("mce-prod-1"), ["mce-node-types", "mce-prod-1"]],
   ["fleet.openshiftVersions", day1Keys.fleet.openshiftVersions("mce-prod-1"), ["mce-openshift-versions", "mce-prod-1"]],
   ["fleet.openshiftVersions (no MCE)", day1Keys.fleet.openshiftVersions(undefined), ["mce-openshift-versions", undefined]],
   ["fleet.machineConfigs", day1Keys.fleet.machineConfigs, ["machine-configs"]],

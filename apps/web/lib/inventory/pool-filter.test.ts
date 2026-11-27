@@ -4,7 +4,6 @@ import {
   NO_FILTER,
   facetsOf,
   narrows,
-  parseInfraEnvName,
   poolNames,
   shownPools,
   splitSelection,
@@ -30,17 +29,6 @@ const names = (pools: PoolCount[]) => pools.map((p) => p.infra_env);
 const filter = (overrides: Partial<PoolFilter>): PoolFilter => ({ ...NO_FILTER, ...overrides });
 
 describe("an InfraEnv's name", () => {
-  it("is read as flavor, size and zone under the platform's convention", () => {
-    expect(parseInfraEnvName("c200-mtl-az1")).toEqual({ flavor: "c200", size: "mtl", zone: "az1" });
-    expect(parseInfraEnvName("c200-kv32-az2")).toEqual({ flavor: "c200", size: "kv32", zone: "az2" });
-  });
-
-  it("off the convention is not guessed", () => {
-    for (const name of ["dell-r660-site1-128c-1024gb-5tb", "hp-gen12-site1-64c-512gb", "c200-kv-az1", "c200-gpu-az1", "C200-MTL-AZ1", "c200-mtl"]) {
-      expect(parseInfraEnvName(name)).toBeNull();
-    }
-  });
-
   it("gives the zones and sizes to filter by, in natural order with their counts; none when nothing parses", () => {
     expect(facetsOf(poolNames(POOLS))).toEqual({
       zone: [{ value: "az1", count: 2 }, { value: "az2", count: 1 }, { value: "az10", count: 1 }],

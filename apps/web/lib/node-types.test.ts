@@ -1,0 +1,56 @@
+import { describe, expect, it } from "vitest";
+import type { NodeType } from "@/types";
+import { infraEnvsOf, nodeTypeFor, nodeTypeOf, parseInfraEnvName, placedLabel, splitInfraEnv, zoneLabel, zoneOf } from "./node-types";
+
+const LEGACY = "dell-r660-site1-128c-1024gb-5tb";
+const R760: NodeType = {
+  name: "r760-mtl",
+  zones: [
+    { zone: "az1", infra_env: "r760-mtl-az1" },
+    { zone: "az2", infra_env: "r760-mtl-az2" },
+  ],
+};
+const OLD: NodeType = { name: LEGACY, zones: [{ zone: "az3", infra_env: LEGACY }] };
+
+describe("an InfraEnv's name", () => {
+  it("is read as flavor, size and zone under the platform's convention", () => {
+    expect(parseInfraEnvName("c200-mtl-az1")).toEqual({ flavor: "c200", size: "mtl", zone: "az1" });
+    expect(parseInfraEnvName("c200-kv32-az2")).toEqual({ flavor: "c200", size: "kv32", zone: "az2" });
+  });
+
+  it("off the convention is not guessed", () => {
+    for (const name of [LEGACY, "hp-gen12-site1-64c-512gb", "c200-kv-az1", "c200-gpu-az1", "C200-MTL-AZ1", "c200-mtl"]) {
+      expect(parseInfraEnvName(name)).toBeNull();
+    }
+  });
+});
+
+describe("a node type", () => {
+  it("is an InfraEnv's name without its zone, or the whole name off the convention", () => {
+    expect(splitInfraEnv("r760-mtl-az1")).toEqual({ nodeType: "r760-mtl", zone: "az1" });
+    expect(nodeTypeOf("c200-kv32-az2")).toBe("c200-kv32");
+    expect(splitInfraEnv(LEGACY)).toEqual({ nodeType: LEGACY, zone: null });
+  });
+
+  it("names an InfraEnv in a customer's words", () => {
+    expect(placedLabel("r760-mtl-az1")).toBe("r760-mtl · az1");
+    expect(placedLabel(LEGACY)).toBe(LEGACY);
+    expect(placedLabel(LEGACY, "az3")).toBe(`${LEGACY} · az3`);
+    expect(zoneLabel(null)).toBe("one zone");
+  });
+
+  it("is found for an InfraEnv by the hub's zones first, then by name", () => {
+    expect(nodeTypeFor("r760-mtl-az2", [OLD, R760])).toBe(R760);
+    expect(nodeTypeFor(LEGACY, [OLD, R760])).toBe(OLD);
+    expect(nodeTypeFor("r760-mtl-az9", [R760])).toBe(R760);
+    expect(nodeTypeFor("g12-mtl-az1", [R760])).toBeNull();
+    expect(nodeTypeFor("r760-mtl-az1", null)).toBeNull();
+  });
+
+  it("gives a zone from the hub when it lists the InfraEnv, else from the name", () => {
+    expect(zoneOf(LEGACY, [OLD])).toBe("az3");
+    expect(zoneOf(LEGACY)).toBeNull();
+    expect(zoneOf("r760-mtl-az4", [R760])).toBe("az4");
+    expect(infraEnvsOf([OLD, R760])).toEqual([LEGACY, "r760-mtl-az1", "r760-mtl-az2"]);
+  });
+});
