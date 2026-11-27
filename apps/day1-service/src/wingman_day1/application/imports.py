@@ -145,7 +145,8 @@ def positional_warnings(spec: ClusterSpec) -> list[str]:
     """Each lock on one nodepool position: on an imported file it is whichever nodepool is there."""
     return [
         f"{lock.path} locks one nodepool by position: on a cluster the flavor did not create it "
-        f"compares the file's nodepool[{lock.path.segments[1]}], whichever that is"
+        f"compares the file's nodepool[{lock.path.segments[1]}] and the NodePools of its node "
+        "type and suffix (ADR-0072), whichever that is"
         + ("; nodepools[*].configs compares every nodepool" if is_configs_lock(lock.path) else "")
         for lock in spec.locks()
         if lock.path.segments[0] == "nodepools" and not lock.is_rule

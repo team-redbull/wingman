@@ -36,7 +36,7 @@ from wingman_day1.application.provision_mrs import provision_merge_requests
 from wingman_day1.application.sites import SiteCatalog
 from wingman_day1.application.specs import SpecCatalog
 from wingman_day1.application.tree import read_tree
-from wingman_day1.domain import rendered_file
+from wingman_day1.domain import rendered_file, zone_inputs
 from wingman_day1.domain.changes import ClusterAction, ClusterChange, ProvisionResult
 from wingman_day1.domain.cluster_delete import delete_confirm_problems, delete_summary
 from wingman_day1.domain.cluster_file import (
@@ -392,6 +392,8 @@ class ClusterService:
     ) -> str:
         locks = spec.locks()
         conflicts = lock_conflicts(variables, locks, flavor=spec.metadata.name)
+        locked = zone_inputs.locked_replicas([(lock.path, lock.value) for lock in locks])
+        conflicts += zone_inputs.lock_conflicts(variables, locked, flavor=spec.metadata.name)
         inputs = build_inputs(
             variables=variables,
             cluster_name=ref.name,

@@ -59,6 +59,59 @@ What there was:
    Infrastructure workspace (Inventory Management, MCEs, seeds and KV
    clusters) keeps "InfraEnv", where the objects are the platform's.
 
+### Logical and physical NodePools
+
+7. **A logical nodepool is a node type, one config and replicas per zone.**
+   What the customer sees and edits; behind it, one **physical** NodePool per
+   zone of that node type on the cluster's MCE, each with exactly the same
+   config (configs, node labels, tuning profiles, scale-down policy, name
+   suffix), `infraEnvName` its zone's InfraEnv, and its own replicas. Each is
+   named `<InfraEnv>[-<suffix>]` (ADR-0071), the suffix the group's:
+   `r760-mtl-az1-gpu`, `r760-mtl-az2-gpu`, ...
+8. **The create request carries it; day1 spreads it.** A create's
+   `nodepools[i]` may give `node_type` and `zones: [{infra_env, replicas}]`
+   (`wingman_day1.domain.zone_inputs`). The flavor's positions, presets,
+   locks and ratio stay logical: `nodepools[i]` is the logical nodepool. Day1
+   checks it (the zones are InfraEnvs of one node type, each once, replicas
+   whole and at least 0, one at least in all; no `infra_env` or other
+   InfraEnvs beside `zones`), names each zone's NodePool and finds a clash
+   across nodepools, then spreads it into physical nodepools in zone order
+   before the render. The template and the cluster file see physical
+   nodepools only: **no new key in the cluster file**. A nodepool without
+   `zones` is physical, as before.
+9. **Every zone is written, 0 replicas allowed.** The specs template writes
+   `replicas: 0` as given (`default(2)` applies only to a missing key),
+   placement leaves a 0 out of its needs (the web's `need` and day1's
+   `file_needs`), the provision-cluster workflow checks a nodepool's list and
+   configs but not its replicas, and HyperShift runs a NodePool at 0. So the
+   group always has its full shape, and a zone can grow later without adding
+   a NodePool.
+10. **Locks and the ratio hold per zone.** A flavor's locked `replicas` on a
+    logical nodepool fixes every zone's (`zone_inputs.lock_conflicts`); its
+    configs, node labels and scale-down policy are the group's one config. A
+    ratio (ADR-0040) sizes every zone of a sized nodepool: each zone gets
+    `ratio[i] × size`, and the zones grow together. Without a ratio, each zone
+    starts at the flavor's preset replicas (else the template's 2) and the
+    customer sets each.
+11. **A flavor presets a node type, never zones.** `nodepools[i].node_type` is
+    a preset (a DNS label that is not an InfraEnv of the convention, and not
+    beside an `infra_env`); `zones` are the MCE's and refused at save
+    (`zone_inputs.flavor_problems`). A flavor that presets an `infra_env`
+    (before node types) still works: that nodepool is physical, in that one
+    zone.
+12. **Drift, sync and import group by logical nodepool.** The group is read
+    from the file's names alone (`wingman_day1.domain.logical_pools`): entries
+    whose InfraEnvs are one node type and whose names carry one suffix (a
+    derived name has none) are one logical nodepool, in first-seen order; an
+    entry named off the rule, or drawing from no InfraEnv, is one alone. A
+    flavor position's lock holds on every NodePool of the file's logical
+    nodepool there, so a zone-spread cluster shows no false drift, each
+    drifted zone is its own line (by its NodePool), and a sync sets every zone
+    alike and keeps the group's shape (it adds and removes no NodePool). While
+    the file has fewer groups than the flavor has nodepools (a cluster made
+    before node types from a flavor that preset one zone's InfraEnv per
+    position), each position stays one entry, as before.
+
 ## Alternatives rejected
 
 - **The node type from the zone label** (the name less `-<label>`): a cluster
@@ -68,6 +121,13 @@ What there was:
   would change for a field only the create form needs.
 - **Keeping placement's "node type"**: the same words would mean `r760-mtl`
   on the form and `r760-mtl-az1 + r760-mtl-az2` in the placement panel.
+- **The web spreading the zones** and sending physical nodepools: a flavor's
+  locks, presets and ratio name positions, which would no longer be the
+  flavor's, and every check would need the group back.
+- **A key in the cluster file for the group** (an annotation or a label): the
+  file is the chart's values file, and the names already carry the group.
+- **Omitting a zone at 0 replicas**: the group's shape would change with its
+  size, and a zone grown later would be a new NodePool to add by hand.
 
 ## Consequences
 
@@ -77,6 +137,12 @@ What there was:
 - An InfraEnv without the zone label and off the convention is one node type
   in one unnamed zone: nothing groups it with another.
 - The dev fleet's `ocp4-prod-mce-site1-a` has `r760-mtl` in three zones.
+- A new cluster's file has more NodePools than its flavor has nodepools: one
+  per zone. A 0-replica NodePool is a NodePool still: it shows on the
+  cluster page and on the MCE, with no node.
+- Two hand-made NodePools of one node type and suffix (an older cluster's
+  derived names, `<clusterName>-r760-mtl-az1` and `-az2`) are one logical
+  nodepool: a position's lock that held only the first now holds both.
 
 ## Verification
 
@@ -88,3 +154,13 @@ What there was:
   found for an InfraEnv.
 - The placement suites (`test_placement_api.py`, `mce-placement.spec.ts`)
   read `server_pools`.
+- `apps/day1-service/tests/unit/domain/test_zone_inputs.py`: the spread,
+  each zone's replicas, the checks, a locked replicas per zone, the ratio per
+  zone, the zone names and a clash, a flavor's node type.
+- `apps/day1-service/tests/unit/domain/test_logical_pools.py`: the grouping
+  by node type and suffix, a flavor's positions (and an older cluster's),
+  drift on a zone-spread file.
+- `apps/day1-service/tests/api/test_logical_nodepools_api.py`: a flavor's
+  node type, a create written as three NodePools (one at 0), in sync with
+  its flavor, two zones' drift by NodePool, a sync; the locked replicas and
+  a nodepool with no replica refused.

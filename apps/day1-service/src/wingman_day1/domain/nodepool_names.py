@@ -51,6 +51,7 @@ from typing import Final, cast
 
 from wingman_day1.domain.names import dns_label_problems
 from wingman_day1.domain.template import FieldType, TemplateField
+from wingman_day1.domain.zone_inputs import zone_infra_envs
 
 SUFFIX_INPUT: Final = "name_suffix"
 """The form's input in each ``nodepools[]`` entry: the part a person adds. Never rendered."""
@@ -220,27 +221,56 @@ def _pool_problems(
     return name_problems(shown, name, infra_env), name, at
 
 
+def _zone_names(
+    where: str, pool: Mapping[str, object], zones: list[str]
+) -> tuple[list[str], list[str]]:
+    """A logical nodepool's problems and its NodePools' names, one per zone (ADR-0072).
+
+    Every zone's NodePool is ``<zone's InfraEnv>[-<suffix>]``: the suffix is
+    the nodepool's, shared by its zones.
+    """
+    at, suffix = f"{where}.{SUFFIX_INPUT}", pool.get(SUFFIX_INPUT)
+    problems = suffix_problems(at, suffix)
+    if _text(pool.get(NAME_INPUT)) is not None:
+        problems.append(
+            f"{where}.{NAME_INPUT}: a nodepool spread over zones is named per zone from its "
+            f"{SUFFIX_INPUT}"
+        )
+    if problems:
+        return problems, []
+    names = [compose(zone, suffix if isinstance(suffix, str) else None) for zone in zones]
+    for i, (name, zone) in enumerate(zip(names, zones, strict=True)):
+        shown = at if suffix else f"{where}.zones[{i}].{INFRA_ENV_INPUT}"
+        problems += name_problems(shown, name, zone)
+    return problems, names
+
+
 def input_problems(inputs: Mapping[str, object], *, preset: bool = False) -> list[str]:
     """Why the nodepools' names may not be used: a create's (or, ``preset``, a flavor's).
 
     Each suffix is a DNS-1123 label's end; a ``nodepool_name`` follows the
     rule (a flavor may not preset one: the InfraEnv is the cluster's); each
     name is at most :data:`MAX_NAME` and the cluster's only one. A flavor's
-    nodepool without an InfraEnv is named at create.
+    nodepool without an InfraEnv is named at create; a logical nodepool's
+    NodePools are named per zone (``zone_inputs``, ADR-0072).
     """
     problems: list[str] = []
     seen: dict[str, int] = {}
     for index, pool in nodepool_entries(inputs, "nodepools"):
-        found, name, at = _pool_problems(f"nodepools[{index}]", pool, preset=preset)
+        where, zones = f"nodepools[{index}]", zone_infra_envs(pool)
+        if zones is None:
+            found, name, at = _pool_problems(where, pool, preset=preset)
+            names = [] if name is None else [name]
+        else:
+            (found, names), at = _zone_names(where, pool, zones), f"{where}.{SUFFIX_INPUT}"
         problems += found
-        if name is None:
-            continue
-        if name in seen:
-            problems.append(
-                f"{at}: NodePool {name} is nodepools[{seen[name]}]'s already; nodepools on one "
-                "InfraEnv need different suffixes, and at most one may have none"
-            )
-        seen.setdefault(name, index)
+        for name in names:
+            if seen.get(name, index) != index:
+                problems.append(
+                    f"{at}: NodePool {name} is nodepools[{seen[name]}]'s already; nodepools on one "
+                    "InfraEnv need different suffixes, and at most one may have none"
+                )
+            seen.setdefault(name, index)
     return problems
 
 

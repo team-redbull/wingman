@@ -239,14 +239,22 @@ class SyncService:
         name = spec.metadata.name
         values = values_or_refuse(cluster.content)
         cluster_name = cluster.hosted_cluster.cluster_name
-        plain = value_drift(spec.locks(), values, cluster_name=cluster_name, catalog=catalog)
+        count = spec.nodepool_count()  # a position is a logical nodepool (ADR-0072)
+        plain = value_drift(
+            spec.locks(), values, cluster_name=cluster_name, catalog=catalog, flavor_nodepools=count
+        )
         choice_problems = _hardware_problems(hardware, plain, catalog, cluster_name=cluster_name)
         if choice_problems:
             raise InvalidInputError(
                 f"the hardware chosen for {cluster.ref.name} is not usable", choice_problems
             )
         changes = value_drift(
-            spec.locks(), values, cluster_name=cluster_name, catalog=catalog, hardware=hardware
+            spec.locks(),
+            values,
+            cluster_name=cluster_name,
+            catalog=catalog,
+            hardware=hardware,
+            flavor_nodepools=count,
         )
         problems = [f"{d.file_key}: {d.needs_decision}" for d in changes if d.needs_decision]
         provenance = Provenance(name, spec.metadata.version, cluster.provenance.requested_addons)
