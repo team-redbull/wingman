@@ -86,11 +86,11 @@ export const day2Api = {
   /** PUT: one env's `values-<env>.yaml` of a fleet default. */
   envValues: (team: string, chart: string, scope: FleetScope, env: string, dryRun = false) =>
     `${addon(team, chart)}/defaults/${encodeURIComponent(scope)}/envs/${encodeURIComponent(env)}/values${dry(dryRun)}`,
-  /** POST: a new OCP-version pin of the add-on (ADR-0043's 2026-11-25 amendment). */
-  ocpPins: (team: string, chart: string, dryRun = false) => `${addon(team, chart)}/ocp-versions${dry(dryRun)}`,
-  /** PUT: change one pin; DELETE (with a JSON body): remove it. */
-  ocpPin: (team: string, chart: string, version: string, dryRun = false) =>
-    `${addon(team, chart)}/ocp-versions/${encodeURIComponent(version)}${dry(dryRun)}`,
+  /** An add-on's OLM operator: its Subscription per level, and the mirrored catalog (ADR-0073). */
+  addonOperator: (team: string, chart: string) => `${addon(team, chart)}/operator`,
+  /** A chart before its add-on exists, for New add-on: its branches, and its operator if it is one. */
+  addonChart: (team: string, chart: { repourl: string; revision?: string; path?: string }) =>
+    `/api/day2/teams/${encodeURIComponent(team)}/addon-chart${query({ repourl: chart.repourl, revision: chart.revision, path: chart.path })}`,
   /** POST: deploy the add-on on specific MCEs, one install MR per MCE (ADR-0053's amendment). */
   mceInstalls: (team: string, chart: string, dryRun = false) => `${addon(team, chart)}/mce-installs${dry(dryRun)}`,
 };
@@ -117,6 +117,9 @@ export const day2Keys = {
   fleetDefaults: ["day2", "fleet-defaults"] as const,
   teamAddons: (team: string) => ["day2", "team-addons", team] as const,
   addonDetail: (team: string, chart: string) => ["day2", "team-addons", team, chart] as const,
+  addonOperator: (team: string, chart: string) => ["day2", "addon-operator", team, chart] as const,
+  addonChart: (team: string, repourl: string, revision: string, path: string) =>
+    ["day2", "addon-chart", team, repourl, revision, path] as const,
   /** `merge-preview` of a destination with `override` (stable JSON) as `path` (its own file when `""`), or without one (`null`). */
   mergePreview: (id: string, team: string, chart: string, override: string | null, path = "") =>
     ["day2", "merge-preview", id, team, chart, override, path] as const,
@@ -158,6 +161,18 @@ export function newAddonHref(team: string): string {
 }
 
 // ── Catalog ──────────────────────────────────────────────────────────────────
+
+/** A chart folder becomes part of Application names: a DNS label (the service's rule `chart-name`). */
+export const CHART_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+
+/** A chart repo is `http(s)://...` (the service's rule `repourl-invalid`). */
+export const REPO_URL = /^https?:\/\/\S+$/;
+
+/** An add-on's revision as shown: `HEAD` is the chart repo's default branch, listed first in `available_versions`. */
+export function revisionLabel(entry: Pick<CatalogEntry, "current_version" | "available_versions">): string {
+  const head = entry.available_versions[0];
+  return entry.current_version === "HEAD" && head ? `HEAD (${head})` : entry.current_version;
+}
 
 /**
  * The revisions a chart can be asked for: the add-on's first (`HEAD`, the

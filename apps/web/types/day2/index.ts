@@ -15,3 +15,4 @@ export * from "./values-preview";
 export * from "./writes";
 export * from "./authoring";
 export * from "./addons";
+export * from "./operators";

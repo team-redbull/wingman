@@ -2,143 +2,24 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Boxes, Layers, Pencil, RefreshCw } from "lucide-react";
-import { api } from "@/lib/api-client";
-import { FLEET_SCOPES, day2Api, day2Keys, keyFromParam, problemOf, syncSummary, teamAddonsHref } from "@/lib/day2";
+import { Layers, RefreshCw } from "lucide-react";
+import { FLEET_SCOPES, keyFromParam, problemOf, teamAddonsHref } from "@/lib/day2";
 import { cn } from "@/lib/utils";
-import { ignoreDifferencesText } from "@/lib/values";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, EmptyStateLink } from "@/components/common/empty-state";
 import { ProblemList } from "@/components/common/problem-list";
+import { AddonCard } from "@/components/addons/addon-card";
 import { ChangeResultPanel, type OpenedChanges } from "@/components/addons/change-result";
-import { EditAddonDialog } from "@/components/addons/default-dialogs";
 import { FindingsList } from "@/components/addons/findings";
 import { ReadOnlyBadge, ReadOnlyNote } from "@/components/addons/team-access";
-import { DefinitionList } from "@/components/addons/definition-list";
 import { Breadcrumbs, PageTitle, useAddonAccess } from "@/components/addons/page-header";
-import { RepoFileView } from "@/components/addons/repo-file";
 import { OcpPinsCard } from "@/components/addons/ocp-pins/pins-card";
 import { ScopePanelCard, type AddonWrites } from "@/components/addons/scope-panel";
-import { ValuesLevels } from "@/components/addons/values-levels";
-import type { AuthoringChange, CatalogEntry, AddonDetail, ScopePanel } from "@/types/day2";
+import { useAddonDetail } from "@/components/addons/use-addon-reads";
+import type { AuthoringChange, ScopePanel } from "@/types/day2";
 
 const VERB: Record<string, OpenedChanges["verb"]> = { "create-addon": "Create", "make-default": "Promote" };
-
-function Card({ title, icon: Icon, action, children, label }: { title: string; icon: typeof Boxes; action?: React.ReactNode; children: React.ReactNode; label: string }) {
-  return (
-    <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5" aria-label={label}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />
-          {title}
-        </h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** `HEAD` is the chart repo's default branch, listed first in `available_versions`. */
-function revisionLabel(entry: CatalogEntry): string {
-  const head = entry.available_versions[0];
-  return entry.current_version === "HEAD" && head ? `HEAD (${head})` : entry.current_version;
-}
-
-/** The add-on itself, `operators/<chart>/`: where it deploys from and how, and its Sig values. */
-function AddonFiles({ detail, writes }: { detail: AddonDetail; writes: AddonWrites }) {
-  const [editing, setEditing] = useState(false);
-  const entry = detail.catalog;
-  const meta = entry?.argocd_metadata;
-  return (
-    <Card
-      title="Add-on"
-      icon={Boxes}
-      label="Add-on"
-      action={
-        entry &&
-        writes.isAdmin && (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            disabled={Boolean(writes.readOnlyReason)}
-            title={writes.readOnlyReason ?? undefined}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 gap-1.5")}
-          >
-            <Pencil className="h-3 w-3" />
-            Edit add-on
-          </button>
-        )
-      }
-    >
-      {!entry ? (
-        <p className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
-          {detail.name} is not in {detail.team}&apos;s catalog: there is no <code>operators/{detail.name}/</code>, only the fleet
-          defaults below. Their own files are the whole deploy config.
-        </p>
-      ) : (
-        <>
-          <p className="text-xs text-muted-foreground">
-            <code>operators/{detail.name}/</code>: where the chart comes from, how ArgoCD syncs it, and its Sig values.
-          </p>
-          <DefinitionList
-            items={[
-              [
-                "repourl",
-                meta?.repourl || (
-                  <span className="inline-flex items-center gap-1 font-sans text-status-warning-fg">
-                    <AlertTriangle className="h-3 w-3" />
-                    none in lowercase: every install must give one
-                  </span>
-                ),
-              ],
-              ["chart repo", entry.chart_project ?? "not on this GitLab"],
-              ["targetRevision", revisionLabel(entry)],
-              ["path", meta?.path || "."],
-              ["projectNamespace", meta?.projectNamespace || "—"],
-              ["sync", syncSummary(entry.sync)],
-              [
-                "ignoreDifferences",
-                entry.ignore_differences && entry.ignore_differences.length > 0 ? (
-                  <pre key="ignore" className="whitespace-pre-wrap">
-                    {ignoreDifferencesText(entry.ignore_differences)}
-                  </pre>
-                ) : (
-                  "—"
-                ),
-              ],
-            ]}
-          />
-        </>
-      )}
-      <Tabs defaultValue="deploy">
-        <TabsList>
-          <TabsTrigger value="deploy">{detail.name}.yaml</TabsTrigger>
-          <TabsTrigger value="values">Sig values</TabsTrigger>
-        </TabsList>
-        <TabsContent value="deploy" className="pt-2">
-          <RepoFileView file={detail.deploy_config} absent={`No operators/${detail.name}/${detail.name}.yaml.`} />
-        </TabsContent>
-        <TabsContent value="values" className="space-y-2 pt-2">
-          <ValuesLevels current="Sig values" />
-          <RepoFileView file={detail.values_file} absent="No values.yaml: the chart's own values apply." />
-        </TabsContent>
-      </Tabs>
-      {editing && entry && (
-        <EditAddonDialog
-          entry={entry}
-          open
-          onOpenChange={setEditing}
-          readOnlyReason={writes.readOnlyReason}
-          onOpened={writes.onOpened}
-        />
-      )}
-    </Card>
-  );
-}
 
 function sortedScopes(scopes: ScopePanel[]): ScopePanel[] {
   const order = (s: ScopePanel) => {
@@ -160,8 +41,9 @@ function PageSkeleton() {
 
 /**
  * One add-on of a team, reached from the Addons page (ADR-0053): the add-on
- * itself (`operators/<chart>/` in the team repo: its deploy config and Sig
- * values), its OCP-version pins (edited here, ADR-0043's 2026-11-25 amendment), and
+ * itself (`operators/<chart>/` in the team repo: its deploy config, Sig
+ * values and an OLM operator's settings, ADR-0073), its OCP-version pins
+ * (ADR-0043's 2026-11-25 amendment; both edited in one editor), and
  * one panel per fleet scope: whether it is a default there, which destinations
  * get it, and each destination's overrides. Every write is previewed first and
  * confirmed against the previewed plan. One cluster's add-ons stay on that
@@ -172,11 +54,7 @@ export default function AddonPage() {
   const team = keyFromParam(params.team);
   const name = keyFromParam(params.addon);
   const [opened, setOpened] = useState<OpenedChanges | null>(null);
-  const query = useQuery<AddonDetail>({
-    queryKey: day2Keys.addonDetail(team, name),
-    queryFn: () => api.get<AddonDetail>(day2Api.addonDetail(team, name)),
-    staleTime: 30_000,
-  });
+  const query = useAddonDetail(team, name);
   const detail = query.data;
   const access = useAddonAccess(team, detail);
 
@@ -238,7 +116,7 @@ export default function AddonPage() {
         <>
           <FindingsList findings={detail.warnings} showContext />
           <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <AddonFiles detail={detail} writes={writes} />
+            <AddonCard detail={detail} writes={writes} />
             <OcpPinsCard detail={detail} writes={writes} />
           </div>
           <section className="space-y-3" aria-label="Defaults">

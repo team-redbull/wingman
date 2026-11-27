@@ -40,7 +40,8 @@ Cluster values  what a cluster gets where the add-on is used: create, a flavor, 
       <ul className="text-sm text-muted-foreground leading-relaxed mb-3 list-disc space-y-1 pl-5">
         <li>
           <strong>New add-on</strong>, on a team, adds one to the team&apos;s catalog; an add-on&apos;s{" "}
-          <strong>Edit add-on</strong> (the same fields) changes its deploy config, sync options and Sig values.
+          <strong>Edit add-on</strong> (the same fields) changes its deploy config, sync options, Sig values, an
+          operator&apos;s settings and its OCP-version pins, all in one merge request.
         </li>
         <li>
           Its <strong>Defaults &amp; overrides</strong> page has one panel per scope (hosted clusters, MCEs, the hub,
@@ -63,15 +64,18 @@ Cluster values  what a cluster gets where the add-on is used: create, a flavor, 
 
       <h3 className="text-base font-semibold mt-6 mb-3">OCP-version pins</h3>
       <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-        A pin gives every destination at exactly one OpenShift version its own chart revision and values:{" "}
+        A pin gives every destination at exactly one OpenShift version its own chart revision, values, or both:{" "}
         <InlineCode>operators/{"{chart}"}/ocp-versions/{"{version}"}/</InlineCode>, a{" "}
         <InlineCode>{"{chart}"}.yaml</InlineCode> holding <InlineCode>targetRevision</InlineCode> (a branch of the
-        chart repo) and, when it has values, a <InlineCode>values.yaml</InlineCode> above the Sig values. The version is
-        the full one a cluster&apos;s <InlineCode>mastertag</InlineCode> gives (<InlineCode>4.16.27-x86_64</InlineCode>{" "}
-        is <InlineCode>4.16.27</InlineCode>); <InlineCode>4.16</InlineCode> is refused, since a cluster even a z-stream
-        away does not read it. The add-on&apos;s <strong>OCP-version pins</strong> card adds, edits and removes them,
-        offering the versions its destinations run; <strong>New add-on</strong> can set them in its create merge
-        request. Each one is previewed and confirmed, as above.
+        chart repo) when it pins one, and a <InlineCode>values.yaml</InlineCode> above the Sig values when it has values.
+        A pin with values and no revision (a <strong>values-only pin</strong>) keeps the add-on&apos;s revision. The
+        version is the full one a cluster&apos;s <InlineCode>mastertag</InlineCode> gives (
+        <InlineCode>4.16.27-x86_64</InlineCode> is <InlineCode>4.16.27</InlineCode>); <InlineCode>4.16</InlineCode> is
+        refused, since a cluster even a z-stream away does not read it. The add-on&apos;s{" "}
+        <strong>OCP-version pins</strong> card lists them; its <strong>Add pin</strong>, <strong>Edit</strong> and{" "}
+        <strong>Remove</strong> open Edit add-on on the pins, which offers the versions its destinations run and the
+        chart repo&apos;s branches. Changing a pin&apos;s version moves its folder; a removal can be undone until the
+        preview. <strong>New add-on</strong> can set pins in its create merge request.
       </p>
       <Callout type="warning" title="Two things the platform does with pins">
         A fleet default whose own <InlineCode>{"{chart}"}.yaml</InlineCode> sets <InlineCode>targetRevision</InlineCode>{" "}
@@ -79,6 +83,8 @@ Cluster values  what a cluster gets where the add-on is used: create, a flavor, 
         only at its exact version, so a cluster that day1 moves to a new one, z-streams too, falls back to the
         add-on&apos;s revision until that version&apos;s pin exists: add it first, then upgrade.
       </Callout>
+
+      <OperatorsDocs />
 
       <h3 className="text-base font-semibold mt-6 mb-3">Value layering</h3>
       <p className="text-sm text-muted-foreground leading-relaxed mb-3">
@@ -110,6 +116,59 @@ cluster               …/{cluster}/{chart}/values.yaml
 
       <AddonChartsDocs />
     </section>
+  );
+}
+
+/** An add-on that installs an OLM operator (ADR-0073): its settings as OperatorHub has them, per OCP version. */
+function OperatorsDocs() {
+  return (
+    <>
+      <h3 className="text-base font-semibold mt-6 mb-3">Operators</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+        An operator is an add-on like any other. Wingman treats one as an <strong>OLM operator</strong> when its
+        chart&apos;s own <InlineCode>values.yaml</InlineCode> holds a Subscription: a <InlineCode>subscription</InlineCode>{" "}
+        block with a <InlineCode>name</InlineCode>, at the top level or under one key, as the platform&apos;s{" "}
+        <InlineCode>operator-olm</InlineCode> subchart has it (<InlineCode>operator-olm.subscription</InlineCode>). The
+        add-on&apos;s page then shows, and Edit add-on edits, what OperatorHub&apos;s install page asks for, in its order:
+      </p>
+      <CodeBlock language="An operator's settings, per level">
+{`Update channel   subscription.channel              a channel of the package (stable-v1.14)
+Version          subscription.startingCSV          "Latest in the channel", or one CSV name
+Update approval  subscription.installPlanApproval  Automatic; Manual is shown, never written
+Package, Install namespace, Installation mode, Catalog source: the chart's, read only`}
+      </CodeBlock>
+      <ul className="text-sm text-muted-foreground leading-relaxed mt-3 mb-3 list-disc space-y-1 pl-5">
+        <li>
+          The <strong>Version</strong> is the version of the first install only: with Automatic approval, OLM then
+          follows the channel, as on OperatorHub.
+        </li>
+        <li>
+          <strong>Manual</strong> approval stalls the GitOps sync: the Subscription waits at{" "}
+          <InlineCode>InstallPlanPending</InlineCode>, Argo CD reports it Progressing, and no later sync wave (the
+          chart&apos;s own resources) runs. The platform has no InstallPlan approver, so Wingman offers Automatic only; a
+          file that sets Manual today is shown with a warning until someone picks Automatic.
+        </li>
+        <li>
+          The Sig values set the channel for every cluster. Each OpenShift minor&apos;s catalog differs (a channel such as{" "}
+          <InlineCode>stable-v1.14</InlineCode> may be gone in 4.20), so an <strong>OCP-version pin</strong> can set its
+          own channel and version: a values-only pin, with no revision, is enough. A pin that sets none inherits the Sig
+          values&apos;.
+        </li>
+        <li>
+          Only those three keys are written, in place: the values file keeps every other line and its comments. A chart
+          with two Subscriptions is shown, not edited.
+        </li>
+      </ul>
+      <Callout type="info" title="The mirrored catalog: lists instead of free text">
+        With <InlineCode>DAY2_OPERATOR_CATALOG_PROJECT</InlineCode> set (a GitLab project holding, per OCP minor,
+        oc-mirror&apos;s <InlineCode>ImageSetConfiguration</InlineCode> and, for versions, a file-based catalog; paths in{" "}
+        <InlineCode>DAY2_OPERATOR_CATALOG_PATHS</InlineCode>, default <InlineCode>mirror/imageset-config-{"{minor}"}.yaml</InlineCode>),
+        the channel and version are picked from a list: the Sig values offer the channels of every minor the add-on&apos;s
+        clusters run, each marked where it is missing, and a pin those of its own minor. Without it, or for a package
+        the catalog lacks, they are typed, and the form says why. The catalog never refuses a change: a channel or
+        version it does not list is a warning.
+      </Callout>
+    </>
   );
 }
 

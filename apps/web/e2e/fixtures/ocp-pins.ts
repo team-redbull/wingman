@@ -3,14 +3,14 @@ import { json } from "./api-handlers";
 import { addonDetailOf } from "./addon-detail";
 import { changeOf } from "./authoring";
 import { HOSTED_ID, TWIN_IDS, problem } from "./day2";
-import type { AddonDetail, AuthoringPlan, DestinationImpact } from "../../types/day2";
+import type { AddonDetail, AuthoringPlan, DestinationImpact, PinEditIn, PlannedFileChange } from "../../types/day2";
 
 /**
- * An add-on's OCP-version pins (ADR-0043's 2026-11-25 amendment), mocked as
- * the service answers them (docs/notes/2026-11-12-day2-addon-authoring-api.md
- * §8): `POST /addons/{team}/{addon}/ocp-versions`, `PUT` and `DELETE
- * .../ocp-versions/{version}`, each a dry run first, then the write
- * confirming the dry run's `needs_confirmation` and `digest`.
+ * An add-on's OCP-version pins (ADR-0043's 2026-11-25 amendment), edited in
+ * Edit add-on's one `PUT /addons/{team}/{addon}` (ADR-0073), mocked as the
+ * service answers it (docs/notes/2026-11-12-day2-addon-authoring-api.md §9):
+ * a dry run first, then the write confirming the dry run's
+ * `needs_confirmation` and `digest`.
  *
  * observability/prometheus is the pinned add-on of the mocked world
  * (4.18.22 on 2.44.0). Here its destinations run two versions: the hosted
@@ -52,72 +52,107 @@ export interface PinRequests {
   writes: { method: string; path: string; dryRun: boolean; body: Record<string, unknown> }[];
 }
 
-function impactOf(detail: AddonDetail, version: string): DestinationImpact[] {
-  return detail.scopes
+type Body = Record<string, unknown>;
+
+const SIG_KEYS = ["repourl", "target_revision", "path", "project_namespace", "sync", "ignore_differences", "values", "operator"];
+
+/** The versions a body's pins touch: each one's version, the folder it moves from, and each removal. */
+function touched(body: Body): string[] {
+  const pins = (body.ocp_versions as PinEditIn[] | undefined) ?? [];
+  return [...pins.flatMap((p) => [p.version, p.from_version ?? p.version]), ...((body.remove_ocp_versions as string[] | undefined) ?? [])];
+}
+
+/** The MR title, as §9 gives it. */
+function titleOf(detail: AddonDetail, body: Body): string {
+  const pins = ((body.ocp_versions as PinEditIn[] | undefined) ?? []).map((p) =>
+    !p.from_version ? `${p.version} (new)` : p.from_version !== p.version ? `${p.version} (moved from ${p.from_version})` : p.version,
+  );
+  const parts = [...pins, ...((body.remove_ocp_versions as string[] | undefined) ?? []).map((v) => `${v} (removed)`)];
+  const sig = SIG_KEYS.some((k) => k in body);
+  const what = [sig ? "Sig values" : "", parts.length > 0 ? `OCP-version pins ${parts.join(", ")}` : ""].filter(Boolean).join(" and ");
+  return `[Wingman/Day2] Update addon ${detail.team}/${detail.name} ${what}`;
+}
+
+function filesOf(detail: AddonDetail, body: Body): PlannedFileChange[] {
+  const op = `operators/${detail.name}`;
+  const pins = (body.ocp_versions as PinEditIn[] | undefined) ?? [];
+  const removed = (body.remove_ocp_versions as string[] | undefined) ?? [];
+  return [
+    ...(SIG_KEYS.some((k) => k in body) ? [{ action: "update", path: `${op}/values.yaml`, content: "# the team's values\n", previous: null }] : []),
+    ...pins.map((p) => ({ action: p.from_version ? "update" : "create", path: `${op}/ocp-versions/${p.version}/values.yaml`, content: "{}\n", previous: null })),
+    ...removed.map((v) => ({ action: "delete", path: `${op}/ocp-versions/${v}/${detail.name}.yaml`, content: null, previous: "targetRevision: 2.44.0\n" })),
+  ];
+}
+
+/**
+ * The plan of Edit add-on's PUT: the title and files from the body, and
+ * each app it changes: every one for a Sig change, else those at the
+ * versions its pins touch.
+ */
+function editPlan(detail: AddonDetail, body: Body): AuthoringPlan {
+  const versions = touched(body);
+  const sig = SIG_KEYS.some((k) => k in body);
+  const impact: DestinationImpact[] = detail.scopes
     .flatMap((s) => s.destinations)
-    .filter((d) => d.deployed && d.ocp_version === version)
+    .filter((d) => d.deployed && (sig || versions.includes(d.ocp_version ?? "")))
     .map((d) => ({
       cluster: d.id,
       name: d.name,
       kind: d.kind,
       effect: "changed",
       app_name: `${detail.team}-${d.name}-${detail.name}-deploy`,
-      changes: [{ stack: "deploy", key: "targetRevision", before: "2.45.0", after: "2.44.0" }],
+      changes: [{ stack: "values", key: "operator-olm.subscription.channel", before: "stable-v1", after: "stable-v1.15" }],
       orphaned: false,
     }));
-}
-
-function pinPlan(method: string, detail: AddonDetail, version: string, body: Record<string, unknown>): AuthoringPlan {
-  const folder = `operators/${detail.name}/ocp-versions/${version}`;
-  const extra = method === "POST" ? ` (new: ${String(body.target_revision)})` : method === "DELETE" ? " (removed)" : "";
-  const impact = impactOf(detail, version);
   return {
     team: detail.team,
-    action: "update-default",
+    action: "update-team-default",
     chart: detail.name,
     scope: null,
-    title: `[Wingman/Day2] Update addon ${detail.team}/${detail.name} OCP-version pin ${version}${extra}`,
-    files: [
-      method === "DELETE"
-        ? { action: "delete", path: `${folder}/${detail.name}.yaml`, content: null, previous: "targetRevision: 2.44.0\n" }
-        : { action: method === "POST" ? "create" : "update", path: `${folder}/${detail.name}.yaml`, content: `targetRevision: ${String(body.target_revision)}\n`, previous: null },
-    ],
+    title: titleOf(detail, body),
+    files: filesOf(detail, body),
     reach: impact.map((i) => i.cluster),
     adopted: [],
     impact,
     excluded: [],
     needs_confirmation: impact.map((i) => i.cluster),
     warnings: [],
-    notes: [`operators/${detail.name}/ocp-versions/${version}/ is read by every destination at OCP ${version} exactly.`],
-    digest: `pin-digest-${method}-${version}`,
+    notes: versions.map((v) => `operators/${detail.name}/ocp-versions/${v}/ is read by every destination at OCP ${v} exactly.`),
+    digest: `edit-digest-${detail.name}-${versions.join("-")}`,
   };
 }
 
+/** Answer a PUT of Edit add-on for `detail`: the plan, or the MR once its preview is confirmed. */
+export function answerEdit(r: Route, detail: AddonDetail, seen: PinRequests) {
+  const request = r.request();
+  const url = new URL(request.url());
+  const body = (request.postDataJSON() ?? {}) as Body;
+  const dryRun = url.searchParams.get("dry_run") === "true";
+  seen.writes.push({ method: request.method(), path: url.pathname, dryRun, body });
+  const plan = editPlan(detail, body);
+  if (dryRun) return json(r, plan);
+  if (body.expected_digest !== plan.digest || JSON.stringify(body.confirm_changes) !== JSON.stringify(plan.needs_confirmation))
+    return r.fulfill(problem(422, "VALIDATION_ERROR", "confirm what the preview listed", { rule: "confirm-changes" }));
+  return json(r, { ...changeOf(plan), impact: plan.impact, needs_confirmation: plan.needs_confirmation, digest: plan.digest });
+}
+
 /**
- * Route the pin writes, and the pinned add-ons' reads with the versions
- * above. Register after mockAddonDetail (route mocks match last registered first).
+ * Route the pinned add-ons' reads with the versions above, and their Edit
+ * add-on PUTs that carry pins. Register after mockAddonDetail (route mocks
+ * match last registered first).
  */
 export async function mockOcpPins(page: Page): Promise<PinRequests> {
   const seen: PinRequests = { writes: [] };
-  await page.route(/\/api\/day2\/teams\/(observability\/addons\/prometheus|platform\/addons\/external-secrets)(\?.*)?$/, (r) => {
+  const pinned = /\/api\/day2\/teams\/(observability\/addons\/prometheus|platform\/addons\/external-secrets)(\?.*)?$/;
+  await page.route(pinned, (r) => {
     const p = new URL(r.request().url()).pathname.split("/").map(decodeURIComponent);
     return json(r, withVersions(addonDetailOf(p[4], p[6]) as AddonDetail));
   });
-  const write = (r: Route) => {
-    const request = r.request();
-    const url = new URL(request.url());
-    const p = url.pathname.split("/").map(decodeURIComponent);
-    const detail = withVersions(addonDetailOf(p[4], p[5]) as AddonDetail);
-    const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
-    const dryRun = url.searchParams.get("dry_run") === "true";
-    seen.writes.push({ method: request.method(), path: url.pathname, dryRun, body });
-    const plan = pinPlan(request.method(), detail, p[7] ?? String(body.version), body);
-    if (dryRun) return json(r, plan);
-    if (body.expected_digest !== plan.digest || JSON.stringify(body.confirm_changes) !== JSON.stringify(plan.needs_confirmation))
-      return r.fulfill(problem(422, "VALIDATION_ERROR", "confirm what the preview listed", { rule: "confirm-changes" }));
-    return json(r, { ...changeOf(plan), impact: plan.impact, needs_confirmation: plan.needs_confirmation, digest: plan.digest }, request.method() === "POST" ? 201 : 200);
-  };
-  await page.route(/\/api\/day2\/addons\/[^/?]+\/[^/?]+\/ocp-versions(\?.*)?$/, write);
-  await page.route(/\/api\/day2\/addons\/[^/?]+\/[^/?]+\/ocp-versions\/[^/?]+(\?.*)?$/, write);
+  await page.route(/\/api\/day2\/addons\/(observability\/prometheus|platform\/external-secrets)(\?.*)?$/, (r) => {
+    const body = (r.request().postDataJSON() ?? {}) as Body;
+    if (r.request().method() !== "PUT" || !("ocp_versions" in body || "remove_ocp_versions" in body)) return r.fallback();
+    const p = new URL(r.request().url()).pathname.split("/").map(decodeURIComponent);
+    return answerEdit(r, withVersions(addonDetailOf(p[4], p[5]) as AddonDetail), seen);
+  });
   return seen;
 }

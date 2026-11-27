@@ -11,12 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Hint } from "@/components/common/hint";
 import type { AddonTemplate, FleetScope, ScopeReach } from "@/types/day2";
 
-/** A chart folder becomes part of Application names: a DNS label (the service's rule `chart-name`). */
-export const CHART_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
-
-/** A chart repo is `http(s)://...` (the service's rule `repourl-invalid`). */
-export const REPO_URL = /^https?:\/\/\S+$/;
-
 export function TextField({
   label,
   value,
@@ -28,6 +22,8 @@ export function TextField({
   list,
   mono = true,
   disabled = false,
+  autoFocus = false,
+  invalid = false,
 }: {
   label: string;
   value: string;
@@ -40,6 +36,10 @@ export function TextField({
   list?: string;
   mono?: boolean;
   disabled?: boolean;
+  /** Focused when it mounts: a dialog opened on this field keeps it focused. */
+  autoFocus?: boolean;
+  /** The value breaks a rule `help` states. */
+  invalid?: boolean;
 }) {
   const id = useId();
   const labelClass = "font-semibold uppercase tracking-wide text-muted-foreground";
@@ -59,10 +59,13 @@ export function TextField({
       autoComplete="off"
       spellCheck={false}
       disabled={disabled}
+      autoFocus={autoFocus}
+      aria-invalid={invalid || undefined}
       aria-describedby={hint && help ? `${id}-help` : undefined}
       className={cn(
         "h-8 w-full rounded-lg border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60",
         mono && "font-mono",
+        invalid && "border-destructive/60",
       )}
     />
   );

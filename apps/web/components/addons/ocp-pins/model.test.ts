@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { AddonDetail, AddonOcpVersion, Destination, RepoFile, ScopeDestination, ScopePanel } from "@/types/day2";
+import { NO_SETTINGS } from "@/lib/olm";
+import type { AddonDetail, AddonOcpVersion, Destination, OperatorPin, RepoFile, ScopeDestination, ScopePanel } from "@/types/day2";
 import {
-  changeBody,
-  changeProblem,
+  cardsProblem,
   compareVersions,
   draftsProblem,
   fleetOverrides,
   pinBody,
+  pinCards,
+  pinEdit,
+  pinEdits,
   reachAt,
   teamVersions,
   versionProblem,
   versionSuggestions,
+  withNewCard,
   withNewRow,
 } from "./model";
 
@@ -59,18 +63,31 @@ describe("an OCP-version pin's version", () => {
 });
 
 describe("a new add-on's pins", () => {
-  it("need a revision, values that parse, and one version each", () => {
+  it("need a revision, values or operator settings, values that parse, and one version each", () => {
     const [a, b] = withNewRow(withNewRow([]));
     expect(a.key).not.toBe(b.key);
     expect(draftsProblem([])).toBeNull();
-    expect(draftsProblem([{ ...a, version: "4.16.27", revision: "" }])).toContain("Pin 1: Give the chart revision");
+    // pin-empty: a pin with nothing in it is refused; a revision alone, values alone or a channel alone is a pin (ADR-0073).
+    expect(draftsProblem([{ ...a, version: "4.16.27", revision: "" }])).toBe("Pin 1: A pin needs a chart revision or values");
+    expect(draftsProblem([{ ...a, version: "4.16.27", revision: "" }], true)).toBe("Pin 1: A pin needs a chart revision, values or operator settings");
+    expect(draftsProblem([{ ...a, version: "4.16.27", revision: "", values: { a: 1 } }])).toBeNull();
+    expect(draftsProblem([{ ...a, version: "4.16.27", operator: { ...NO_SETTINGS, channel: "stable-v1" } }], true)).toBeNull();
+    expect(draftsProblem([{ ...a, version: "4.16.27", operator: { ...NO_SETTINGS, channel: "-bad" } }], true)).toContain("Pin 1: Update channel:");
     expect(draftsProblem([{ ...a, version: "4.16.27", revision: "1.0", values: null }])).toBe("Pin 1: Fix the values YAML");
     const twice = [
       { ...a, version: "4.16.27", revision: "1.0" },
       { ...b, version: "4.16.27", revision: "2.0" },
     ];
     expect(draftsProblem(twice)).toBe("Pin 1: OCP 4.16.27 is pinned already");
-    expect(pinBody({ version: " 4.16.27", revision: " 1.0 ", values: null })).toEqual({ version: "4.16.27", target_revision: "1.0", values: {} });
+  });
+
+  it("are sent with a revision only when given, and operator settings only when set", () => {
+    expect(pinBody({ version: " 4.16.27", revision: " 1.0 ", values: null, operator: NO_SETTINGS })).toEqual({ version: "4.16.27", target_revision: "1.0", values: {} });
+    expect(pinBody({ version: "4.20.9", revision: "", values: {}, operator: { channel: "stable-v1.15", starting_csv: "", install_plan_approval: null } })).toEqual({
+      version: "4.20.9",
+      values: {},
+      operator: { channel: "stable-v1.15", starting_csv: "" },
+    });
   });
 
   it("are offered the versions the team's destinations run, newest first", () => {
@@ -90,20 +107,48 @@ describe("a new add-on's pins", () => {
   });
 });
 
-describe("a change of a pin", () => {
-  it("sends only what changes, guarded by the read", () => {
-    const p = pin("4.20.9", "2.0.0", { extra: 1 });
-    expect(changeBody(p, { version: "4.20.9", revision: "2.1.0", values: { extra: 1 } })).toEqual({ last_commit_id: "c1", target_revision: "2.1.0" });
-    expect(changeBody(p, { version: "4.20.9", revision: "2.0.0", values: {} })).toEqual({ last_commit_id: "c1", values: {} });
-    expect(changeProblem(p, { version: "4.20.9", revision: "2.0.0", values: { extra: 1 } })).toBe("No changes yet");
-    expect(changeProblem(p, { version: "4.20.9", revision: "", values: { extra: 1 } })).toContain("Give the chart revision");
+describe("the pins of Edit add-on", () => {
+  const own = (channel: string | null) => ({ version: "4.20.9", own: { ...NO_SETTINGS, channel } }) as OperatorPin;
+  const cards = () => pinCards(detail([], [pin("4.20.9", "2.0.0", { extra: 1 }), pin("4.16.27", null, { a: 1 })]), [own("stable-v1.15")]);
+
+  it("are read oldest version first, each with its operator settings", () => {
+    const [old, recent] = cards();
+    expect([old.from, recent.from]).toEqual(["4.16.27", "4.20.9"]);
+    expect(recent.original).toMatchObject({ revision: "2.0.0", values: { extra: 1 }, operator: { channel: "stable-v1.15" } });
+    expect(old.operator).toEqual(NO_SETTINGS);
+    expect(pinEdits(cards())).toEqual({ ocp_versions: [], remove_ocp_versions: [] });
   });
 
-  it("keeps a values-only layer values-only, and refuses emptying it", () => {
-    const p = pin("4.16.27", null, { a: 1 });
-    expect(changeProblem(p, { version: "4.16.27", revision: "", values: { a: 2 } })).toBeNull();
-    expect(changeBody(p, { version: "4.16.27", revision: "", values: { a: 2 } })).toEqual({ last_commit_id: "c1", values: { a: 2 } });
-    expect(changeProblem(p, { version: "4.16.27", revision: "", values: {} })).toContain("remove it instead");
+  it("send only what changes: its own version, the keys, a dropped revision as blank", () => {
+    const [old, recent] = cards();
+    expect(pinEdit({ ...recent, revision: "2.1.0" })).toEqual({ version: "4.20.9", from_version: "4.20.9", target_revision: "2.1.0" });
+    expect(pinEdit({ ...recent, revision: "" })).toEqual({ version: "4.20.9", from_version: "4.20.9", target_revision: "" });
+    expect(pinEdit({ ...recent, values: {} })).toEqual({ version: "4.20.9", from_version: "4.20.9", values: {} });
+    expect(pinEdit({ ...recent, operator: { ...recent.operator, channel: null } })).toEqual({ version: "4.20.9", from_version: "4.20.9", operator: { channel: null } });
+    expect(pinEdit({ ...old, values: null })).toBeNull();
+  });
+
+  it("move a folder, add a pin with what it has, and remove one", () => {
+    const [old, recent] = cards();
+    expect(pinEdit({ ...recent, version: "4.20.10" })).toEqual({ version: "4.20.10", from_version: "4.20.9" });
+    const added = withNewCard([old, recent]).at(-1);
+    expect(added?.key).toBe(3);
+    const fresh = { ...added!, version: "4.21.2", operator: { ...NO_SETTINGS, channel: "stable-v1.16" } };
+    expect(pinEdit(fresh)).toEqual({ version: "4.21.2", operator: { channel: "stable-v1.16" } });
+    expect(pinEdit({ ...fresh, revision: "1.16.0", values: { b: 1 } })).toEqual({ version: "4.21.2", target_revision: "1.16.0", values: { b: 1 }, operator: { channel: "stable-v1.16" } });
+    expect(pinEdits([{ ...old, removed: true }, recent, { ...fresh, removed: true }])).toEqual({ ocp_versions: [], remove_ocp_versions: ["4.16.27"] });
+  });
+
+  it("are checked like a new add-on's: a version no other pin that stays has, and something in each", () => {
+    const [old, recent] = cards();
+    expect(cardsProblem([old, { ...recent, version: "4.16.27" }], true)).toBe("OCP 4.20.9: OCP 4.16.27 is pinned already");
+    expect(cardsProblem([{ ...old, removed: true }, { ...recent, version: "4.16.27" }], true)).toBeNull();
+    expect(cardsProblem([old, { ...recent, revision: "", values: {}, operator: NO_SETTINGS }], true)).toBe(
+      "OCP 4.20.9: A pin needs a chart revision, values or operator settings",
+    );
+    const fresh = withNewCard([]);
+    expect(cardsProblem(fresh, false)).toBe("The new pin: Give the OpenShift version");
+    expect(cardsProblem([{ ...fresh[0], version: "4.16" }], false)).toContain("OCP 4.16: A pin is keyed by the full version");
   });
 });
 

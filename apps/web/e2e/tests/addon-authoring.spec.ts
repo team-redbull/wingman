@@ -253,7 +253,8 @@ test.describe("Edit add-on", () => {
     await go(page, "/addons/observability/prometheus");
     await page.getByRole("button", { name: "Edit add-on" }).click();
     const form = await editAddonForm(page);
-    await form.getByRole("combobox", { name: /Revision/ }).fill("");
+    // The add-on's own revision, not a pin's (the editor has both).
+    await form.getByRole("combobox", { name: /^Revision \(targetRevision\)/ }).fill("");
     await preview(page);
     expect(dryRuns()[0].body).toEqual({ last_commit_id: "observability-catalog-1", target_revision: null });
   });

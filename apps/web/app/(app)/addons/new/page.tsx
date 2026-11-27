@@ -10,7 +10,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/common/empty-state";
 import { ChangeResultPanel, type OpenedChanges } from "@/components/addons/change-result";
-import { NewAddonForm } from "@/components/addons/new-addon-form";
+import { NewAddonForm } from "@/components/addons/new-addon/new-addon-form";
 import { Breadcrumbs, PageTitle, useAddonAccess } from "@/components/addons/page-header";
 import type { AddonSummary } from "@/types/day2";
 

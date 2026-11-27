@@ -9,20 +9,26 @@
  */
 
 import { FLEET_SCOPES, scopeLabel } from "@/lib/day2";
+import { NO_SETTINGS, hasSettings, settingsChange, settingsProblem, settingsSet, type OperatorDraft } from "@/lib/olm";
 import { sameValues, type Values } from "@/lib/values";
-import type { AddonDetail, AddonOcpVersion, ChangePinBody, Destination, OcpPinBody } from "@/types/day2";
+import type { AddonDetail, AddonOcpVersion, Destination, OcpPinBody, OperatorPin, PinEditIn } from "@/types/day2";
 
 /** `<major>.<minor>.<patch>`, as day2's `FULL_VERSION`. */
 const FULL_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
-/** A pin as a form holds it: `values` is `null` while its YAML does not parse. */
+/**
+ * A pin as a form holds it: `values` is `null` while its YAML does not
+ * parse; `revision` blank is a values-only pin (ADR-0073); `operator` an OLM
+ * operator's settings at this version (none for a plain chart).
+ */
 export interface PinDraft {
   version: string;
   revision: string;
   values: Values | null;
+  operator: OperatorDraft;
 }
 
-export const EMPTY_PIN: PinDraft = { version: "", revision: "", values: {} };
+const EMPTY_PIN: PinDraft = { version: "", revision: "", values: {}, operator: NO_SETTINGS };
 
 /** One pin of a list a form edits: `key` keeps its fields when another row goes. */
 export interface PinRow extends PinDraft {
@@ -58,57 +64,115 @@ export function versionProblem(version: string, taken: readonly string[]): strin
   return null;
 }
 
-/** Why a pin's revision cannot be sent, or `null`. */
-function revisionProblem(revision: string): string | null {
-  return revision.trim() ? null : "Give the chart revision: a branch of the chart repo (HEAD for its default branch)";
+/** A pin with nothing in it is no pin (the service's `pin-empty`). */
+function emptyProblem(draft: PinDraft, isOperator: boolean): string | null {
+  if (draft.revision.trim() || Object.keys(draft.values ?? {}).length > 0 || hasSettings(draft.operator)) return null;
+  return isOperator ? "A pin needs a chart revision, values or operator settings" : "A pin needs a chart revision or values";
 }
 
-/** Why `draft` cannot be sent as a new pin, or `null`. */
-export function draftProblem(draft: PinDraft, taken: readonly string[]): string | null {
-  return versionProblem(draft.version, taken) ?? revisionProblem(draft.revision) ?? (draft.values === null ? "Fix the values YAML" : null);
+/** Why `draft` cannot be sent as a pin, or `null`. `taken`: the versions other pins have. */
+function draftProblem(draft: PinDraft, taken: readonly string[], isOperator = false): string | null {
+  return (
+    versionProblem(draft.version, taken) ??
+    (draft.values === null ? "Fix the values YAML" : null) ??
+    settingsProblem(draft.operator) ??
+    emptyProblem(draft, isOperator)
+  );
 }
 
 /** Why a new add-on's pins cannot be sent, or `null`: each pin's problem, and no version twice. */
-export function draftsProblem(drafts: readonly PinDraft[]): string | null {
+export function draftsProblem(drafts: readonly PinDraft[], isOperator = false): string | null {
   for (const [i, draft] of drafts.entries()) {
     const others = drafts.filter((_, j) => j !== i).map((d) => d.version.trim());
-    const problem = draftProblem(draft, others);
+    const problem = draftProblem(draft, others, isOperator);
     if (problem) return `Pin ${i + 1}: ${problem}`;
   }
   return null;
 }
 
-/** The body of a new pin, as the service reads it. */
+/** A new pin, as the service reads it: no revision is a values-only pin; operator settings only when set. */
 export function pinBody(draft: PinDraft): OcpPinBody {
-  return { version: draft.version.trim(), target_revision: draft.revision.trim(), values: draft.values ?? {} };
+  const revision = draft.revision.trim();
+  const operator = settingsSet(draft.operator);
+  return {
+    version: draft.version.trim(),
+    ...(revision ? { target_revision: revision } : {}),
+    values: draft.values ?? {},
+    ...(Object.keys(operator).length > 0 ? { operator } : {}),
+  };
 }
 
-/** A form's draft of an existing pin. */
-export function draftOf(pin: AddonOcpVersion): PinDraft {
-  return { version: pin.version, revision: pin.target_revision ?? "", values: pin.values_file.values };
+// ── The pins of Edit add-on (ADR-0073: one MR with the add-on) ───────────────
+
+/**
+ * A pin in Edit add-on: one that exists (`from`, its version as read, and
+ * `original`, its fields as read) or a new one; `removed` sends it as a
+ * removal, and can be undone until then.
+ */
+export interface PinCard extends PinRow {
+  from: string | null;
+  original: PinDraft | null;
+  removed: boolean;
+}
+
+/** The add-on's pins as cards, oldest version first, each with its operator settings as read. */
+export function pinCards(detail: AddonDetail, operatorPins: readonly OperatorPin[]): PinCard[] {
+  return sortedPins(detail.ocp_versions).map((pin, i) => {
+    const original: PinDraft = {
+      version: pin.version,
+      revision: pin.target_revision ?? "",
+      values: pin.values_file.values,
+      operator: operatorPins.find((p) => p.version === pin.version)?.own ?? NO_SETTINGS,
+    };
+    return { ...original, key: i + 1, from: pin.version, original, removed: false };
+  });
+}
+
+/** `cards` with a new, empty, pin last. */
+export function withNewCard(cards: readonly PinCard[]): PinCard[] {
+  return [...cards, { ...EMPTY_PIN, key: Math.max(0, ...cards.map((c) => c.key)) + 1, from: null, original: null, removed: false }];
 }
 
 /**
- * A change of `pin` to `draft`: only what changes is sent (`values: {}`
- * deletes the file), guarded by the commit the pin was read at.
+ * A card as `ocp_versions` carries it, or `null` when it changes nothing: a
+ * new pin as created (no values is none), an existing one with only what
+ * changed (`target_revision: ""` drops the revision, `values: {}` the file)
+ * and its own version, or another (a move of its folder).
  */
-export function changeBody(pin: AddonOcpVersion, draft: PinDraft): ChangePinBody {
-  const body: ChangePinBody = { last_commit_id: pin.last_commit_id };
-  const revision = draft.revision.trim();
-  if (revision && revision !== (pin.target_revision ?? "")) body.target_revision = revision;
-  if (draft.values !== null && !sameValues(draft.values, pin.values_file.values)) body.values = draft.values;
-  return body;
+export function pinEdit(card: PinCard): PinEditIn | null {
+  if (card.removed) return null;
+  if (card.from === null || card.original === null) {
+    const { values, ...created } = pinBody(card);
+    return Object.keys(values).length > 0 ? { ...created, values } : created;
+  }
+  const item: PinEditIn = { version: card.version.trim(), from_version: card.from };
+  const revision = card.revision.trim();
+  if (revision !== card.original.revision) item.target_revision = revision;
+  if (card.values !== null && !sameValues(card.values, card.original.values)) item.values = card.values;
+  const operator = settingsChange(card.original.operator, card.operator);
+  if (Object.keys(operator).length > 0) item.operator = operator;
+  return Object.keys(item).length > 2 || item.version !== card.from ? item : null;
 }
 
-/** Why a change of `pin` to `draft` cannot be sent, or `null`. */
-export function changeProblem(pin: AddonOcpVersion, draft: PinDraft): string | null {
-  // A pin that pins a revision keeps one; a hand-written values-only layer may stay so.
-  if (pin.target_revision && !draft.revision.trim()) return revisionProblem(draft.revision);
-  if (draft.values === null) return "Fix the values YAML";
-  const body = changeBody(pin, draft);
-  if (!("target_revision" in body) && !("values" in body)) return "No changes yet";
-  if (!pin.target_revision && !draft.revision.trim() && Object.keys(draft.values).length === 0)
-    return "A pin with neither a revision nor values is no pin: remove it instead";
+/** What Edit add-on sends for its pins. */
+export function pinEdits(cards: readonly PinCard[]): { ocp_versions: PinEditIn[]; remove_ocp_versions: string[] } {
+  return {
+    ocp_versions: cards.map(pinEdit).filter((item): item is PinEditIn => item !== null),
+    remove_ocp_versions: cards.filter((c) => c.removed && c.from !== null).map((c) => c.from as string),
+  };
+}
+
+/** Why the cards cannot be sent, or `null`: each pin that stays, its rules, and no version twice. */
+export function cardsProblem(cards: readonly PinCard[], isOperator: boolean): string | null {
+  const live = cards.filter((c) => !c.removed);
+  // A clash is said on the pin whose version was typed, not on the one it clashes with.
+  const typed = (c: PinCard) => Number(c.from === c.version.trim());
+  for (const card of [...live].sort((a, b) => typed(a) - typed(b))) {
+    const others = live.filter((c) => c.key !== card.key).map((c) => c.version.trim());
+    const problem = draftProblem(card, others, isOperator);
+    const name = card.from ?? card.version.trim();
+    if (problem) return `${name ? `OCP ${name}` : "The new pin"}: ${problem}`;
+  }
   return null;
 }
 
@@ -122,10 +186,10 @@ export interface VersionSuggestion {
 /**
  * The versions the add-on's destinations run (the page's own read): those
  * that deploy it first, then the rest, newest first, without the versions
- * already pinned. The hub is version-less.
+ * pinned (`taken`: those the editor's pins have). The hub is version-less.
  */
-export function versionSuggestions(detail: AddonDetail): VersionSuggestion[] {
-  const pinned = new Set(detail.ocp_versions.map((p) => p.version));
+export function versionSuggestions(detail: AddonDetail, taken: readonly string[] = detail.ocp_versions.map((p) => p.version)): VersionSuggestion[] {
+  const pinned = new Set(taken);
   const found = new Map<string, VersionSuggestion>();
   for (const panel of detail.scopes) {
     for (const d of panel.destinations) {

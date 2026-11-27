@@ -4,49 +4,30 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, ChevronDown, ChevronsUpDown, Layers, Package, Pencil, Plus, RefreshCw, Search, Tag } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronsUpDown, Layers, Package, Plus, RefreshCw, Search, Tag } from "lucide-react";
 import { api } from "@/lib/api-client";
-import { day2Api, day2Keys, addonHref, newAddonHref, syncSummary, teamAccess, uniqueFindings } from "@/lib/day2";
+import { day2Api, day2Keys, newAddonHref, revisionLabel, teamAccess, uniqueFindings } from "@/lib/day2";
 import { cn } from "@/lib/utils";
-import { inlineYaml, leaves, pathLabel, toYaml } from "@/lib/values";
+import { leaves } from "@/lib/values";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches } from "@/components/common/empty-state";
 import { ProblemList } from "@/components/common/problem-list";
-import { DefinitionList } from "@/components/addons/definition-list";
-import { FindingsBadge, FindingsList } from "@/components/addons/findings";
+import { FindingsBadge } from "@/components/addons/findings";
 import { FleetDefaultsList } from "@/components/addons/fleet-defaults";
 import { IntentLink } from "@/components/common/intent-link";
 import { ChangeResultPanel, type OpenedChanges } from "@/components/addons/change-result";
-import { EditAddonDialog } from "@/components/addons/default-dialogs";
+import { AddonEditorDialog } from "@/components/addons/addon-editor/addon-editor";
+import { CatalogChartDialog } from "@/components/addons/catalog-chart-dialog";
 import { useAddonAccess } from "@/components/addons/page-header";
 import { ReadOnlyBadge, useTeams } from "@/components/addons/team-access";
-import { ValuesLevels } from "@/components/addons/values-levels";
 import type { AuthoringChange, CatalogEntry, FleetDefault } from "@/types/day2";
-
-/** `HEAD` is the chart repo's default branch, listed first in `available_versions`. */
-function revisionLabel(entry: CatalogEntry): string {
-  const head = entry.available_versions[0];
-  return entry.current_version === "HEAD" && head ? `HEAD (${head})` : entry.current_version;
-}
 
 /** Write actions on a team's add-ons: admins only, disabled with the reason while the team is read-only (ADR-0043). */
 interface TeamWrites {
   isAdmin: boolean;
   readOnlyReason: string | null;
   onOpened: (change: AuthoringChange) => void;
-}
-
-/** An add-on's page: its fleet defaults, which destinations they reach and each one's overrides (ADR-0053). */
-function DefaultsLink({ team, name, className }: { team: string; name: string; className?: string }) {
-  return (
-    <IntentLink href={addonHref(team, name)} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5", className)}>
-      Defaults &amp; overrides
-      <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-    </IntentLink>
-  );
 }
 
 function NewAddonButton({ team, writes }: { team: string; writes: TeamWrites }) {
@@ -62,150 +43,6 @@ function NewAddonButton({ team, writes }: { team: string; writes: TeamWrites }) 
       <Plus className="h-3.5 w-3.5" aria-hidden />
       New add-on
     </IntentLink>
-  );
-}
-
-function ChartDialog({
-  entry,
-  open,
-  onOpenChange,
-  writes,
-  onEdit,
-}: {
-  entry: CatalogEntry;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  writes: TeamWrites;
-  onEdit: () => void;
-}) {
-  const [view, setView] = useState<"table" | "yaml">("table");
-  const values = leaves(entry.default_values);
-  const meta = entry.argocd_metadata;
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="break-words pr-8">{entry.name}</DialogTitle>
-          <DialogDescription>
-            Team <strong>{entry.team}</strong> · revision <strong className="font-mono">{revisionLabel(entry)}</strong>
-          </DialogDescription>
-        </DialogHeader>
-        <FindingsList findings={entry.warnings} showContext />
-        <Tabs defaultValue="values">
-          <TabsList>
-            <TabsTrigger value="values">Sig values</TabsTrigger>
-            <TabsTrigger value="deploy">Deploy config</TabsTrigger>
-            <TabsTrigger value="versions">Versions</TabsTrigger>
-          </TabsList>
-          <TabsContent value="values" className="space-y-2 pt-2">
-            <div className="flex items-center justify-between gap-2">
-              <ValuesLevels current="Sig values" path={`operators/${entry.name}/values.yaml`} />
-              {values.length > 0 && (
-                <div className="inline-flex shrink-0 rounded-lg border bg-muted/40 p-0.5" role="group" aria-label="View">
-                  {(["table", "yaml"] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setView(v)}
-                      aria-pressed={view === v}
-                      className={cn(
-                        "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
-                        view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {v === "table" ? "Table" : "YAML"}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="max-h-[55vh] overflow-auto">
-              {values.length === 0 ? (
-                <p className="py-4 text-center text-sm italic text-muted-foreground">No Sig values: the chart&apos;s own values apply.</p>
-              ) : view === "yaml" ? (
-                <pre className="whitespace-pre rounded-lg border bg-muted/50 p-4 font-mono text-xs leading-relaxed">{toYaml(entry.default_values)}</pre>
-              ) : (
-                <table className="w-full border-collapse text-xs">
-                  <tbody>
-                    {values.map(({ path, value }) => (
-                      <tr key={JSON.stringify(path)} className="border-b border-border/50 last:border-0">
-                        <td className="w-2/5 break-all px-3 py-1.5 align-top font-mono font-medium">{pathLabel(path)}</td>
-                        <td className="break-all px-3 py-1.5 font-mono text-muted-foreground">{inlineYaml(value)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </TabsContent>
-          <TabsContent value="deploy" className="space-y-3 pt-2">
-            <p className="text-xs text-muted-foreground">
-              <code>operators/{entry.name}/{entry.name}.yaml</code>: where the chart comes from.
-            </p>
-            <DefinitionList
-              items={[
-                [
-                  "repourl",
-                  meta.repourl || (
-                    <span className="inline-flex items-center gap-1 font-sans text-status-warning-fg">
-                      <AlertTriangle className="h-3 w-3" />
-                      none in lowercase: every install must give one
-                    </span>
-                  ),
-                ],
-                ["chart repo", entry.chart_project ?? "not on this GitLab"],
-                ["path", meta.path],
-                ["targetRevision", revisionLabel(entry)],
-                ["projectNamespace", meta.projectNamespace || "—"],
-                ["sync", syncSummary(entry.sync)],
-                ["syncPolicy", <pre key="sync" className="whitespace-pre-wrap">{toYaml(meta.syncPolicy) || "—"}</pre>],
-                ["fleet default on", entry.fleet_defaults.length > 0 ? entry.fleet_defaults.join(", ") : "—"],
-              ]}
-            />
-          </TabsContent>
-          <TabsContent value="versions" className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold text-muted-foreground">Chart repo branches, default first</p>
-              {entry.available_versions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">None readable{entry.chart_project ? "" : ": the chart repo is unknown"}.</p>
-              ) : (
-                <ul className="flex flex-wrap gap-1.5">
-                  {entry.available_versions.map((v, i) => (
-                    <li key={v} className={cn("rounded-full px-2 py-0.5 font-mono text-xs", i === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                      {v}
-                      {i === 0 && <span className="font-sans"> · default</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold text-muted-foreground">Pins per OCP version (ocp-versions/)</p>
-              {entry.ocp_version_pins.length === 0 ? (
-                <p className="text-xs text-muted-foreground">None: every OCP version gets {revisionLabel(entry)}.</p>
-              ) : (
-                <DefinitionList items={entry.ocp_version_pins.map((p) => [p.version, p.target_revision ?? "values only"])} />
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
-        <DialogFooter showCloseButton>
-          {writes.isAdmin && (
-            <button
-              type="button"
-              onClick={onEdit}
-              disabled={Boolean(writes.readOnlyReason)}
-              title={writes.readOnlyReason ?? undefined}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
-            >
-              <Pencil className="h-3.5 w-3.5" aria-hidden />
-              Edit add-on
-            </button>
-          )}
-          <DefaultsLink team={entry.team} name={entry.name} />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -268,19 +105,21 @@ function ChartCard({ entry, writes }: { entry: CatalogEntry; writes: TeamWrites 
           </span>
         </div>
       </button>
-      <ChartDialog
+      <CatalogChartDialog
         entry={entry}
         open={open}
         onOpenChange={setOpen}
-        writes={writes}
+        isAdmin={writes.isAdmin}
+        readOnlyReason={writes.readOnlyReason}
         onEdit={() => {
           setOpen(false);
           setEditing(true);
         }}
       />
       {editing && (
-        <EditAddonDialog
-          entry={entry}
+        <AddonEditorDialog
+          team={entry.team}
+          name={entry.name}
           open
           onOpenChange={setEditing}
           readOnlyReason={writes.readOnlyReason}

@@ -1,6 +1,7 @@
 import { Page, Route } from "@playwright/test";
 import { mockAddons, mockSpecs } from "./addons";
 import { mockTuningProfiles } from "./tuning";
+import { mockPlainCharts } from "./plain-charts";
 import type {
   ApprovalRollout, ClusterNetworkRead, ClusterNodes, MRDetail, MachineConfigs, Mce, MergeRequestLink, NodePoolNodes, Placement,
   PlacementCandidate, PoolNode, Problem, ErrorCode, RolloutCluster, RolloutStatus, ServerRecord, WorkflowRun,
@@ -639,6 +640,7 @@ export async function mockDashboardApis(page: Page) {
   // fails closed (ADR-0053): a team the list does not have is read-only.
   await page.route("**/api/day2/teams", (route: Route) => json(route, WRITABLE_TEAMS));
   await page.route("**/api/day2/fleet-defaults**", (route: Route) => json(route, []));
+  await mockPlainCharts(page);
   // A flavor's rollout follows no cluster unless a test says otherwise (mockRollout, ADR-0044)
   await page.route("**/api/day1/specs/*/rollout", (route: Route) => {
     const spec = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-2) ?? "");

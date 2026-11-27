@@ -1,4 +1,5 @@
 import type { DestinationKind, Finding } from "./destinations";
+import type { OperatorSettingsIn, PinEditIn } from "./operators";
 import type { FleetScope, SyncSettings } from "./sync-options";
 import type { Day2MergeRequest, FileChange } from "./writes";
 
@@ -19,6 +20,8 @@ export interface CreateAddonBody {
   /** Also make it a fleet default in the same MR. */
   default_scope: FleetScope | null;
   default_values: Record<string, unknown>;
+  /** An operator's settings, written into `values.yaml` at the chart's key path (ADR-0073); sent only when some are set. */
+  operator?: OperatorSettingsIn;
   /** Its OCP-version pins, written in the same MR; sent only when there are some. */
   ocp_versions?: OcpPinBody[];
   /** The preview's `needs_confirmation`, confirmed (ADR-0053). */
@@ -32,7 +35,8 @@ export interface CreateAddonBody {
  * `PUT /api/day2/addons/{team}/{addon}`, Edit add-on (the API's team default,
  * hence the name): an absent field is unchanged; `null`
  * for `target_revision`, `path`, `project_namespace` or `ignore_differences`
- * removes that key.
+ * removes that key. An operator's settings and the OCP-version pins go in
+ * the same one MR (ADR-0073); the web edits pins only this way.
  */
 export interface UpdateTeamDefaultBody {
   repourl?: string;
@@ -42,46 +46,29 @@ export interface UpdateTeamDefaultBody {
   sync?: SyncSettings;
   ignore_differences?: unknown[] | null;
   values?: Record<string, unknown>;
+  /** The Sig level's operator settings. */
+  operator?: OperatorSettingsIn;
+  /** Pins added, changed or moved. */
+  ocp_versions?: PinEditIn[];
+  /** Pins removed, by version. */
+  remove_ocp_versions?: string[];
+  /** The entry's: every file the MR changes, moves or deletes is guarded by it. */
   last_commit_id: string | null;
   confirm_changes?: string[];
   expected_digest?: string | null;
   message?: string | null;
 }
 
-/** An OCP-version pin, `operators/<chart>/ocp-versions/<version>/` (ADR-0043's 2026-11-25 amendment). */
+/** A new add-on's OCP-version pin, `operators/<chart>/ocp-versions/<version>/` (ADR-0043's 2026-11-25 amendment). */
 export interface OcpPinBody {
   /** The full OpenShift version, `4.16.27` (never `4.16`). */
   version: string;
-  /** A branch of the chart repo; `HEAD` its default branch. */
-  target_revision: string;
+  /** A branch of the chart repo; `HEAD` its default branch. Absent: a values-only pin (ADR-0073). */
+  target_revision?: string;
   /** Its `values.yaml`; `{}`: none. */
   values: Record<string, unknown>;
-}
-
-/** `POST /api/day2/addons/{team}/{addon}/ocp-versions`: a new pin. */
-export interface AddPinBody extends OcpPinBody {
-  confirm_changes?: string[];
-  expected_digest?: string | null;
-  message?: string | null;
-}
-
-/** `PUT .../ocp-versions/{version}`: an absent field is unchanged; `values: {}` deletes `values.yaml`. */
-export interface ChangePinBody {
-  target_revision?: string;
-  values?: Record<string, unknown>;
-  /** `AddonOcpVersion.last_commit_id`. */
-  last_commit_id: string | null;
-  confirm_changes?: string[];
-  expected_digest?: string | null;
-  message?: string | null;
-}
-
-/** `DELETE .../ocp-versions/{version}`, with this JSON body: every file of the pin goes. */
-export interface RemovePinBody {
-  last_commit_id: string | null;
-  confirm_changes?: string[];
-  expected_digest?: string | null;
-  message?: string | null;
+  /** An operator's settings at this version. */
+  operator?: OperatorSettingsIn;
 }
 
 /** `POST /api/day2/addons/{team}/{addon}/defaults/{scope}`. */

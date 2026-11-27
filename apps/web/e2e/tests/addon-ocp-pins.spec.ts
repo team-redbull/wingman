@@ -1,10 +1,11 @@
 /**
- * An add-on's OCP-version pins (ADR-0043's 2026-11-25 amendment), mocked:
- * the add-on page's pins card is their editor (add, edit, remove, each a
- * dry run first and then the write confirming it), the fleet-default
- * footgun is said above them, a read-only team's cannot be changed, and a
- * new add-on carries pins in its create MR
- * (docs/notes/2026-11-12-day2-addon-authoring-api.md §8).
+ * An add-on's OCP-version pins (ADR-0043's 2026-11-25 amendment, ADR-0073),
+ * mocked: the add-on page's pins card reads them, and its Add pin, Edit and
+ * Remove open the add-on's editor on the pins, where every change goes in
+ * Edit add-on's one PUT (a dry run first, then the write confirming it); the
+ * fleet-default footgun is said above them, a read-only team's cannot be
+ * changed, and a new add-on carries pins in its create MR, a revision or
+ * values each (docs/notes/2026-11-12-day2-addon-authoring-api.md §8, §9).
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -44,7 +45,7 @@ test.describe("The add-on page's OCP-version pins", () => {
     await world(page);
   });
 
-  test("are listed with what each reaches, and added from the versions the destinations run", async ({ page }) => {
+  test("are listed with what each reaches, and added in the editor from the versions the destinations run", async ({ page }) => {
     await go(page, "/addons/observability/prometheus");
     const pin = card(page).getByTestId("ocp-pin-4.18.22");
     await expect(pin).toContainText("targetRevision 2.44.0");
@@ -52,83 +53,96 @@ test.describe("The add-on page's OCP-version pins", () => {
 
     await card(page).getByRole("button", { name: "Add pin" }).click();
     const form = formDialog(page);
+    await expect(form.getByRole("heading", { name: "Edit add-on observability/prometheus" })).toBeVisible();
+    // The editor opens on a new pin, its version focused.
+    const fresh = form.getByTestId("editor-pin-new-1");
+    const version = fresh.getByLabel("OpenShift version", { exact: true });
+    await expect(version).toBeFocused();
     const previewButton = form.getByRole("button", { name: "Preview changes" });
-    await expect(previewButton).toHaveAttribute("title", "Give the OpenShift version");
-    const version = form.getByRole("textbox", { name: "OpenShift version" });
+    await expect(previewButton).toHaveAttribute("title", "The new pin: Give the OpenShift version");
     await version.fill("4.19");
     await expect(previewButton).toBeDisabled();
-    await expect(form).toContainText("A pin is keyed by the full version, 4.19.<patch>");
+    await expect(fresh).toContainText("A pin is keyed by the full version, 4.19.<patch>");
     // The pinned version is not offered again; the one a twin runs with prometheus is, first.
-    const offered = form.getByRole("group", { name: "Versions the destinations run" });
+    const offered = fresh.getByRole("group", { name: "Versions the destinations run" });
     await expect(offered.getByRole("button")).toHaveCount(1);
     await offered.getByRole("button", { name: new RegExp(`^${NEXT_VERSION.replaceAll(".", "\\.")}`) }).click();
     await expect(version).toHaveValue(NEXT_VERSION);
-    await expect(previewButton).toHaveAttribute("title", /Give the chart revision/);
-    await form.getByRole("combobox", { name: "Chart revision (targetRevision)" }).fill("2.45.0");
-    await form.getByRole("textbox", { name: `Contents of operators/prometheus/ocp-versions/${NEXT_VERSION}/values.yaml` }).fill("scrapeInterval: 1m");
-    await expect(form.getByTestId("pin-reach")).toContainText(`1 destination that gets prometheus runs OCP ${NEXT_VERSION}`);
+    // A pin needs a revision or values (no longer a revision alone).
+    await expect(previewButton).toHaveAttribute("title", `OCP ${NEXT_VERSION}: A pin needs a chart revision or values`);
+    await fresh.getByRole("textbox", { name: `Contents of operators/prometheus/ocp-versions/${NEXT_VERSION}/values.yaml` }).fill("scrapeInterval: 1m");
+    await expect(previewButton).toBeEnabled();
+    await fresh.getByRole("combobox", { name: "Chart revision (targetRevision)" }).fill("2.45.0");
+    await expect(fresh.getByTestId("pin-reach")).toContainText(`1 destination that gets prometheus runs OCP ${NEXT_VERSION}`);
 
     const review = await preview(page);
-    await expect(review.getByTestId("plan-title")).toHaveText(
-      `[Wingman/Day2] Update addon observability/prometheus OCP-version pin ${NEXT_VERSION} (new: 2.45.0)`,
-    );
+    await expect(review.getByTestId("plan-title")).toHaveText(`[Wingman/Day2] Update addon observability/prometheus OCP-version pins ${NEXT_VERSION} (new)`);
     await review.getByRole("checkbox", { name: "I understand the app on twin changes as listed" }).click();
     await review.getByRole("button", { name: /Create MR/ }).click();
-    await expect(page.getByRole("region", { name: "Opened merge requests" })).toContainText(`OCP-version pin ${NEXT_VERSION}`);
+    await expect(page.getByRole("region", { name: "Opened merge requests" })).toContainText(`OCP-version pins ${NEXT_VERSION}`);
 
-    expect(pins.writes[0]).toMatchObject({ method: "POST", dryRun: true, path: "/api/day2/addons/observability/prometheus/ocp-versions" });
+    expect(pins.writes[0]).toMatchObject({ method: "PUT", dryRun: true, path: "/api/day2/addons/observability/prometheus" });
     expect(realPinWrites()).toHaveLength(1);
     expect(realPinWrites()[0].body).toEqual({
-      version: NEXT_VERSION,
-      target_revision: "2.45.0",
-      values: { scrapeInterval: "1m" },
+      last_commit_id: "observability-catalog-1",
+      ocp_versions: [{ version: NEXT_VERSION, target_revision: "2.45.0", values: { scrapeInterval: "1m" } }],
       confirm_changes: [DEPLOYING_TWIN],
-      expected_digest: `pin-digest-POST-${NEXT_VERSION}`,
+      expected_digest: `edit-digest-prometheus-${NEXT_VERSION}-${NEXT_VERSION}`,
     });
   });
 
-  test("are edited: only what changes is sent, guarded by the read", async ({ page }) => {
+  test("are edited in the editor: only what changes is sent, guarded by the entry's read", async ({ page }) => {
     await go(page, "/addons/observability/prometheus");
     await card(page).getByRole("button", { name: "Edit the pin for OCP 4.18.22" }).click();
     const form = formDialog(page);
-    await expect(form.getByRole("textbox", { name: "OpenShift version" })).toBeDisabled();
-    const revision = form.getByRole("combobox", { name: "Chart revision (targetRevision)" });
+    const pin = form.getByTestId("editor-pin-4.18.22");
+    await expect(pin.getByLabel("OpenShift version", { exact: true })).toBeFocused();
+    const revision = pin.getByRole("combobox", { name: "Chart revision (targetRevision)" });
     await expect(revision).toHaveValue("2.44.0");
     await expect(form.getByRole("button", { name: "Preview changes" })).toHaveAttribute("title", "No changes yet");
     await revision.fill("2.45.0");
 
     const review = await preview(page);
-    await expect(review.getByTestId("plan-title")).toHaveText("[Wingman/Day2] Update addon observability/prometheus OCP-version pin 4.18.22");
+    await expect(review.getByTestId("plan-title")).toHaveText("[Wingman/Day2] Update addon observability/prometheus OCP-version pins 4.18.22");
     await review.getByRole("checkbox", { name: `I understand the app on ${HOSTED_NAME} changes as listed` }).click();
     await review.getByRole("button", { name: /Create MR/ }).click();
     await expect(page.getByRole("region", { name: "Opened merge requests" })).toBeVisible();
 
     const real = realPinWrites()[0];
     expect(real.method).toBe("PUT");
-    expect(real.path).toBe("/api/day2/addons/observability/prometheus/ocp-versions/4.18.22");
+    expect(real.path).toBe("/api/day2/addons/observability/prometheus");
     expect(real.body).toEqual({
-      last_commit_id: "observability-repo-1",
-      target_revision: "2.45.0",
+      last_commit_id: "observability-catalog-1",
+      ocp_versions: [{ version: "4.18.22", from_version: "4.18.22", target_revision: "2.45.0" }],
       confirm_changes: [HOSTED_ID],
-      expected_digest: "pin-digest-PUT-4.18.22",
+      expected_digest: "edit-digest-prometheus-4.18.22-4.18.22",
     });
   });
 
-  test("are removed through a confirmed delete", async ({ page }) => {
+  test("are removed in the editor, with undo, and the removal is confirmed", async ({ page }) => {
     await go(page, "/addons/observability/prometheus");
     await card(page).getByRole("button", { name: "Remove the pin for OCP 4.18.22" }).click();
     const form = formDialog(page);
-    await expect(form).toContainText("go back to the add-on's revision, 2.45.0");
+    const removed = form.getByTestId("editor-pin-4.18.22");
+    await expect(removed).toContainText("get the add-on's revision and Sig values again");
+    await removed.getByRole("button", { name: "Undo removing the pin for OCP 4.18.22" }).click();
+    await expect(form.getByRole("button", { name: "Preview changes" })).toHaveAttribute("title", "No changes yet");
+    await form.getByRole("button", { name: "Remove the pin for OCP 4.18.22" }).click();
+
     const review = await preview(page);
-    await expect(review.getByTestId("plan-title")).toHaveText(/OCP-version pin 4\.18\.22 \(removed\)$/);
+    await expect(review.getByTestId("plan-title")).toHaveText(/OCP-version pins 4\.18\.22 \(removed\)$/);
     await review.getByRole("checkbox", { name: `I understand the app on ${HOSTED_NAME} changes as listed` }).click();
     await review.getByRole("button", { name: /Create MR/ }).click();
     await expect(page.getByRole("region", { name: "Opened merge requests" })).toBeVisible();
 
     const real = realPinWrites()[0];
-    expect(real.method).toBe("DELETE");
-    expect(real.path).toBe("/api/day2/addons/observability/prometheus/ocp-versions/4.18.22");
-    expect(real.body).toEqual({ last_commit_id: "observability-repo-1", confirm_changes: [HOSTED_ID], expected_digest: "pin-digest-DELETE-4.18.22" });
+    expect(real.method).toBe("PUT");
+    expect(real.body).toEqual({
+      last_commit_id: "observability-catalog-1",
+      remove_ocp_versions: ["4.18.22"],
+      confirm_changes: [HOSTED_ID],
+      expected_digest: "edit-digest-prometheus-4.18.22",
+    });
   });
 
   test("say when a fleet default's own revision overrides every pin", async ({ page }) => {
@@ -165,14 +179,14 @@ test("A new add-on is created with a pin, in the same merge request", async ({ p
   await form.getByRole("button", { name: "Add a pin" }).click();
   const first = form.getByTestId("new-pin-0");
   await first.getByRole("button", { name: /^4\.18\.22/ }).click();
-  await expect(first.getByRole("textbox", { name: "OpenShift version" })).toHaveValue("4.18.22");
-  await expect(previewButton).toHaveAttribute("title", /^Pin 1: Give the chart revision/);
+  await expect(first.getByLabel("OpenShift version", { exact: true })).toHaveValue("4.18.22");
+  await expect(previewButton).toHaveAttribute("title", "Pin 1: A pin needs a chart revision or values");
   await first.getByRole("combobox", { name: "Chart revision (targetRevision)" }).fill("1.0.0");
   // A second pin of the same version is refused before anything is sent, and the version is not offered again.
   await form.getByRole("button", { name: "Add a pin" }).click();
   const second = form.getByTestId("new-pin-1");
   await expect(second.getByRole("group", { name: "Versions the destinations run" })).toHaveCount(0);
-  await second.getByRole("textbox", { name: "OpenShift version" }).fill("4.18.22");
+  await second.getByLabel("OpenShift version", { exact: true }).fill("4.18.22");
   await expect(previewButton).toHaveAttribute("title", "Pin 1: OCP 4.18.22 is pinned already");
   await second.getByRole("button", { name: "Remove pin 2" }).click();
   await expect(previewButton).toBeEnabled();

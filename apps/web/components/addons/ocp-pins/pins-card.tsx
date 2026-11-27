@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { RepoFileView } from "@/components/addons/repo-file";
 import type { AddonWrites } from "@/components/addons/scope-panel";
-import { AddPinDialog, EditPinDialog, RemovePinDialog } from "@/components/addons/ocp-pins/pin-dialogs";
+import { AddonEditorDialog } from "@/components/addons/addon-editor/addon-editor";
+import type { EditorFocus } from "@/components/addons/addon-editor/model";
+import { useAddonOperator } from "@/components/addons/use-addon-reads";
 import { fleetOverrides, reachAt, sortedPins } from "@/components/addons/ocp-pins/model";
-import type { AddonDetail, AddonOcpVersion } from "@/types/day2";
-
-type Open = { kind: "add" } | { kind: "edit" | "remove"; pin: AddonOcpVersion } | null;
+import type { AddonDetail, AddonOcpVersion, OperatorPin } from "@/types/day2";
 
 const small = cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 gap-1.5");
 
@@ -38,9 +38,23 @@ function FleetOverrideWarning({ detail }: { detail: AddonDetail }) {
   );
 }
 
-function PinRowView({ detail, pin, writes, onOpen }: { detail: AddonDetail; pin: AddonOcpVersion; writes: AddonWrites; onOpen: (open: Open) => void }) {
+function PinRowView({
+  detail,
+  pin,
+  operatorPin,
+  writes,
+  onOpen,
+}: {
+  detail: AddonDetail;
+  pin: AddonOcpVersion;
+  /** Its operator settings, when the add-on installs an operator. */
+  operatorPin: OperatorPin | undefined;
+  writes: AddonWrites;
+  onOpen: (focus: EditorFocus) => void;
+}) {
   const reach = reachAt(detail, pin.version);
   const blocked = writes.readOnlyReason ?? undefined;
+  const channel = operatorPin?.own.channel;
   return (
     <li className="space-y-1 rounded-lg border px-3 py-2" data-testid={`ocp-pin-${pin.version}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -48,16 +62,17 @@ function PinRowView({ detail, pin, writes, onOpen }: { detail: AddonDetail; pin:
         <span className="font-mono text-[11px] text-muted-foreground">
           {pin.target_revision ? `targetRevision ${pin.target_revision}` : "values only"}
         </span>
+        {channel && <span className="font-mono text-[11px] text-muted-foreground">channel {channel}</span>}
         <span className="text-muted-foreground">
           {reach === 0 ? "no destination runs it yet" : `${reach} destination${reach === 1 ? "" : "s"}`}
         </span>
         {writes.isAdmin && (
           <span className="ml-auto flex gap-1.5">
-            <button type="button" className={small} disabled={Boolean(blocked)} title={blocked} aria-label={`Edit the pin for OCP ${pin.version}`} onClick={() => onOpen({ kind: "edit", pin })}>
+            <button type="button" className={small} disabled={Boolean(blocked)} title={blocked} aria-label={`Edit the pin for OCP ${pin.version}`} onClick={() => onOpen({ kind: "edit", version: pin.version })}>
               <Pencil className="h-3 w-3" aria-hidden />
               Edit
             </button>
-            <button type="button" className={small} disabled={Boolean(blocked)} title={blocked} aria-label={`Remove the pin for OCP ${pin.version}`} onClick={() => onOpen({ kind: "remove", pin })}>
+            <button type="button" className={small} disabled={Boolean(blocked)} title={blocked} aria-label={`Remove the pin for OCP ${pin.version}`} onClick={() => onOpen({ kind: "remove", version: pin.version })}>
               <Trash2 className="h-3 w-3" aria-hidden />
               Remove
             </button>
@@ -76,18 +91,16 @@ function PinRowView({ detail, pin, writes, onOpen }: { detail: AddonDetail; pin:
 }
 
 /**
- * The add-on's OCP-version pins, and their editor (ADR-0043's 2026-11-25
- * amendment): `operators/<chart>/ocp-versions/<version>/`, read by every
- * destination at exactly that OpenShift version. An admin adds, edits and
- * removes them here, one previewed and confirmed merge request each.
+ * The add-on's OCP-version pins, read (ADR-0043's 2026-11-25 amendment):
+ * `operators/<chart>/ocp-versions/<version>/`, read by every destination at
+ * exactly that OpenShift version, with an operator's own channel there
+ * (ADR-0073). Add pin, Edit and Remove open the add-on's editor on the pins,
+ * where they go in one previewed and confirmed merge request with the rest.
  */
 export function OcpPinsCard({ detail, writes }: { detail: AddonDetail; writes: AddonWrites }) {
-  const [open, setOpen] = useState<Open>(null);
+  const [focus, setFocus] = useState<EditorFocus | null>(null);
+  const operator = useAddonOperator(detail.team, detail.name, detail.in_catalog);
   const pins = sortedPins(detail.ocp_versions);
-  const close = (next: boolean) => {
-    if (!next) setOpen(null);
-  };
-  const dialog = { detail, open: true, onOpenChange: close, readOnlyReason: writes.readOnlyReason, onOpened: writes.onOpened };
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5" aria-label="OCP-version pins">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -101,7 +114,7 @@ export function OcpPinsCard({ detail, writes }: { detail: AddonDetail; writes: A
             className={small}
             disabled={Boolean(writes.readOnlyReason)}
             title={writes.readOnlyReason ?? undefined}
-            onClick={() => setOpen({ kind: "add" })}
+            onClick={() => setFocus({ kind: "add" })}
           >
             <Plus className="h-3 w-3" aria-hidden />
             Add pin
@@ -118,16 +131,33 @@ export function OcpPinsCard({ detail, writes }: { detail: AddonDetail; writes: A
       ) : (
         <ul className="space-y-2" aria-label="Pins per OCP version">
           {pins.map((pin) => (
-            <PinRowView key={pin.version} detail={detail} pin={pin} writes={writes} onOpen={setOpen} />
+            <PinRowView
+              key={pin.version}
+              detail={detail}
+              pin={pin}
+              operatorPin={operator.data?.pins.find((p) => p.version === pin.version)}
+              writes={writes}
+              onOpen={setFocus}
+            />
           ))}
         </ul>
       )}
       {!detail.in_catalog && (
         <p className="text-[11px] text-muted-foreground">A pin belongs to an add-on of the catalog: add {detail.name} to it first.</p>
       )}
-      {open?.kind === "add" && <AddPinDialog {...dialog} />}
-      {open?.kind === "edit" && <EditPinDialog {...dialog} pin={open.pin} />}
-      {open?.kind === "remove" && <RemovePinDialog {...dialog} pin={open.pin} />}
+      {focus && (
+        <AddonEditorDialog
+          team={detail.team}
+          name={detail.name}
+          open
+          onOpenChange={(next) => {
+            if (!next) setFocus(null);
+          }}
+          readOnlyReason={writes.readOnlyReason}
+          onOpened={writes.onOpened}
+          focus={focus}
+        />
+      )}
     </section>
   );
 }

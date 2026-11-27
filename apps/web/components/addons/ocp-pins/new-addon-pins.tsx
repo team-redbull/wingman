@@ -2,27 +2,39 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { OperatorDraft } from "@/lib/olm";
 import { buttonVariants } from "@/components/ui/button";
 import { PinFields } from "@/components/addons/ocp-pins/pin-fields";
 import { withNewRow, type PinRow } from "@/components/addons/ocp-pins/model";
 import { useTeamVersions } from "@/components/addons/ocp-pins/use-team-versions";
+import { PinOperatorFields } from "@/components/addons/addon-editor/operator-fields";
+import type { AddonOperator } from "@/types/day2";
 
 /**
  * A new add-on's OCP-version pins (ADR-0043's 2026-11-25 amendment), none or
  * more, written in its create MR: each one a full OpenShift version, the
- * chart revision there and its values. The versions offered are the ones
- * the team's destinations run.
+ * chart revision there (optional, ADR-0073), an operator's own channel and
+ * version, and its values. The versions offered are the ones the team's
+ * destinations run; the revisions, the chart repo's branches.
  */
 export function NewAddonPins({
   team,
   chart,
   rows,
   onChange,
+  revisions,
+  operator,
+  sigDraft,
 }: {
   team: string;
   chart: string;
   rows: readonly PinRow[];
   onChange: (rows: PinRow[]) => void;
+  /** The chart repo's branches, once its address is read. */
+  revisions: readonly string[];
+  /** The chart is an OLM operator: each pin gets its own channel and version. */
+  operator: AddonOperator | null;
+  sigDraft: OperatorDraft;
 }) {
   const suggestions = useTeamVersions(
     team,
@@ -31,7 +43,7 @@ export function NewAddonPins({
   return (
     <div className="space-y-3">
       {rows.map((row, i) => (
-        <div key={row.key} className="space-y-3 rounded-lg border p-3" data-testid={`new-pin-${i}`}>
+        <div key={row.key} className="min-w-0 space-y-3 rounded-lg border p-3" data-testid={`new-pin-${i}`}>
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="font-semibold">Pin {i + 1}</span>
             <button
@@ -50,8 +62,18 @@ export function NewAddonPins({
             onChange={(draft) => onChange(rows.map((r) => (r.key === row.key ? { ...draft, key: row.key } : r)))}
             taken={rows.filter((r) => r.key !== row.key).map((r) => r.version.trim())}
             suggestions={suggestions}
-            revisions={[]}
-          />
+            revisions={revisions}
+          >
+            {operator && (
+              <PinOperatorFields
+                op={operator}
+                version={row.version.trim()}
+                draft={row.operator}
+                sigDraft={sigDraft}
+                onChange={(settings) => onChange(rows.map((r) => (r.key === row.key ? { ...r, operator: settings } : r)))}
+              />
+            )}
+          </PinFields>
         </div>
       ))}
       <button
