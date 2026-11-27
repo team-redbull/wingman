@@ -71,6 +71,12 @@ do. Paths are relative to the day1 service (`/api/day1`, `/api/auth`,
     gives the key another value, or a flavor that sets it, is a 422.
     `GET /clusters/{name}/drift` has `zone_labels: [{nodepool: {index, name},
     zone}]`: NodePools that lack it, which a sync adds (never drift).
+9d. **Changed (2026-11-28, 3.72.0, ADR-0072's third 2026-11-28 amendment):
+    a sync never adds a zone label.** `GET /clusters/{name}/drift`'s
+    `zone_labels` is renamed `missing_zone_labels` (the same objects): the
+    NodePools whose Nodes carry no zone label, as information (never drift),
+    which no sync changes; `POST /clusters/{name}/sync/preview` no longer warns
+    `adds topology.kubernetes.io/zone …`. Only Wingman's web read the field.
 
 10. **List items** (`ClusterStatus`): `spec_name`/`spec_version` are `null`
     for clusters not linked to a spec (was the sentinel

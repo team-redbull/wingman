@@ -17,18 +17,15 @@ from dataclasses import dataclass
 from typing import cast
 
 from wingman_day1.domain.cluster_edits import Edit, SetConfigs, SetValue
-from wingman_day1.domain.input_paths import InputPath
-from wingman_day1.domain.node_types import ZONE_LABEL
-from wingman_day1.domain.value_drift import NodepoolRef, ValueDrift, file_nodepools, nodepool_name
-from wingman_day1.domain.zone_labels import FILE_KEY, gap_labels, gaps
+from wingman_day1.domain.value_drift import NodepoolRef, ValueDrift, file_nodepools
 
 
-def sync_edits(drift: Sequence[ValueDrift], values: Mapping[str, object]) -> list[Edit]:
-    """The text edits that set every drifted value that needs no decision, and the zone labels.
+def sync_edits(drift: Sequence[ValueDrift]) -> list[Edit]:
+    """The text edits that set every drifted value that needs no decision.
 
-    Each NodePool of a convention InfraEnv whose ``nodeLabels`` lack its zone gets
-    it (ADR-0072); one whose node labels a lock sets already gets it from the
-    lock's value, which keeps each entry's own zone.
+    Nothing else: a NodePool's zone label is never added, changed or dropped
+    (ADR-0072's third 2026-11-28 amendment); a drifted locked ``node_labels``
+    carries the entry's own zone label, when it has one, in its value.
     """
     edits: list[Edit] = []
     for item in drift:
@@ -39,46 +36,7 @@ def sync_edits(drift: Sequence[ValueDrift], values: Mapping[str, object]) -> lis
             edits.append(SetConfigs(item.nodepool.index, tuple(e["name"] for e in entries)))
         else:
             edits.append(SetValue(item.file_key, item.flavor_value))
-    labelled = {d.file_key.segments[1] for d in drift if str(d.file_key).endswith(f".{FILE_KEY}")}
-    edits.extend(
-        SetValue(InputPath(("nodepool", gap.index, FILE_KEY)), gap_labels(values, gap))
-        for gap in gaps(values)
-        if gap.index not in labelled
-    )
     return edits
-
-
-@dataclass(frozen=True, slots=True)
-class ZoneLabelAdded:
-    """A NodePool whose ``nodeLabels`` lack its zone: a sync adds it, not the flavor."""
-
-    nodepool: NodepoolRef
-    zone: str
-
-
-def zone_labels_added(
-    values: Mapping[str, object], cluster_name: str
-) -> tuple[ZoneLabelAdded, ...]:
-    """The zone labels a sync adds (ADR-0072): never drift, the naming convention's."""
-    pools = file_nodepools(values)
-    return tuple(
-        ZoneLabelAdded(
-            NodepoolRef(
-                gap.index, nodepool_name(pools[gap.index], gap.index, cluster_name=cluster_name)
-            ),
-            gap.zone,
-        )
-        for gap in gaps(values)
-    )
-
-
-def zone_label_lines(values: Mapping[str, object], cluster_name: str) -> list[str]:
-    """What a sync says of each zone label it adds: the naming convention's, not the flavor's."""
-    return [
-        f"adds {ZONE_LABEL}: {added.zone} to nodepool {added.nodepool.name}: every NodePool "
-        "labels its Nodes with its zone (the naming convention), which Wingman writes"
-        for added in zone_labels_added(values, cluster_name)
-    ]
 
 
 @dataclass(frozen=True, slots=True)

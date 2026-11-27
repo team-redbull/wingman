@@ -1,4 +1,4 @@
-"""Each zone's NodePool labels its Nodes with its zone (ADR-0072's 2026-11-28 amendment).
+"""Each zone's NodePool labels its Nodes with its zone (ADR-0072's 2026-11-28 amendments).
 
 The naming convention (kubevirt-workflows ``docs/naming-convention.md`` §3.2,
 §3.3): a NodePool "sets ``topology.kubernetes.io/zone`` on its Nodes", from
@@ -6,7 +6,8 @@ its ``nodeLabels``. The platform reads it there: the upgrade workflow takes a
 NodePool's zone from the day1 entry's ``nodeLabels``, upgrades a cluster as
 zoned (its zoned soak) only when a NodePool has one, and rolls NodePools zone
 by zone only when every one has one; tenant workloads spread by it
-(``topologySpreadConstraints``). So Wingman writes it:
+(``topologySpreadConstraints``). So Wingman writes it on every NodePool it
+adds, and never on one that exists:
 
 - **At create** (:func:`with_zone_labels`): every agent nodepool whose
   InfraEnv follows the convention gets ``node_labels[topology.kubernetes.io/zone]``
@@ -16,10 +17,16 @@ by zone only when every one has one; tenant workloads spread by it
   refused (:func:`input_problems`); a flavor never presets it
   (:func:`flavor_problems`). The rendered file must hold it
   (:func:`rendered_problems`).
-- **Drift, sync, import**: the key is Wingman's per-zone value, never part of
-  the one configuration a flavor locks (``value_drift``). A NodePool of a
-  convention InfraEnv without it (a cluster made before) is not drifted; a
-  sync adds it (:func:`gaps`, ``sync_effects.sync_edits``) and says so.
+- **An existing NodePool's label is never added, changed or removed** (the
+  user, 2026-11-28: "the fix will be create new Nodepool"): changing a
+  NodePool's ``nodeLabels`` may apply in place or only to new Nodes, and under
+  ``upgradeType: Replace`` a NodePool change can replace every worker. The key
+  is never part of the one configuration a flavor locks (``value_drift``), and
+  a sync that sets drifted node labels keeps the file's zone label, if it has
+  one, and adds none (:func:`with_own_zone`). A NodePool of a convention
+  InfraEnv without it (made before Wingman labelled zones) is listed, never
+  fixed (:func:`zone_labels_missing`): a new NodePool is the way to Nodes
+  labelled with their zone.
 
 An InfraEnv off the convention names no zone Wingman can trust at create, so
 Wingman writes none for it, and a label a person set there is theirs.
@@ -32,7 +39,7 @@ from dataclasses import dataclass
 from typing import Final, cast
 
 from wingman_day1.domain.node_types import ZONE_LABEL, parse
-from wingman_day1.domain.nodepool_names import infra_env_of
+from wingman_day1.domain.nodepool_names import infra_env_of, rendered_name
 from wingman_day1.domain.zone_inputs import zone_infra_envs
 
 INPUT: Final = "node_labels"
@@ -58,19 +65,22 @@ def _pools(values: Mapping[str, object], key: str) -> list[tuple[int, Mapping[st
     ]
 
 
-def without_zone(labels: object, infra_env: object) -> object:
-    """A file entry's ``nodeLabels`` without Wingman's zone key, when its InfraEnv names a zone."""
-    if not isinstance(labels, Mapping) or zone_of(infra_env) is None:
+def without_zone(labels: object) -> object:
+    """A file entry's ``nodeLabels`` without the zone key: never a flavor's to lock."""
+    if not isinstance(labels, Mapping):
         return labels
     return {k: v for k, v in cast("Mapping[str, object]", labels).items() if k != ZONE_LABEL}
 
 
-def with_own_zone(labels: object, have: object, infra_env: object) -> object:
-    """``labels`` (a flavor's) with a convention entry's zone: the file's, else its InfraEnv's."""
-    own = zone_of(infra_env)
-    if own is None or not isinstance(labels, Mapping):
+def with_own_zone(labels: object, have: object) -> object:
+    """``labels`` (a flavor's) with the zone label the file's ``have`` gives, if it gives one.
+
+    A sync that sets an existing NodePool's node labels keeps its zone label as it
+    is: it never adds one, changes one or drops one.
+    """
+    zone = _mapping(have).get(ZONE_LABEL)
+    if zone is None or not isinstance(labels, Mapping):
         return labels
-    zone = _mapping(have).get(ZONE_LABEL) or own
     return {**cast("Mapping[str, object]", labels), ZONE_LABEL: zone}
 
 
@@ -135,24 +145,28 @@ def rendered_problems(inputs: Mapping[str, object], rendered: Mapping[str, objec
 
 
 @dataclass(frozen=True, slots=True)
-class ZoneLabelGap:
-    """A NodePool of a convention InfraEnv whose ``nodeLabels`` lack its zone: a sync adds it."""
+class ZoneLabelMissing:
+    """A NodePool of a convention InfraEnv whose ``nodeLabels`` lack its zone: told, never fixed."""
 
     index: int
+    name: str
+    """The NodePool the chart renders (``nodepool_names.rendered_name``)."""
     zone: str
+    """Its InfraEnv's zone, which its Nodes are not labelled with."""
 
 
-def gaps(values: Mapping[str, object]) -> tuple[ZoneLabelGap, ...]:
-    """The file's NodePools whose InfraEnv names a zone their Nodes are not labelled with."""
-    found: list[ZoneLabelGap] = []
+def zone_labels_missing(
+    values: Mapping[str, object], *, cluster_name: str
+) -> tuple[ZoneLabelMissing, ...]:
+    """The file's NodePools whose InfraEnv names a zone their Nodes are not labelled with.
+
+    Made before Wingman labelled zones: their Nodes carry no zone label, a sync
+    never changes an existing NodePool, and a new NodePool gets its zone.
+    """
+    found: list[ZoneLabelMissing] = []
     for index, entry in _pools(values, "nodepool"):
         zone = zone_of(infra_env_of(entry))
         if zone is not None and ZONE_LABEL not in _mapping(entry.get(FILE_KEY)):
-            found.append(ZoneLabelGap(index, zone))
+            name = rendered_name(entry, cluster_name=cluster_name) or f"nodepool[{index}]"
+            found.append(ZoneLabelMissing(index, name, zone))
     return tuple(found)
-
-
-def gap_labels(values: Mapping[str, object], gap: ZoneLabelGap) -> dict[str, object]:
-    """The entry's ``nodeLabels`` with its zone added, every other label kept."""
-    entry = dict(_pools(values, "nodepool")).get(gap.index, {})
-    return {**_mapping(entry.get(FILE_KEY)), ZONE_LABEL: gap.zone}

@@ -29,8 +29,8 @@ rollout opened it, and one to an older version is closed, with a comment,
 when the new one opens. :meth:`SyncService.plan` is the same plan against
 any version of the flavor: the rollout and the approve page use it.
 
-A NodePool of a convention InfraEnv whose ``nodeLabels`` lack its zone gets
-it too (ADR-0072's 2026-11-28 amendment): Wingman's, never the flavor's.
+A sync never adds, changes or drops a NodePool's zone label (ADR-0072's third
+2026-11-28 amendment): one that lacks it stays so, and a new NodePool gets it.
 
 With ``DAY1_SCALE_NODEPOOLS`` the update-nodepool workflow owns each
 existing NodePool's replicas (ADR-0062): a sync leaves drifted locked replicas
@@ -82,7 +82,6 @@ from wingman_day1.domain.sync_effects import (
     rebooting,
     removals,
     sync_edits,
-    zone_label_lines,
 )
 from wingman_day1.domain.tuning_profiles import edit_problems as tuning_edit_problems
 from wingman_day1.domain.value_drift import (
@@ -250,15 +249,11 @@ class SyncService:
         provenance = Provenance(name, spec.metadata.version, cluster.provenance.requested_addons)
         held: tuple[HeldReplicas, ...] = ()
         try:
-            content = with_header(
-                edit_values(cluster.content, sync_edits(changes, values)), provenance
-            )
+            content = with_header(edit_values(cluster.content, sync_edits(changes)), provenance)
             if self._owned.replicas:  # the NodePools' replicas are update-nodepool's (ADR-0062)
                 written = values_or_refuse(content)
                 changes, held = held_back(values, written, changes, cluster_name=cluster_name)
-                content = with_header(
-                    edit_values(cluster.content, sync_edits(changes, values)), provenance
-                )
+                content = with_header(edit_values(cluster.content, sync_edits(changes)), provenance)
         except UneditableFileError as exc:
             problems += [f"{exc}: {problem}" for problem in exc.problems]
             content = cluster.content
@@ -281,10 +276,7 @@ class SyncService:
             removals=removals(decided),
             rebooting=rebooting(values, decided),
             problems=tuple(problems),
-            warnings=(
-                *_mc_files_warnings(values, decided),
-                *zone_label_lines(values, cluster_name),
-            ),
+            warnings=tuple(_mc_files_warnings(values, decided)),
             addons_to_install=found.addon_drift if found else (),
             version_differences=found.version_differences if found else (),
             addons_error=found.error if found else None,
