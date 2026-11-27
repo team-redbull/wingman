@@ -29,3 +29,34 @@ export function clusterQuery(site: string, mce: string | null): string {
   params.set("mce", mce);
   return `?${params.toString()}`;
 }
+
+// ── The clusters list's site and MCE, kept in the URL (`?site=&mce=`) ───────
+
+const SITE_PARAM = "site";
+const MCE_PARAM = "mce";
+
+/** The site and MCE the clusters list is filtered to; `null`: every one. */
+export interface ListPlace {
+  site: string | null;
+  mce: string | null;
+}
+
+/** The site and MCE a URL's query names; an empty one names none. */
+export function listPlaceOf(search: string): ListPlace {
+  const params = new URLSearchParams(search);
+  return { site: params.get(SITE_PARAM)?.trim() || null, mce: params.get(MCE_PARAM)?.trim() || null };
+}
+
+/** The URL showing `place`, every other part of `url` kept; every site or every MCE leaves no trace. */
+export function withListPlace(url: { pathname: string; search: string; hash: string }, place: ListPlace): string {
+  const params = new URLSearchParams(url.search);
+  for (const [key, value] of [[SITE_PARAM, place.site], [MCE_PARAM, place.mce]] as const) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const query = params.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
+}
+
+/** The clusters list filtered to `place`, for the pages that link to an MCE's hosted clusters. */
+export const clustersHref = (place: ListPlace): string => withListPlace({ pathname: "/clusters", search: "", hash: "" }, place);

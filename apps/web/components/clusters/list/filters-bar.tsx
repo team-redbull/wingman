@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import { Search, SearchX, X } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { EmptyState, NoMatches } from "@/components/common/empty-state";
 import { OWNER_KEYS } from "@/lib/clusters";
 import { cn } from "@/lib/utils";
 import { FilterPills } from "./filter-pills";
@@ -37,6 +39,49 @@ function OwnerFilters({ filters }: { filters: ListFilters }) {
   );
 }
 
+/**
+ * The MCE filter: a searchable list, since a fleet has dozens of MCEs, in the
+ * owner filters' style. Shown only when some row has an MCE (an admin's list).
+ */
+function MceFilter({ filters }: { filters: ListFilters }) {
+  if (!filters.mceOptions) return null;
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label="MCE filters">
+      <span className="text-xs text-muted-foreground font-medium">MCE:</span>
+      <Combobox
+        size="sm"
+        options={filters.mceOptions}
+        value={filters.mce}
+        onValueChange={filters.setMce}
+        placeholder="Any MCE"
+        searchPlaceholder="Search MCEs…"
+        emptyMessage="No MCE matches."
+        aria-label="Filter by MCE"
+        data-testid="mce-filter"
+        className={cn("w-auto min-w-28 max-w-60 text-xs", filters.mce !== null && "border-primary text-primary")}
+      />
+    </div>
+  );
+}
+
+/** No row matches: for an MCE no cluster is on, says so and offers every MCE; else the list's usual empty state. */
+export function ListNoMatches({ filters }: { filters: ListFilters }) {
+  if (!filters.staleMce) return <NoMatches what="clusters" onClear={filters.clear} />;
+  return (
+    <EmptyState
+      icon={SearchX}
+      title={`No clusters on ${filters.staleMce}`}
+      description="No hosted cluster in the day1 repo is on this MCE: it has none yet, or the link names an MCE the repo does not have."
+      action={
+        <button type="button" onClick={() => filters.setMce(null)} className={buttonVariants({ variant: "outline", size: "sm" })}>
+          Show every MCE
+        </button>
+      }
+      data-testid="clusters-stale-mce"
+    />
+  );
+}
+
 function GroupByPills({ groupBy, onGroupBy }: { groupBy: GroupBy; onGroupBy: (next: GroupBy) => void }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Group by owner">
@@ -59,8 +104,8 @@ function GroupByPills({ groupBy, onGroupBy }: { groupBy: GroupBy; onGroupBy: (ne
 }
 
 /**
- * The clusters list's filters bar: the search, Site, Drift, Upgrades, the
- * owner numbers and Group, Clear filters, then `children` (the page size).
+ * The clusters list's filters bar: the search, Site, MCE, Drift, Upgrades,
+ * the owner numbers and Group, Clear filters, then `children` (the page size).
  */
 export function FiltersBar({
   filters,
@@ -100,6 +145,8 @@ export function FiltersBar({
           onChange={(s) => setSite(site === s && s !== "all" ? "all" : s)}
         />
       )}
+
+      <MceFilter filters={filters} />
 
       <FilterPills
         label="Drift"

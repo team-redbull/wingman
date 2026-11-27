@@ -7,14 +7,14 @@ import { Plus, Server, TriangleAlert } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClusterRow, type LiveStatusRead } from "@/components/clusters/list/cluster-row";
-import { FiltersBar } from "@/components/clusters/list/filters-bar";
+import { FiltersBar, ListNoMatches } from "@/components/clusters/list/filters-bar";
 import { countBy, OWNER_LABEL, ownerOf, sortRows, type GroupBy, type SortDir, type SortField } from "@/components/clusters/list/model";
 import { SortIcon } from "@/components/clusters/list/sort-icon";
 import { useClusterPrefetch } from "@/components/clusters/list/use-cluster-prefetch";
 import { useListDrift } from "@/components/clusters/list/use-list-drift";
 import { useListFilters } from "@/components/clusters/list/use-list-filters";
 import { useListUpgrades } from "@/components/clusters/list/use-list-upgrades";
-import { EmptyState, EmptyStateLink, NoMatches } from "@/components/common/empty-state";
+import { EmptyState, EmptyStateLink } from "@/components/common/empty-state";
 import { Pagination, PageSizePicker } from "@/components/common/pagination";
 import { ProblemList } from "@/components/common/problem-list";
 import { RefreshButton } from "@/components/common/refresh-button";
@@ -198,7 +198,7 @@ export default function ClustersPage() {
                 {!isLoading && clusters && clusters.length > 0 && filtered.length === 0 && (
                   <tr>
                     <td colSpan={COLUMNS}>
-                      <NoMatches what="clusters" onClear={filters.clear} />
+                      <ListNoMatches filters={filters} />
                     </td>
                   </tr>
                 )}

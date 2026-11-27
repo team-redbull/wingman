@@ -35,6 +35,8 @@ export const OWNER_LABEL: Record<OwnerKey, string> = { merkaz: "Merkaz", anaf: "
 export const NO_OWNER = "\u0000none";
 /** The filter option that clears it. */
 export const ANY_OWNER = "\u0000any";
+/** The MCE filter's option that clears it. */
+export const ANY_MCE = "\u0000any";
 
 /** One owner number of a row; `""` when the file has none (an old day1 sends no `owner`). */
 export function ownerOf(c: ClusterStatus, key: OwnerKey): string {
@@ -77,6 +79,29 @@ export function matchesSearch(c: ClusterStatus, q: string): boolean {
     [c.name, c.site, c.mce ?? "", c.spec_name ?? "", c.mastertag ?? ""].some((text) => text.toLowerCase().includes(q)) ||
     OWNER_KEYS.some((k) => ownerOf(c, k).includes(q))
   );
+}
+
+/** An MCE the rows are on: its site and how many rows. */
+export interface McePlace {
+  mce: string;
+  site: string;
+  count: number;
+}
+
+/**
+ * The MCE filter's choices: each MCE a row at `site` is on (every site's
+ * when `null`), with its site and count, by site, then name. A viewer's rows
+ * have no MCE (ADR-0068): none.
+ */
+export function mceFacet(clusters: readonly ClusterStatus[], site: string | null): McePlace[] {
+  const facet = new Map<string, McePlace>();
+  for (const c of clusters) {
+    if (!c.mce || (site !== null && c.site !== site)) continue;
+    const seen = facet.get(c.mce);
+    facet.set(c.mce, { mce: c.mce, site: seen?.site ?? c.site, count: (seen?.count ?? 0) + 1 });
+  }
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+  return [...facet.values()].sort((a, b) => byName(a.site, b.site) || byName(a.mce, b.mce));
 }
 
 /** How many items have each key. */
