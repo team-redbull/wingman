@@ -13,7 +13,8 @@ silently, a create checks the rendered file: the values-file contract
 - the deployment's ``excluded_agent_labels`` as every agent nodepool's
   ``excludeAgentLabels`` (ADR-0065), which :func:`with_agent_labels` sets;
 - each agent nodepool's name, ``<InfraEnv>[-<suffix>]``, as its ``name``
-  (ADR-0071), which :func:`render_new_file` composes into ``nodepool_name``.
+  (ADR-0071), which :func:`render_new_file` composes into ``nodepool_name``;
+- each nodepool's ``replicas`` as given, a zone's 0 included (ADR-0072).
 
 A flavor that gives one of the newer inputs is also refused at its save
 while the template does not read it (``specs.rule_problems``). The newer
@@ -67,6 +68,7 @@ def rendered_problems(inputs: Mapping[str, object], rendered: str) -> list[str]:
         *scale_down_policy.rendered_problems(inputs, written),
         *excluded_agent_labels.rendered_problems(inputs, written),
         *nodepool_names.rendered_problems(inputs, written),
+        *zone_inputs.rendered_problems(inputs, written),
     ]
 
 

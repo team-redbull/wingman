@@ -17,12 +17,15 @@ import yaml
 from wingman_core.domain.git import RepoPath
 from wingman_core.domain.users import User
 from wingman_core.infrastructure.fake_gitlab import InMemoryGitLab
+from wingman_core.testing.fixtures import default_fixture_root
+from wingman_day1.domain.zone_inputs import GUIDE
 from wingman_day1.infrastructure.fakes.provision import FakeProvisionWorkflow
 
 Auth = Callable[[User], dict[str, str]]
 AZ = ["r760-mtl-az1", "r760-mtl-az2", "r760-mtl-az3"]
 KUBELET = [{"name": "worker-kubeletconfig-reserved"}]
 NAME = "ocp4-prod-falcon-site1"
+TEMPLATE = (default_fixture_root() / "wingman/cluster-specs/cluster-template.j2").read_text()
 
 
 def flavor(pool: dict[str, Any], *locked: str, name: str = "agent-zoned") -> dict[str, Any]:
@@ -54,7 +57,7 @@ async def push(
     client: httpx.AsyncClient, support: Any, gitlab: InMemoryGitLab, file: str, text: str
 ) -> None:
     """Commit outside Wingman, then tell it, as GitLab's push webhook does."""
-    project = support.SPECS if file.startswith("specs/") else support.DAY1
+    project = support.SPECS if file.startswith("specs/") or file.endswith(".j2") else support.DAY1
     await support.push(gitlab, project, branch="main", file=file, content=text)
     await client.post(
         "/api/webhooks/gitlab",
@@ -142,3 +145,20 @@ async def test_every_zone_holds_a_locked_replicas_and_a_zone_set_cluster_needs_a
     assert "nodepools[0].zones: every zone has 0 replicas; a nodepool needs one at least" in (
         problems(await client.post("/api/day1/clusters/preview", json=none, headers=alice))
     )
+
+
+async def test_a_template_that_drops_a_zones_zero_refuses_the_create(
+    client: httpx.AsyncClient, auth: Auth, support: Any, gitlab: InMemoryGitLab
+) -> None:
+    old = TEMPLATE.replace(
+        "replicas: {{ np.replicas | default(2) }}", "replicas: {{ np.replicas | default(2, true) }}"
+    )
+    assert old != TEMPLATE
+    await push(client, support, gitlab, "cluster-template.j2", old)
+    stored = flavor({"node_type": "r760-mtl"})
+    await push(client, support, gitlab, "specs/agent-zoned.yaml", yaml.safe_dump(stored))
+    alice = auth(support.ALICE)
+    body = zoned(support, 2, 0, 1)
+    (problem,) = problems(await client.post("/api/day1/clusters/preview", json=body, headers=alice))
+    assert problem.startswith("nodepool[1].replicas: the template wrote 2 for 0")
+    assert GUIDE in problem

@@ -269,6 +269,29 @@ def spread(inputs: Mapping[str, object]) -> dict[str, object]:
     return {**inputs, "nodepools": out}
 
 
+GUIDE: Final = "docs/upgrade/3.69-to-3.70.md"
+
+
+def rendered_problems(inputs: Mapping[str, object], rendered: Mapping[str, object]) -> list[str]:
+    """Each rendered nodepool whose ``replicas`` are not the ones its input gave.
+
+    The guard against a specs-project template that drops a 0 (``default(2,
+    true)`` treats 0 as missing): a zone at 0 would get the template's 2.
+    """
+    written = dict(_pools({"nodepools": rendered.get("nodepool")}))
+    problems: list[str] = []
+    for index, pool in _pools(inputs):
+        want, entry = _whole(pool.get(REPLICAS)), written.get(index)
+        if want is None or entry is None or _whole(entry.get(REPLICAS)) == want:
+            continue
+        problems.append(
+            f"nodepool[{index}].{REPLICAS}: the template wrote {entry.get(REPLICAS)!r} for {want}; "
+            f"the specs project's cluster-template.j2 must render replicas as given, 0 included "
+            f"({GUIDE})"
+        )
+    return problems
+
+
 def flavor_problems(values: Mapping[str, object]) -> list[str]:
     """Why a flavor's nodepools' node types may not be saved; empty when they may.
 
