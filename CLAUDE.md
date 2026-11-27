@@ -198,48 +198,49 @@ Then the step no command covers: re-read the docs your change made wrong.
 you finish yours, move this entry to the top of `docs/notes/session-log.md`
 and write yours here.
 
-**2026-11-25 — 3.63.0 to 3.66.0: the install picker, day2 with Sync and Import, OCP-version pins, NodePool names.**
-- **Install servers' Choose servers** (3.63.0, ADR-0057's 2026-11-25
-  amendment): a search on name, hardware or problem, Status and Hardware
-  filters, Chosen only, "Pick the n shown" (never past 20, never a server
-  not offered); the dialog is wide. One search field,
-  `components/common/search-box.tsx`, shared with the pool filters.
-- **Sync and Import open the day2 MRs** (3.64.0, ADR-0037's 2026-11-25
-  amendment): day1 opens its MR first, then asks day2 for the missing
-  add-ons, one MR per team, in the admin's name; a day2 failure is reported,
-  never retried, and the day1 MR stays. Rollouts share the same helper
-  (`application/addon_installs.py`).
-- **OCP-version pins** (3.65.0, ADR-0043's 2026-11-25 amendment):
-  `operators/<chart>/ocp-versions/<X.Y.Z>/` added, changed and removed from
-  the add-on page, and set on New add-on, each by MR to the team's repo
-  (`application/ocp_pins.py`); a fleet default's `targetRevision` that
-  overrides the pins is warned.
-- **NodePool names** (3.66.0, ADR-0071): a new NodePool is `<InfraEnv>` or
-  `<InfraEnv>-<suffix>` (no cluster prefix: NodePools live in
-  `hcp-<cluster>`), at most 63 characters, unique in the cluster; existing
-  NodePools keep their names (a rename recreates the nodes). Every path that
-  writes a new NodePool follows it; everything that finds one by name reads
-  both shapes (`rendered_name`). The specs template must read
-  `nodepool_name` (`docs/upgrade/3.65-to-3.66.md`).
-- The lab deploys itself: each merge releases, CI writes the chart into
-  redbull-platform, Argo syncs it (ADR-0070).
+**2026-11-27 — 3.67.0 to 3.70.0: the clusters list by MCE, the flavor editor, node types and logical nodepools.**
+- **Clusters by MCE** (3.67.0, ADR-0018's 2026-11-27 amendment): the
+  clusters list has an MCE filter (a combobox grouped by site); `?site=` and
+  `?mce=` live in the URL like `?upgrade=` (`components/clusters/list/list-url.ts`,
+  `lib/clusters.ts` `clustersHref`). A Customer MCEs row's cluster count opens
+  its hosted clusters; the row still opens Inventory. The clusters page was
+  split into `components/clusters/list/*`.
+- **Flavor editor** (3.68.0): Basics, Nodepools and Add-ons collapse to a
+  one-line summary (Collapse all / Expand all; a problem opens its part and
+  nodepool; per-flavor memory in localStorage), each nodepool card collapses
+  (`nodepool-frame.tsx`, `components/ui/collapsible.tsx`); the add-ons
+  transfer list has an arrow from Available to Selected, counts, and a chosen
+  add-on leaves Available (`lib/addon-transfer.ts`).
+- **Node types** (3.69.0, ADR-0072): a node type is an InfraEnv's name
+  without its zone (`r760-mtl` for `r760-mtl-az1`); the zone is the hub's
+  `topology.kubernetes.io/zone` label, else the name's. The Customers
+  workspace says "node type · zone", Infrastructure keeps "InfraEnv".
+  `GET /mces/{mce}/node-types`; placement's old "node type" is a **server
+  pool** (`GET /placement` candidates carry `server_pools`).
+- **Logical nodepools** (3.70.0, ADR-0072): a customer's nodepool is a node
+  type, one config and replicas per zone; day1 writes one NodePool per zone
+  (`<InfraEnv>[-<suffix>]`), every zone even at 0, with no new key in the
+  cluster file (`domain/zone_inputs.py` `spread`). Drift, Sync and Import
+  group a file's NodePools by node type and suffix, read from the names
+  (`domain/logical_pools.py`); older clusters keep one entry per position. A
+  flavor presets a node type. A template that turns 0 into 2 is refused
+  (`docs/upgrade/3.69-to-3.70.md`).
+- **Deferred by the user** ("too soon, we will try this in the future"):
+  operator versions like OperatorHub (channel, version, approval; editing
+  pins in Edit add-on). Draft ADR-0073 on `roiblum/operator-channels` and the
+  web half on `roiblum/operator-channels-web`; no PR. Don't resume unasked.
 
 **Next:**
-- The specs repo's `cluster-template.j2` comment above `name:` still says
-  "needed only when two nodepools share an InfraEnv" (rendered into every
-  file): an MR to the user's GitLab, when the user says so.
-- The team: the platform's acceptance tests name NodePools
-  `<cluster>-<InfraEnv>` (kubevirt-workflows Acceptance Tests §3); Wingman's
-  new ones are `<InfraEnv>[-<suffix>]`.
-- InfraEnvs on production MCEs need `spec.agentLabels` `redbull.io/flavor`,
-  `redbull.io/size`, `redbull.io/site` for a pool draw (workflows
-  `add_server_to_mce.py` `_POOL_LABELS`); nothing sets them today.
-- Code organisation is paused (the user, 2026-11-25): PR #4 (day2's big
-  services split, open) and the create-page split (an unpushed local branch,
-  stopped mid-rebase) wait; then steps 3 to 5 of
-  `docs/ideas/code-organisation.md`.
-- ADR-0069's open questions (KV create), the seed name to confirm with the
-  team, the drift tab's Install still one chart per MR, the air-gap's
-  upgrade path (`docs/upgrade/`, through 3.65-to-3.66).
-- The team's questions: herzi, RBAC, a shared Git store, provision-cluster's
-  24 characters.
+- Logical nodepools left for later (ADR-0072): Edit cluster changing a
+  logical nodepool's config in every zone at once (today it warns), Scale per
+  logical nodepool, a NodePool for a zone an MCE gains later, placement
+  reading each candidate MCE's own zones, drift lines grouped in the web.
+- The specs repo's `cluster-template.j2` comment above `name:` is stale: an
+  MR to the user's GitLab, when the user says so.
+- The team: acceptance tests name NodePools `<cluster>-<InfraEnv>`; InfraEnvs
+  on production MCEs need `redbull.io/flavor`, `redbull.io/size`,
+  `redbull.io/site` agentLabels and the zone label; the seed name to confirm;
+  ADR-0069's open questions.
+- Code organisation is paused (PR #4 and the create-page branch wait).
+- The air-gap's upgrade path: `docs/upgrade/`, through 3.69-to-3.70.
+
