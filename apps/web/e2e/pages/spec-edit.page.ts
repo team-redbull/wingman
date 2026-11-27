@@ -32,8 +32,10 @@ export class SpecEditPage {
     return this.page.getByTestId(`selected-addon-${team}-${name}`);
   }
 
+  /** Add an add-on, and let it land: it travels into Selected, so measuring or dragging it waits. */
   async selectAddon(team: string, name: string) {
     await this.getAddonCard(team, name).getByRole("button", { name: "Add", exact: true }).click();
+    await this.getSelectedAddon(team, name).evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   }
 
   async removeAddon(team: string, name: string) {

@@ -102,7 +102,9 @@ export function FlavorsSection() {
           collapses to its InfraEnv or hardware, replicas and number of machine configs; a new one opens.
         </Step>
         <Step n={3} title="Add-ons">
-          Pick charts from the catalog and put them in order. The gear opens{" "}
+          Move charts from <strong>Available</strong> (the catalog, by team) to <strong>Selected</strong>, the arrow
+          between them: <strong>Add</strong> takes a chart out of Available, and removing it from Selected puts it
+          back in its place. Drag the selected charts into install order. The gear opens{" "}
           <strong>Configure overrideable fields</strong>: the values a cluster&apos;s creator may set for that
           add-on. Everything else comes from the chart&apos;s defaults.
         </Step>
