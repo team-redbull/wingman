@@ -11,7 +11,16 @@ type Entry = Record<string, unknown>;
 /** What one configuration of a logical nodepool is: every NodePool of it has the same (ADR-0072). */
 const CONFIG_KEYS = ["configs", "nodeLabels", "tuningConfig", "annotations", "labels"] as const;
 
-const configOf = (entry: Entry) => JSON.stringify(CONFIG_KEYS.map((key) => entry[key] ?? null));
+/** A NodePool's zone on its Nodes is its own (ADR-0072), never part of the one configuration. */
+const ZONE_LABEL = "topology.kubernetes.io/zone";
+
+function withoutZone(labels: unknown): unknown {
+  if (!labels || typeof labels !== "object" || Array.isArray(labels)) return labels;
+  return Object.fromEntries(Object.entries(labels).filter(([key]) => key !== ZONE_LABEL));
+}
+
+const configOf = (entry: Entry) =>
+  JSON.stringify(CONFIG_KEYS.map((key) => (key === "nodeLabels" ? withoutZone(entry[key]) : entry[key]) ?? null));
 
 function entriesOf(text: string): Entry[] {
   const doc = load(text);
@@ -28,8 +37,8 @@ function differing(pool: LogicalPool<Entry>): string[] {
 /**
  * The file's logical nodepools while it is edited (ADR-0072): the NodePools
  * of one node type and suffix, one per zone, each with its replicas, and a
- * warning when their configuration (configs, node labels, tuning profiles,
- * annotations, labels) is no longer one: the text edits each NodePool, so a
+ * warning when their configuration (configs, node labels but each one's zone,
+ * tuning profiles, annotations, labels) is no longer one: the text edits each NodePool, so a
  * change meant for the nodepool is made in every zone's.
  */
 export function LogicalPoolsPanel({ text }: { text: string }) {

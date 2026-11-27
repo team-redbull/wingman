@@ -54,6 +54,19 @@ export function placedLabel(infraEnv: string, zone: string | null = splitInfraEn
   return zone ? `${nodeType} · ${zone}` : nodeType;
 }
 
+/** The size in a customer's words, as the convention means it: `mtl` bare metal, `kv32` a VM of 32 vCPUs. */
+export function sizeLabel(size: string): string {
+  return size === "mtl" ? "bare metal" : `VM · ${size.slice(2)} vCPU`;
+}
+
+/** A node type in a customer's words: `bare metal · az1 · az2`; its zones alone off the convention, if named. */
+export function describeNodeType(type: NodeType): string | undefined {
+  const parsed = type.zones.map((z) => parseInfraEnvName(z.infra_env)).find((p) => p !== null);
+  const zones = type.zones.some((z) => z.zone) ? type.zones.map((z) => zoneLabel(z.zone)) : [];
+  const parts = [...(parsed ? [sizeLabel(parsed.size)] : []), ...zones];
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
 /** `az1`, or "one zone" for an unnamed zone. */
 export const zoneLabel = (zone: string | null): string => zone ?? "one zone";
 

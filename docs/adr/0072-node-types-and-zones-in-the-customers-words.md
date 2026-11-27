@@ -250,14 +250,25 @@ so the NodePools it wrote carried no zone label. KV create already wrote one.
    guess which is right.
 5. **The rest of the one configuration** ignores the key: Edit cluster's
    "another configuration than the first zone's" compares node labels
-   without it. The create form names each zone's label beside its row, and
-   the rendered preview shows it.
+   without it. The create form says each zone's NodePool labels its Nodes
+   with its zone, stops the review for a node label that gives the key, and
+   the rendered preview shows it; the drift tab names the labels the next sync
+   adds, apart from the flavor's drift.
+6. **The Node type dropdown in the convention's words.** An option's value
+   stays the node type (`c200-mtl`: the convention's "c200 bare metal across
+   all zones is `flavor=c200, size=mtl`"), and its description says what the
+   convention means: "bare metal" for `mtl`, "VM · 32 vCPU" for `kv32`, then
+   its zones (`lib/node-types.ts` `describeNodeType`). No invented names.
 
 Verified by `test_zone_labels.py` (the label, the refusals, the rendered
 guard, drift without the key, a sync's labels), `test_zone_labels_api.py`
 (a refused request and flavor; an older file in sync with `zone_labels`, a
 sync that adds them) and `test_logical_nodepools_api.py` (each zone's label
-in a create).
+in a create); in the web by `lib/node-types.test.ts` (the descriptions),
+`lib/zone-form.test.ts` (a zone label the person gives) and the mocked
+Playwright `logical-nodepools.spec.ts` (the dropdown's descriptions, the
+zone note, the refused label, the drift tab's zone labels, Edit cluster
+ignoring the key).
 
 ## Amendment (2026-11-28): the convention's exact grammar
 
