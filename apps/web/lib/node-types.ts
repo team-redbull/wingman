@@ -17,13 +17,15 @@ import type { NodeType } from "@/types";
 
 /** An InfraEnv's name under the platform's convention, `<flavor>-<size>-<zone>`. */
 export interface InfraEnvName {
+  /** With its variant letter: `c200n` (an extra NIC) is another node type than `c200`. */
   flavor: string;
   /** `mtl` (bare metal) or `kv<cpu>` (a KubeVirt VM of that many CPUs). */
   size: string;
   zone: string;
 }
 
-const CONVENTION = /^([a-z0-9]+)-(mtl|kv[0-9]+)-([a-z0-9]+)$/;
+/** The convention's grammar exactly, as the platform's workflows parse it: a flavor starts with a letter and carries its variant letter, a VM's vCPUs are positive, a zone is `az<n>`. */
+const CONVENTION = /^([a-z][0-9a-z]*)-(mtl|kv[1-9][0-9]*)-(az[1-9][0-9]*)$/;
 
 /** `c200-kv32-az2` as its flavor, size and zone; `null` for a name off the convention (`dell-r660-site1-128c-1024gb-5tb`). */
 export function parseInfraEnvName(name: string): InfraEnvName | null {

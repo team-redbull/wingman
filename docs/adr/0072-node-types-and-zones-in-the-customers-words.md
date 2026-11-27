@@ -207,3 +207,18 @@ What there was:
   type, zones, names, request and needs; a preset node type with locked
   replicas; an older InfraEnv spread; the typed fallback; the Node pools card
   and Edit cluster's panel.
+
+## Amendment (2026-11-28): the convention's exact grammar
+
+The naming convention (kubevirt-workflows `docs/naming-convention.md` §1)
+names an InfraEnv `<flavor>-<mtl|kv<cpu>>-<zone>`, where the flavor carries
+an optional variant letter (`c200n` an extra NIC, `c200d` an extra disk, `c200x`
+another deviation) and the zone is `az<n>`; the platform's workflows parse it
+as a flavor that starts with a letter, a positive vCPU count and `az<n>`.
+Wingman's two parsers were looser (any lowercase word for the flavor and the
+zone, `kv0`), so a name the workflows refuse could group as a node type here.
+Both now use the convention's grammar exactly: `^[a-z][0-9a-z]*-(mtl|kv[1-9][0-9]*)-az[1-9][0-9]*$`
+(day1 `domain/node_types.py`, the web `lib/node-types.ts`). A variant is
+another node type (`c200n-mtl` is not `c200-mtl`), and a name off the grammar
+(`c200-mtl-zone-a`) stays a node type of its own in one zone. Verified by
+`test_node_types.py` and `lib/node-types.test.ts`.

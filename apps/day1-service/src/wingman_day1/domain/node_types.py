@@ -2,7 +2,9 @@
 
 The platform's naming convention (2026-11-22) names an InfraEnv
 ``<flavor>-<size>-<zone>`` (``r760-mtl-az1``): ``<size>`` is ``mtl`` for bare
-metal or ``kv<cpu>`` for a KubeVirt VM of that many CPUs, and the InfraEnv's
+metal or ``kv<cpu>`` for a KubeVirt VM of that many vCPUs, ``<zone>`` is
+``az<n>``, and ``<flavor>`` carries its variant letter (``c200n`` is another
+node type than ``c200``: an extra NIC). The InfraEnv's
 ``topology.kubernetes.io/zone`` agentLabel names its zone. A customer speaks
 of the kind of server and where it sits, not of InfraEnvs: the **node type**
 is the name without its zone (``r760-mtl``), and the node type's InfraEnvs on
@@ -35,7 +37,12 @@ ZONE_LABEL: Final = "topology.kubernetes.io/zone"
 """An InfraEnv's zone among its agentLabels; a KV cluster's NodePools stamp it on their nodes."""
 BARE_METAL: Final = "mtl"
 """The size of a bare-metal InfraEnv; a KubeVirt one's is ``kv<cpu>``."""
-_CONVENTION = re.compile(r"^(?P<flavor>[a-z0-9]+)-(?P<size>mtl|kv[0-9]+)-(?P<zone>[a-z0-9]+)$")
+_CONVENTION = re.compile(
+    r"^(?P<flavor>[a-z][0-9a-z]*)-(?P<size>mtl|kv[1-9][0-9]*)-(?P<zone>az[1-9][0-9]*)$"
+)
+"""The convention's grammar exactly, as the platform's workflows parse it: a flavor starts
+with a letter and carries its optional variant letter (``c200``, ``c200n``, ``c200d``), a
+VM's vCPUs are a positive number, a zone is ``az<n>``."""
 
 
 @dataclass(frozen=True, slots=True)

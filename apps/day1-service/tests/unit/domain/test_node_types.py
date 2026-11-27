@@ -26,14 +26,27 @@ LEGACY = "dell-r660-site1-128c-1024gb-5tb"
     [
         ("r760-mtl-az1", InfraEnvName("r760", "mtl", "az1")),
         ("c200-kv32-az2", InfraEnvName("c200", "kv32", "az2")),
+        ("c200n-mtl-az12", InfraEnvName("c200n", "mtl", "az12")),
         (LEGACY, None),
         ("r760-mtl", None),
         ("r760-gpu-az1", None),
         ("R760-mtl-az1", None),
+        ("760-mtl-az1", None),
+        ("c200-kv0-az1", None),
+        ("c200-kv032-az1", None),
+        ("c200-mtl-zone1", None),
+        ("c200-mtl-az0", None),
+        ("c200-mtl-a1", None),
     ],
 )
-def test_the_convention_is_flavor_size_zone(name: str, parsed: InfraEnvName | None) -> None:
+def test_the_convention_is_flavor_size_zone_exactly(name: str, parsed: InfraEnvName | None) -> None:
+    """The workflows' grammar: a flavor from a letter, a positive vCPU count, a zone ``az<n>``."""
     assert parse(name) == parsed
+
+
+def test_a_variant_letter_is_another_node_type_and_a_name_off_the_grammar_is_its_own() -> None:
+    assert split("c200n-mtl-az1") == Placed("c200n-mtl", "az1")
+    assert split("c200-mtl-zone-a") == Placed("c200-mtl-zone-a", None)
 
 
 def test_the_node_type_is_the_name_without_its_zone() -> None:
