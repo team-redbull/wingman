@@ -1,51 +1,61 @@
 "use client";
 
-import { Fragment, useState, useMemo, useCallback, useRef } from "react";
+import { Fragment, useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, X, Server, TriangleAlert } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, Server, TriangleAlert } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { api } from "@/lib/api-client";
-import { day1Api, day1Keys } from "@/lib/api/day1";
-import { useIsAdmin } from "@/stores/auth-store";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, formatDate } from "@/lib/utils";
-import { UpgradeFilterGroup } from "@/components/clusters/list/upgrade-filter";
-import { UpgradeState } from "@/components/clusters/list/upgrade-state";
-import { useListUpgrades } from "@/components/clusters/list/use-list-upgrades";
-import { ClusterFlags, ClusterStatusCell, OwnerCell } from "@/components/clusters/list/cells";
-import { FilterPills } from "@/components/clusters/list/filter-pills";
+import { ClusterRow, type LiveStatusRead } from "@/components/clusters/list/cluster-row";
+import { FiltersBar, ListNoMatches } from "@/components/clusters/list/filters-bar";
+import { countBy, OWNER_LABEL, ownerOf, sortRows, type GroupBy, type SortDir, type SortField } from "@/components/clusters/list/model";
 import { SortIcon } from "@/components/clusters/list/sort-icon";
-import { FlavorStateBadge } from "@/components/clusters/drift-badge";
-import { IntentLink } from "@/components/common/intent-link";
+import { useClusterPrefetch } from "@/components/clusters/list/use-cluster-prefetch";
+import { useListDrift } from "@/components/clusters/list/use-list-drift";
+import { useListFilters } from "@/components/clusters/list/use-list-filters";
+import { useListUpgrades } from "@/components/clusters/list/use-list-upgrades";
+import { EmptyState, EmptyStateLink } from "@/components/common/empty-state";
+import { Pagination, PageSizePicker } from "@/components/common/pagination";
 import { ProblemList } from "@/components/common/problem-list";
 import { RefreshButton } from "@/components/common/refresh-button";
-import { Pagination, PageSizePicker } from "@/components/common/pagination";
-import { EmptyState, EmptyStateLink, NoMatches } from "@/components/common/empty-state";
 import { useBulkStatus } from "@/hooks/use-bulk-status";
-import { clusterHref, clusterQuery, OWNER_KEYS, type OwnerKey } from "@/lib/clusters";
-import { flavorDisplayState } from "@/lib/flavor-state";
-import {
-  ANY_OWNER, compareBy, compareOwner, countBy, DRIFT_FILTERS, filterOf, matchesSearch, NO_OWNER, OWNER_LABEL, ownerOf,
-  type DriftFilter, type GroupBy, type SortDir, type SortField,
-} from "@/components/clusters/list/model";
-import { day2Api, day2Keys } from "@/lib/day2";
+import { day1Api, day1Keys } from "@/lib/api/day1";
+import type { OwnerKey } from "@/lib/clusters";
+import { plural } from "@/lib/utils";
 import { tenantClusters } from "@/lib/workspaces";
-import type { CatalogEntry, ClusterStatus, DestinationCharts, DriftSummaryItem } from "@/types";
+import { useIsAdmin } from "@/stores/auth-store";
+import type { ClusterStatus } from "@/types";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const COLUMNS = 8;
+const HEADING = "text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide";
 
-// eslint-disable-next-line max-lines-per-function -- size baseline (ADR-0056)
+/** A group's heading row: it opens the group, and each page the group continues on. */
+function GroupHeading({ groupBy, group, size }: { groupBy: OwnerKey; group: string; size: number }) {
+  return (
+    <tr data-testid={`owner-group-${groupBy}-${group || "none"}`} className="bg-muted/40">
+      <td colSpan={COLUMNS} className="px-3 py-2 text-xs font-semibold text-foreground">
+        {group ? `${OWNER_LABEL[groupBy]} ${group}` : `No ${groupBy}`}
+        <span className="ml-2 font-normal text-muted-foreground">{plural(size, "cluster")}</span>
+      </td>
+    </tr>
+  );
+}
+
+function LoadingRows() {
+  return Array.from({ length: 5 }).map((_, i) => (
+    <tr key={i}>
+      {Array.from({ length: COLUMNS }).map((_, j) => (
+        <td key={j} className="px-3 py-3"><Skeleton className="h-4 w-full" /></td>
+      ))}
+    </tr>
+  ));
+}
+
 export default function ClustersPage() {
   const isAdmin = useIsAdmin();
-  const queryClient = useQueryClient();
 
-  // Filter / sort / pagination state
-  const [search, setSearch] = useState("");
-  const [siteFilter, setSiteFilter] = useState<string>("all");
-  const [driftFilter, setDriftFilter] = useState<DriftFilter>("all");
-  const [ownerFilter, setOwnerFilter] = useState<Record<OwnerKey, string | null>>({ merkaz: null, anaf: null, mador: null });
+  // Sort, grouping and pagination; the filters are useListFilters'
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -61,128 +71,16 @@ export default function ClustersPage() {
   });
 
   const { data: liveStatuses, isLoading: statusLoading, isError: statusFailed } = useBulkStatus(clusters);
+  const live: LiveStatusRead = { statuses: liveStatuses, isLoading: statusLoading, failed: statusFailed };
   const upgrades = useListUpgrades(clusters);
+  const driftOf = useListDrift();
+  const prefetchCluster = useClusterPrefetch();
+  const filters = useListFilters(clusters, driftOf, upgrades, () => setPage(1));
 
-  const { data: driftSummary, isError: driftFailed } = useQuery<DriftSummaryItem[]>({
-    queryKey: day1Keys.clusters.driftSummary,
-    queryFn: day1Api.clusters.driftSummary,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
-
-  const driftMap = useMemo(
-    () => new Map((driftSummary ?? []).map((d) => [d.name, d])),
-    [driftSummary]
+  const filtered = useMemo(
+    () => sortRows((clusters ?? []).filter(filters.matches), groupBy, sortField, sortDir),
+    [clusters, filters.matches, groupBy, sortField, sortDir]
   );
-
-  /** A linked cluster the summary does not list (or a failed summary) is unknown, never in sync. */
-  const driftOf = useCallback(
-    (c: ClusterStatus): DriftSummaryItem | null => {
-      const item = driftMap.get(c.name);
-      if (item) return item;
-      const row = { name: c.name, site: c.site, mce: c.mce, spec_name: c.spec_name, spec_version: c.spec_version, update: null };
-      if (!c.spec_name) return { ...row, state: "not_linked", is_drifted: false, error: null };
-      if (driftSummary === undefined && !driftFailed) return null; // still loading
-      return { ...row, state: "unknown", is_drifted: null, error: driftFailed ? "The drift summary could not be loaded" : null };
-    },
-    [driftMap, driftSummary, driftFailed]
-  );
-
-  // Prefetch the detail page's data on row hover (debounced, at idle time)
-  const prefetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const prefetchCluster = useCallback((c: ClusterStatus) => {
-    if (prefetchTimeoutRef.current) clearTimeout(prefetchTimeoutRef.current);
-    prefetchTimeoutRef.current = setTimeout(() => {
-      // A viewer's cluster has no MCE: it is read by its name (ADR-0068)
-      const where = clusterQuery(c.site, c.mce);
-      const doPrefetch = () => {
-        queryClient.prefetchQuery({
-          queryKey: day1Keys.clusters.detail(c.name),
-          queryFn: () => day1Api.clusters.detail(c.name, where),
-          staleTime: 60_000,
-        });
-        queryClient.prefetchQuery({
-          queryKey: day1Keys.clusters.drift(c.name),
-          queryFn: () => day1Api.clusters.drift(c.name, where),
-          staleTime: 60_000,
-        });
-        // The entries the cluster's charts page reads (a bare name, narrowed by its MCE)
-        queryClient.prefetchQuery({
-          queryKey: day2Keys.charts(c.name, c.mce ?? undefined),
-          queryFn: () => api.get<DestinationCharts>(day2Api.charts(c.name, c.mce ?? undefined)),
-          staleTime: 60_000,
-        });
-        queryClient.prefetchQuery({
-          queryKey: day2Keys.catalog,
-          queryFn: () => api.get<CatalogEntry[]>(day2Api.catalog),
-          staleTime: 120_000,
-        });
-      };
-      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-        (window as Window & { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(doPrefetch);
-      } else {
-        setTimeout(doPrefetch, 0);
-      }
-    }, 150);
-  }, [queryClient]);
-
-  const sites = useMemo(() => {
-    const s = new Set(clusters?.map((c) => c.site).filter(Boolean) ?? []);
-    return Array.from(s).sort();
-  }, [clusters]);
-
-  const driftCounts = useMemo(() => {
-    const counts: Record<DriftFilter, number> = { all: 0, in_sync: 0, update: 0, drifted: 0, unknown: 0, not_linked: 0 };
-    for (const c of clusters ?? []) {
-      counts.all += 1;
-      const d = driftOf(c);
-      if (d) counts[filterOf(flavorDisplayState(d))] += 1;
-    }
-    return counts;
-  }, [clusters, driftOf]);
-
-  /** Each owner filter's choices: every number the files carry, with its count, and "not set" when some lack it. */
-  const ownerOptions = useMemo(() => {
-    const options = {} as Record<OwnerKey, ComboboxOption[]>;
-    for (const key of OWNER_KEYS) {
-      const counts = countBy(clusters ?? [], (c) => ownerOf(c, key));
-      const numbers = [...counts.keys()].filter(Boolean).sort(compareOwner);
-      const count = (n: number) => `${n} cluster${n !== 1 ? "s" : ""}`;
-      options[key] = [
-        { value: ANY_OWNER, label: `Any ${key}` },
-        ...numbers.map((n) => ({ value: n, label: `${OWNER_LABEL[key]} ${n}`, description: count(counts.get(n) ?? 0) })),
-        ...(counts.has("") ? [{ value: NO_OWNER, label: `No ${key}`, description: count(counts.get("") ?? 0) }] : []),
-      ];
-    }
-    return options;
-  }, [clusters]);
-
-  const filtered = useMemo(() => {
-    let list = clusters ?? [];
-    if (search.trim()) list = list.filter((c) => matchesSearch(c, search.toLowerCase()));
-    if (siteFilter !== "all") list = list.filter((c) => c.site === siteFilter);
-    if (driftFilter !== "all") {
-      list = list.filter((c) => {
-        const d = driftOf(c);
-        return d !== null && filterOf(flavorDisplayState(d)) === driftFilter;
-      });
-    }
-    for (const key of OWNER_KEYS) {
-      const wanted = ownerFilter[key];
-      if (wanted !== null) list = list.filter((c) => ownerOf(c, key) === (wanted === NO_OWNER ? "" : wanted));
-    }
-    list = list.filter(upgrades.matches);
-
-    return [...list].sort((a, b) => {
-      // Grouped: the group first, then the chosen order within it
-      if (groupBy !== "none") {
-        const group = compareOwner(ownerOf(a, groupBy), ownerOf(b, groupBy));
-        if (group !== 0) return group;
-      }
-      const cmp = compareBy(sortField, a, b);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [clusters, search, siteFilter, driftFilter, ownerFilter, groupBy, sortField, sortDir, driftOf, upgrades.matches]);
 
   /** How many filtered clusters each group has, for its heading (a group can span pages). */
   const groupSizes = useMemo(
@@ -193,29 +91,10 @@ export default function ClustersPage() {
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
   const flaggedCount = (clusters ?? []).filter((c) => c.problems.length > 0 || !c.naming.follows_convention).length;
 
-  function setFilter<T>(setter: (v: T) => void): (v: T) => void {
-    return (v) => { setter(v); setPage(1); };
-  }
-
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortField(field); setSortDir("asc"); setPage(1); }
   }
-
-  function clearFilters() {
-    setSearch(""); setSiteFilter("all"); setDriftFilter("all"); setOwnerFilter({ merkaz: null, anaf: null, mador: null }); upgrades.setFilter("all"); setPage(1);
-  }
-
-  const setOwner = (key: OwnerKey, value: string | null) => {
-    setOwnerFilter((prev) => ({ ...prev, [key]: value === ANY_OWNER ? null : value }));
-    setPage(1);
-  };
-
-  const hasActiveFilters = search || siteFilter !== "all" || driftFilter !== "all" || upgrades.filter !== "all" ||
-    OWNER_KEYS.some((k) => ownerFilter[k] !== null);
-  const hasOwners = (clusters ?? []).some((c) => OWNER_KEYS.some((k) => ownerOf(c, k)));
-  const columns = 8;
-  const statusOff = liveStatuses === null;
 
   const sortHeader = (field: SortField, label: string) => (
     <button onClick={() => toggleSort(field)} className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors whitespace-nowrap">
@@ -236,7 +115,7 @@ export default function ClustersPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {clusters
-              ? `${filtered.length} of ${clusters.length} cluster${clusters.length !== 1 ? "s" : ""}${hasActiveFilters ? " (filtered)" : ""}`
+              ? `${filtered.length} of ${plural(clusters.length, "cluster")}${filters.hasActive ? " (filtered)" : ""}`
               : "Hosted clusters in the day1 repo"}
             {flaggedCount > 0 && (
               <span className="ml-2 inline-flex items-center gap-1 text-status-warning-fg">
@@ -255,92 +134,15 @@ export default function ClustersPage() {
         </div>
       </div>
 
-      {/* Filters bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-48 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search clusters..."
-            value={search}
-            onChange={(e) => { setFilter(setSearch)(e.target.value); }}
-            className="w-full rounded-lg border bg-card pl-8 pr-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
-          />
-        </div>
-
-        {sites.length > 0 && (
-          <FilterPills
-            label="Site"
-            pills={["all", ...sites].map((s) => ({ value: s, label: s === "all" ? "All" : s }))}
-            value={siteFilter}
-            onChange={(s) => setFilter(setSiteFilter)(siteFilter === s && s !== "all" ? "all" : s)}
-          />
-        )}
-
-        <FilterPills
-          label="Drift"
-          pills={DRIFT_FILTERS.map((f) => ({ ...f, count: f.value !== "all" && clusters ? driftCounts[f.value] : undefined }))}
-          value={driftFilter}
-          onChange={setFilter(setDriftFilter)}
-        />
-
-        <UpgradeFilterGroup upgrades={upgrades} onFilter={setFilter(upgrades.setFilter)} />
-
-        {hasOwners && (
-          <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Owner filters">
-            <span className="text-xs text-muted-foreground font-medium">Owner:</span>
-            {OWNER_KEYS.map((key) => (
-              <Combobox
-                key={key}
-                size="sm"
-                options={ownerOptions[key]}
-                value={ownerFilter[key]}
-                onValueChange={(v) => setOwner(key, v)}
-                placeholder={OWNER_LABEL[key]}
-                searchPlaceholder={`Search ${key} numbers…`}
-                emptyMessage={`No ${key} number matches.`}
-                aria-label={`Filter by ${key}`}
-                data-testid={`owner-filter-${key}`}
-                className={cn(
-                  "w-auto min-w-24 max-w-40 text-xs",
-                  ownerFilter[key] !== null && "border-primary text-primary"
-                )}
-              />
-            ))}
-          </div>
-        )}
-
-        {hasOwners && (
-          <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Group by owner">
-            <span className="text-xs text-muted-foreground font-medium">Group:</span>
-            {(["none", ...OWNER_KEYS] as const).map((g) => (
-              <button
-                key={g}
-                onClick={() => { setGroupBy(g); setPage(1); }}
-                aria-pressed={groupBy === g}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-xs font-medium transition-all border",
-                  groupBy === g
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-                )}
-              >{g === "none" ? "None" : OWNER_LABEL[g]}</button>
-            ))}
-          </div>
-        )}
-
-        {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
-          >
-            <X className="h-3 w-3" />
-            Clear filters
-          </button>
-        )}
-
+      <FiltersBar
+        filters={filters}
+        upgrades={upgrades}
+        counted={clusters !== undefined}
+        groupBy={groupBy}
+        onGroupBy={(g) => { setGroupBy(g); setPage(1); }}
+      >
         <PageSizePicker total={filtered.length} sizes={PAGE_SIZE_OPTIONS} pageSize={pageSize} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
-      </div>
+      </FiltersBar>
 
       {error ? (
         <ProblemList error={error} title="The clusters could not be loaded" />
@@ -351,117 +153,38 @@ export default function ClustersPage() {
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left px-3 py-3">{sortHeader("name", "Name")}</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                  <th className={HEADING}>Status</th>
                   <th className="text-left px-3 py-3">{sortHeader("site", "Site / MCE")}</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap" title="Merkaz / anaf / mador">
-                    Owner
-                  </th>
+                  <th className={`${HEADING} whitespace-nowrap`} title="Merkaz / anaf / mador">Owner</th>
                   <th className="text-left px-3 py-3">{sortHeader("mastertag", "Mastertag")}</th>
                   <th className="text-left px-3 py-3">{sortHeader("spec", "Flavor")}</th>
                   <th className="text-left px-3 py-3">{sortHeader("created_at", "Last change")}</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Drift</th>
+                  <th className={HEADING}>Drift</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {isLoading
-                  ? Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i}>
-                        {Array.from({ length: columns }).map((_, j) => (
-                          <td key={j} className="px-3 py-3"><Skeleton className="h-4 w-full" /></td>
-                        ))}
-                      </tr>
-                    ))
+                  ? <LoadingRows />
                   : paginated.map((cluster, i) => {
-                      const drift = driftOf(cluster);
                       const group = groupBy === "none" ? null : ownerOf(cluster, groupBy);
-                      // A group's heading opens it, and each page it continues on
                       const startsGroup = group !== null && (i === 0 || ownerOf(paginated[i - 1], groupBy as OwnerKey) !== group);
-                      const size = group !== null ? groupSizes.get(group) ?? 0 : 0;
                       return (
                         <Fragment key={cluster.path}>
-                          {startsGroup && (
-                            <tr data-testid={`owner-group-${groupBy}-${group || "none"}`} className="bg-muted/40">
-                              <td colSpan={columns} className="px-3 py-2 text-xs font-semibold text-foreground">
-                                {group ? `${OWNER_LABEL[groupBy as OwnerKey]} ${group}` : `No ${groupBy}`}
-                                <span className="ml-2 font-normal text-muted-foreground">
-                                  {size} cluster{size !== 1 ? "s" : ""}
-                                </span>
-                              </td>
-                            </tr>
-                          )}
-                          <tr
-                            data-testid={`cluster-row-${cluster.name}`}
-                            className="hover:bg-primary/[0.03] transition-colors"
-                            onMouseEnter={() => prefetchCluster(cluster)}
-                          >
-                            <td className="px-3 py-3 max-w-[22rem]">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <IntentLink
-                                  href={clusterHref(cluster)}
-                                  className="font-semibold text-foreground hover:text-primary transition-colors truncate"
-                                  title={cluster.name}
-                                >
-                                  {cluster.name}
-                                </IntentLink>
-                                <ClusterFlags cluster={cluster} />
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              <ClusterStatusCell
-                                cluster={cluster}
-                                status={liveStatuses?.[cluster.name]}
-                                statusOff={statusOff}
-                                isLoading={statusLoading}
-                                failed={statusFailed}
-                              />
-                            </td>
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <div className="leading-snug">
-                                <p className="text-sm text-foreground">{cluster.site}</p>
-                                {cluster.mce && <p className="text-xs text-muted-foreground">{cluster.mce}</p>}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              <OwnerCell cluster={cluster} />
-                            </td>
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <p className="font-mono text-xs text-muted-foreground">{cluster.mastertag ?? "—"}</p>
-                              <UpgradeState cluster={cluster} upgrade={upgrades.stateOf(cluster)} isAdmin={isAdmin} />
-                            </td>
-                            <td className="px-3 py-3">
-                              {cluster.spec_name ? (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <IntentLink href={`/specs/${encodeURIComponent(cluster.spec_name)}`} className="hover:text-primary transition-colors font-medium whitespace-nowrap">
-                                    {cluster.spec_name}
-                                  </IntentLink>
-                                  {cluster.spec_version && (
-                                    <span className="rounded-full px-1.5 py-0.5 text-xs bg-primary/8 text-primary font-medium whitespace-nowrap">
-                                      v{cluster.spec_version}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-3 text-muted-foreground whitespace-nowrap">
-                              <div className="leading-snug">
-                                <p className="text-sm">{cluster.created_by ?? "—"}</p>
-                                <p className="text-xs">
-                                  {cluster.created_at ? formatDate(cluster.created_at) : ""}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              {drift ? <FlavorStateBadge row={drift} /> : <Skeleton className="h-5 w-16" />}
-                            </td>
-                          </tr>
+                          {startsGroup && <GroupHeading groupBy={groupBy as OwnerKey} group={group} size={groupSizes.get(group) ?? 0} />}
+                          <ClusterRow
+                            cluster={cluster}
+                            drift={driftOf(cluster)}
+                            live={live}
+                            upgrade={upgrades.stateOf(cluster)}
+                            isAdmin={isAdmin}
+                            onPrefetch={prefetchCluster}
+                          />
                         </Fragment>
                       );
                     })}
                 {!isLoading && clusters?.length === 0 && (
                   <tr>
-                    <td colSpan={columns}>
+                    <td colSpan={COLUMNS}>
                       <EmptyState
                         icon={Server}
                         title="No clusters yet"
@@ -474,8 +197,8 @@ export default function ClustersPage() {
                 )}
                 {!isLoading && clusters && clusters.length > 0 && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={columns}>
-                      <NoMatches what="clusters" onClear={clearFilters} />
+                    <td colSpan={COLUMNS}>
+                      <ListNoMatches filters={filters} />
                     </td>
                   </tr>
                 )}

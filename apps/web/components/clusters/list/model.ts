@@ -1,6 +1,7 @@
 /**
  * The clusters list's pure logic: its filters, sort and grouping by owner
- * number. The page (app/(app)/clusters/page.tsx) holds the state and the table.
+ * number. The page (app/(app)/clusters/page.tsx) holds the table and its
+ * order; use-list-filters the filters, and filters-bar shows them.
  */
 
 import { OWNER_KEYS, type OwnerKey } from "@/lib/clusters";
@@ -34,6 +35,8 @@ export const OWNER_LABEL: Record<OwnerKey, string> = { merkaz: "Merkaz", anaf: "
 export const NO_OWNER = "\u0000none";
 /** The filter option that clears it. */
 export const ANY_OWNER = "\u0000any";
+/** The MCE filter's option that clears it. */
+export const ANY_MCE = "\u0000any";
 
 /** One owner number of a row; `""` when the file has none (an old day1 sends no `owner`). */
 export function ownerOf(c: ClusterStatus, key: OwnerKey): string {
@@ -58,6 +61,18 @@ export function compareBy(field: SortField, a: ClusterStatus, b: ClusterStatus):
   }
 }
 
+/** The rows in a column's order, within each owner group when grouped (the group first). */
+export function sortRows(rows: readonly ClusterStatus[], groupBy: GroupBy, field: SortField, dir: SortDir): ClusterStatus[] {
+  return [...rows].sort((a, b) => {
+    if (groupBy !== "none") {
+      const group = compareOwner(ownerOf(a, groupBy), ownerOf(b, groupBy));
+      if (group !== 0) return group;
+    }
+    const cmp = compareBy(field, a, b);
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
 /** Whether a lowercased search finds the cluster: in its name, site, MCE (an admin's), flavor, mastertag or owner numbers. */
 export function matchesSearch(c: ClusterStatus, q: string): boolean {
   return (
@@ -66,8 +81,31 @@ export function matchesSearch(c: ClusterStatus, q: string): boolean {
   );
 }
 
+/** An MCE the rows are on: its site and how many rows. */
+export interface McePlace {
+  mce: string;
+  site: string;
+  count: number;
+}
+
+/**
+ * The MCE filter's choices: each MCE a row at `site` is on (every site's
+ * when `null`), with its site and count, by site, then name. A viewer's rows
+ * have no MCE (ADR-0068): none.
+ */
+export function mceFacet(clusters: readonly ClusterStatus[], site: string | null): McePlace[] {
+  const facet = new Map<string, McePlace>();
+  for (const c of clusters) {
+    if (!c.mce || (site !== null && c.site !== site)) continue;
+    const seen = facet.get(c.mce);
+    facet.set(c.mce, { mce: c.mce, site: seen?.site ?? c.site, count: (seen?.count ?? 0) + 1 });
+  }
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+  return [...facet.values()].sort((a, b) => byName(a.site, b.site) || byName(a.mce, b.mce));
+}
+
 /** How many items have each key. */
-export function countBy<T>(items: T[], keyOf: (item: T) => string): Map<string, number> {
+export function countBy<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, number> {
   const counts = new Map<string, number>();
   for (const item of items) counts.set(keyOf(item), (counts.get(keyOf(item)) ?? 0) + 1);
   return counts;

@@ -154,6 +154,19 @@ nodepool:
         workflow&apos;s MR in GitLab once CI has committed to its branch.
       </Callout>
 
+      <h3 className="text-base font-semibold mt-6 mb-3">The clusters list</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+        Search by name, site, MCE, flavor, mastertag or owner number, and narrow the list by <strong>Site</strong>,{" "}
+        <strong>MCE</strong>, <strong>Drift</strong>, <strong>Upgrades</strong> (while upgrades are on) and the owner
+        numbers, or group it by one. The MCE filter lists the MCEs the chosen site&apos;s clusters are on, each with
+        its count, and every site&apos;s, grouped by site, under All; choosing a site that lacks the MCE drops it. The
+        site, the MCE and the Upgrades filter are kept in the URL (
+        <InlineCode>/clusters?site=site1&amp;mce=ocp4-prod-mce-site1-a</InlineCode>), so a reload or Back from a
+        cluster keeps them and a link opens them: each Customer MCE&apos;s cluster count is such a link. A link to an
+        MCE no cluster is on says so, with <strong>Show every MCE</strong>. A Viewer&apos;s list names no MCE, so it
+        has no MCE filter.
+      </p>
+
       <ClusterPageDocs />
     </section>
   );

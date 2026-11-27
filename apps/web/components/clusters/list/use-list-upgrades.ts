@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo } from "react";
 import { isApiError } from "@/lib/api-client";
 import { useFleetUpgrades } from "@/lib/api/upgrades";
 import {
@@ -14,31 +14,12 @@ import {
   type UpgradeFilter,
 } from "@/lib/fleet-upgrades";
 import type { ClusterStatus } from "@/types";
+import { replaceListUrl, useListSearch } from "./list-url";
 
-/** Whoever reads the filter, told when it is set here: `replaceState` fires no event. */
-const listeners = new Set<() => void>();
-
-function subscribe(onChange: () => void): () => void {
-  listeners.add(onChange);
-  window.addEventListener("popstate", onChange);
-  return () => {
-    listeners.delete(onChange);
-    window.removeEventListener("popstate", onChange);
-  };
-}
-
-/**
- * The Upgrade filter, from the URL's `?upgrade=`: Back from a cluster returns
- * to the filtered list, and the link can be shared. A change replaces the
- * history entry, as the Segments page's filters do. Read without
- * `useSearchParams`, so the page needs no Suspense boundary.
- */
+/** The Upgrade filter, from the URL's `?upgrade=` (list-url). */
 function useUpgradeFilter(): [UpgradeFilter, (next: UpgradeFilter) => void] {
-  const filter = upgradeFilterOf(useSyncExternalStore(subscribe, () => window.location.search, () => ""));
-  const setFilter = useCallback((next: UpgradeFilter) => {
-    window.history.replaceState(null, "", withUpgradeFilter(window.location, next));
-    listeners.forEach((listener) => listener());
-  }, []);
+  const filter = upgradeFilterOf(useListSearch());
+  const setFilter = useCallback((next: UpgradeFilter) => replaceListUrl(withUpgradeFilter(window.location, next)), []);
   return [filter, setFilter];
 }
 

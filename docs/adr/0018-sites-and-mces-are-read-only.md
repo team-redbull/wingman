@@ -1,7 +1,7 @@
 # ADR-0018: Sites and MCEs are read-only folders in Wingman
 
 Date: 2026-11-07
-Status: Accepted; amended 2026-11-24: Customer MCEs' Create MCE is a preview of the vision that writes nothing (see the amendment)
+Status: Accepted; amended 2026-11-24: Customer MCEs' Create MCE is a preview of the vision that writes nothing; amended 2026-11-27: a Customer MCE's cluster count opens its hosted clusters (see the amendments)
 
 ## Context
 
@@ -83,3 +83,33 @@ Verification: `apps/web/lib/mce-preview.test.ts` (the name's letter, a
 site's zones, the VMs) and `apps/web/e2e/tests/customer-mces.spec.ts`
 (the inputs drive the name, zones and steps; Create is disabled with its
 reason; no request but a read is sent).
+
+## Amendment (2026-11-27): a Customer MCE's cluster count opens its clusters
+
+The user asked to "give a button that will show which Hosted Clusters are
+under this MCE" on Customer MCEs, and an MCE filter on the clusters list.
+Both read; the Decision above holds.
+
+1. **Each Customer MCE's Clusters cell is a link of its own**, "16
+   clusters" (the count alone on a phone, under the column's heading), to
+   the clusters list filtered to that MCE, `/clusters?site=<site>&mce=<name>`
+   (`clustersHref` in `apps/web/lib/clusters.ts`). It sits above the row's
+   stretched link, so it opens the list and not Inventory; the rest of the
+   row still opens the MCE's servers in Inventory Management. An MCE with no
+   cluster shows a quiet "0 clusters" and no link. The count is day1's
+   `cluster_count`, the cluster files in the MCE's `hostedClusters/`, the
+   files the list shows.
+2. **The clusters list has an MCE filter**: the MCEs the Site filter's
+   clusters are on, each with its count, in a searchable list (a fleet has
+   dozens), every site's grouped by site under All. The site and the MCE are
+   kept in the URL (`?site=&mce=`) as the Upgrades filter is (`?upgrade=`,
+   ADR-0055's amendments), so the link above opens the list filtered and a
+   reload keeps it; a site that lacks the MCE drops it, and an MCE no
+   cluster is on says so, with Show every MCE. A viewer's rows name no MCE
+   (ADR-0068): no MCE filter, and the URL's is ignored.
+
+Verification: `apps/web/lib/clusters.test.ts` (the URL),
+`apps/web/components/clusters/list/model.test.ts` (each MCE and its count)
+and `apps/web/e2e/tests/clusters-mce-filter.spec.ts` (the filter, the URL
+through a reload, Clear filters, a stale MCE, a viewer, and the link from
+Customer MCEs, by mouse, keyboard and on a phone).
