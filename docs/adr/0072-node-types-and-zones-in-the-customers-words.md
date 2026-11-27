@@ -208,6 +208,57 @@ What there was:
   replicas; an older InfraEnv spread; the typed fallback; the Node pools card
   and Edit cluster's panel.
 
+## Amendment (2026-11-28): each zone's NodePool labels its Nodes with its zone
+
+The naming convention (§3.2: a NodePool "sets `topology.kubernetes.io/zone`
+on its Nodes"; §3.3's NodePool example, `nodeLabels: {topology.kubernetes.io/zone: az1}`)
+and the platform's upgrade workflow read a NodePool's zone from the day1
+entry's `nodeLabels`: the workflow upgrades a cluster as zoned (its zoned
+soak) only when a NodePool has one, and rolls NodePools zone by zone only
+when every one has one; tenant workloads spread by it
+(`topologySpreadConstraints`). 3.70.0 copied one configuration to every zone,
+so the NodePools it wrote carried no zone label. KV create already wrote one.
+
+1. **Every NodePool Wingman writes for a convention InfraEnv labels its
+   Nodes with that InfraEnv's zone**: each zone of a logical nodepool, a
+   one-zone node type, a KV cluster's NodePool. Day1 adds
+   `node_labels[topology.kubernetes.io/zone]` before the render, merged with
+   the person's node labels (`domain/zone_labels.py`). The zone is the
+   name's, which for a convention InfraEnv is the zone its agentLabels carry.
+   An InfraEnv off the convention gets none (no zone Wingman can trust at
+   create), and a label a person sets there is theirs.
+2. **The key is Wingman's.** A request that gives it another value than each
+   NodePool's own zone is refused at `nodepools[i].node_labels`, a flavor
+   never presets or locks it (refused at save), and the rendered file must
+   hold it, else the create is refused naming `docs/upgrade/3.70-to-3.71.md`
+   (the specs template must render `node_labels` as `nodeLabels`; the
+   reference does).
+3. **Never a flavor's drift.** A locked `node_labels` is compared without the
+   zone key on a convention entry, so a zone-spread cluster has no false
+   drift, and neither has an older cluster without the label. A sync that
+   sets drifted node labels writes the flavor's labels with the entry's own
+   zone (the file's, else its InfraEnv's), so it never drops one.
+4. **A sync adds a missing zone label.** Every NodePool of a convention
+   InfraEnv whose `nodeLabels` lack its zone gets it from the next sync to
+   the flavor, a person's or a new version's rollout, and the sync preview
+   says so in its warnings; the drift read lists them as `zone_labels`, apart
+   from `value_drift`: Wingman's, the convention's, and the cluster stays in
+   sync. Decided for every such NodePool, a logical nodepool's zones and a
+   one-zone NodePool alike, since the convention asks it of every NodePool.
+   An in-sync cluster is not synced for this alone, and a zone label that
+   differs from its InfraEnv's zone is left for a person: Wingman does not
+   guess which is right.
+5. **The rest of the one configuration** ignores the key: Edit cluster's
+   "another configuration than the first zone's" compares node labels
+   without it. The create form names each zone's label beside its row, and
+   the rendered preview shows it.
+
+Verified by `test_zone_labels.py` (the label, the refusals, the rendered
+guard, drift without the key, a sync's labels), `test_zone_labels_api.py`
+(a refused request and flavor; an older file in sync with `zone_labels`, a
+sync that adds them) and `test_logical_nodepools_api.py` (each zone's label
+in a create).
+
 ## Amendment (2026-11-28): the convention's exact grammar
 
 The naming convention (kubevirt-workflows `docs/naming-convention.md` §1)

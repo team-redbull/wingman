@@ -14,7 +14,9 @@ silently, a create checks the rendered file: the values-file contract
   ``excludeAgentLabels`` (ADR-0065), which :func:`with_agent_labels` sets;
 - each agent nodepool's name, ``<InfraEnv>[-<suffix>]``, as its ``name``
   (ADR-0071), which :func:`render_new_file` composes into ``nodepool_name``;
-- each nodepool's ``replicas`` as given, a zone's 0 included (ADR-0072).
+- each nodepool's ``replicas`` as given, a zone's 0 included (ADR-0072);
+- each convention InfraEnv's zone as its ``nodeLabels``' ``topology.kubernetes.io/zone``,
+  which :func:`render_new_file` adds (ADR-0072's 2026-11-28 amendment).
 
 A flavor that gives one of the newer inputs is also refused at its save
 while the template does not read it (``specs.rule_problems``). The newer
@@ -33,6 +35,7 @@ from wingman_day1.domain import (
     nodepool_names,
     scale_down_policy,
     zone_inputs,
+    zone_labels,
 )
 from wingman_day1.domain.cluster_file import (
     WorkflowKeys,
@@ -69,6 +72,7 @@ def rendered_problems(inputs: Mapping[str, object], rendered: str) -> list[str]:
         *excluded_agent_labels.rendered_problems(inputs, written),
         *nodepool_names.rendered_problems(inputs, written),
         *zone_inputs.rendered_problems(inputs, written),
+        *zone_labels.rendered_problems(inputs, written),
     ]
 
 
@@ -83,6 +87,7 @@ def input_problems(inputs: Mapping[str, object], owned: WorkflowKeys) -> list[st
     """
     return [
         *zone_inputs.input_problems(inputs),
+        *zone_labels.input_problems(inputs),
         *nodepool_infra_envs.input_problems(inputs, enabled=owned.infra_envs),
         *scale_down_policy.input_problems(inputs),
         *excluded_agent_labels.input_problems(inputs, owned.excluded_agent_labels),
@@ -122,6 +127,7 @@ def render_new_file(
     if found:
         raise InvalidInputError("the cluster's inputs are not acceptable", found)
     ready = zone_inputs.spread(inputs)  # one physical nodepool per zone (ADR-0072)
+    ready = zone_labels.with_zone_labels(ready)  # each labels its Nodes with its zone
     ready = render_inputs(expand_network_configs(ready, cluster_name=cluster_name))
     ready = with_agent_labels(ready, owned)  # the deployment's (ADR-0065)
     ready = nodepool_names.with_names(ready)  # <InfraEnv>[-<suffix>] (ADR-0071)

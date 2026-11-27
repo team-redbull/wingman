@@ -25,6 +25,7 @@ Auth = Callable[[User], dict[str, str]]
 AZ = ["r760-mtl-az1", "r760-mtl-az2", "r760-mtl-az3"]
 KUBELET = [{"name": "worker-kubeletconfig-reserved"}]
 NAME = "ocp4-prod-falcon-site1"
+ZONE = "topology.kubernetes.io/zone"
 TEMPLATE = (default_fixture_root() / "wingman/cluster-specs/cluster-template.j2").read_text()
 
 
@@ -100,7 +101,10 @@ async def test_a_create_writes_one_nodepool_per_zone_with_one_config_and_each_zo
         (AZ[1], f"{AZ[1]}-gpu", 0),
         (AZ[2], f"{AZ[2]}-gpu", 1),
     ]
-    assert all(p["configs"] == KUBELET and p["nodeLabels"] == {"tier": "gpu"} for p in written)
+    assert [p["nodeLabels"] for p in written] == [
+        {"tier": "gpu", ZONE: zone} for zone in ("az1", "az2", "az3")
+    ], "one configuration, each NodePool labelling its Nodes with its own zone"
+    assert all(p["configs"] == KUBELET for p in written)
     assert not any("zones" in p or "node_type" in p for p in written)
 
     file = await support.provisioned(gitlab, provision.starts[-1])

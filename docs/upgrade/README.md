@@ -123,6 +123,8 @@ already have.
 | 3.67 | 3.68.0: **the flavor editor's parts and nodepools collapse**: Basics, Nodepools and Add-ons each shrink to one line (the name and version, the nodepools and their replicas, the add-ons) with their problem count, a nodepool's card to its InfraEnv or hardware, replicas and machine configs; **Collapse all** / **Expand all** in the bar; the bar's parts and a problem open what holds them; on an existing flavor the collapsed parts are remembered in the browser. **The add-ons are a transfer list**: an arrow from Available to Selected, both counted, and an added add-on leaves Available and comes back to its place when it is removed from Selected | Generic |
 | 3.68 | 3.69.0: **node types and zones in the customer's words** (ADR-0072): an InfraEnv is a node type in one zone (`r760-mtl-az1` is `r760-mtl` in `az1`; the zone is the InfraEnv's `topology.kubernetes.io/zone` label, else its name's), shown so on the create form, the cluster page, the scale and uninstall views and the docs; `GET /mces/{mce}/node-types` lists an MCE's node types; in `GET /placement` each candidate's `node_types` is renamed `server_pools` | Generic |
 | 3.69 | 3.70.0: **a logical nodepool is a NodePool per zone** (ADR-0072): the create form picks a node type and sets each zone's replicas (0 allowed), and Wingman writes one NodePool per zone with one configuration, no new key in the file; a flavor presets a node type; drift, sync and import read the NodePools of one node type and suffix as the flavor's nodepool; the Node pools card and Edit cluster group them | [3.69-to-3.70.md](3.69-to-3.70.md): check that the specs template writes `replicas: 0` as 0 |
+| 3.70.0 | 3.70.1: documentation only (CLAUDE.md's where the work stands, the session log) | Generic |
+| 3.70 | 3.71.0: **each zone's NodePool labels its Nodes with its zone** (ADR-0072's 2026-11-28 amendment): every NodePool Wingman writes for a convention InfraEnv gets `nodeLabels: {topology.kubernetes.io/zone: <its zone>}`, merged with the node labels (a request that gives the key another value, or a flavor that sets it, is refused); the key is never a flavor's drift, a NodePool that lacks it is listed apart (`zone_labels`) and the next sync adds it; the InfraEnv grammar is the convention's exactly (a flavor's variant letter is another node type, a zone is `az<n>`); the Node type dropdown says bare metal or a VM's vCPUs, and the zones | [3.70-to-3.71.md](3.70-to-3.71.md): check that the specs template renders `node_labels` as `nodeLabels` |
 
 ### Skipping versions
 
@@ -149,7 +151,9 @@ InfraEnvs lack the labels a pool draw needs. Going past 3.65, do
 [3.65-to-3.66.md](3.65-to-3.66.md)'s template check before the upgrade: a
 template that does not write `nodepool_name` refuses every create. Going past
 3.69, do [3.69-to-3.70.md](3.69-to-3.70.md)'s template check: a template that
-drops a zone's `replicas: 0` refuses that create.
+drops a zone's `replicas: 0` refuses that create. Going past 3.70, do
+[3.70-to-3.71.md](3.70-to-3.71.md)'s template check: a template that does not
+render `node_labels` refuses every create of a convention InfraEnv.
 Rows marked Generic add nothing. A guide's checks still apply: run them
 before its upgrade step.
 

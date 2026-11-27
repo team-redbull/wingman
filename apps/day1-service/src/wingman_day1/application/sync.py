@@ -29,6 +29,9 @@ rollout opened it, and one to an older version is closed, with a comment,
 when the new one opens. :meth:`SyncService.plan` is the same plan against
 any version of the flavor: the rollout and the approve page use it.
 
+A NodePool of a convention InfraEnv whose ``nodeLabels`` lack its zone gets
+it too (ADR-0072's 2026-11-28 amendment): Wingman's, never the flavor's.
+
 With ``DAY1_SCALE_NODEPOOLS`` the update-nodepool workflow owns each
 existing NodePool's replicas (ADR-0062): a sync leaves drifted locked replicas
 out of its MR (``held_replicas``, by ``replicas_ownership.replicas_changes``)
@@ -52,7 +55,6 @@ from wingman_day1.application.open_syncs import open_syncs, supersede
 from wingman_day1.application.specs import SpecCatalog
 from wingman_day1.domain.addons import AddonDrift, VersionDifference
 from wingman_day1.domain.changes import ClusterAction, ClusterChange, ProvisionResult
-from wingman_day1.domain.cluster_edits import Edit, SetConfigs, SetValue
 from wingman_day1.domain.cluster_file import (
     AUTOMATION_KEYS,
     NO_WORKFLOW_KEYS,
@@ -79,6 +81,8 @@ from wingman_day1.domain.sync_effects import (
     nodes,
     rebooting,
     removals,
+    sync_edits,
+    zone_label_lines,
 )
 from wingman_day1.domain.tuning_profiles import edit_problems as tuning_edit_problems
 from wingman_day1.domain.value_drift import (
@@ -137,20 +141,6 @@ class SyncResult:
     provision: ProvisionResult
     plan: SyncPlan
     addons: AddonInstalls
-
-
-def sync_edits(drift: Sequence[ValueDrift]) -> list[Edit]:
-    """The text edits that set every drifted value that needs no decision."""
-    edits: list[Edit] = []
-    for item in drift:
-        if item.needs_decision is not None:
-            continue
-        if item.is_configs and item.nodepool is not None:
-            entries = cast("Sequence[Mapping[str, str]]", item.flavor_value)
-            edits.append(SetConfigs(item.nodepool.index, tuple(e["name"] for e in entries)))
-        else:
-            edits.append(SetValue(item.file_key, item.flavor_value))
-    return edits
 
 
 def _hardware_problems(
@@ -260,11 +250,15 @@ class SyncService:
         provenance = Provenance(name, spec.metadata.version, cluster.provenance.requested_addons)
         held: tuple[HeldReplicas, ...] = ()
         try:
-            content = with_header(edit_values(cluster.content, sync_edits(changes)), provenance)
+            content = with_header(
+                edit_values(cluster.content, sync_edits(changes, values)), provenance
+            )
             if self._owned.replicas:  # the NodePools' replicas are update-nodepool's (ADR-0062)
                 written = values_or_refuse(content)
                 changes, held = held_back(values, written, changes, cluster_name=cluster_name)
-                content = with_header(edit_values(cluster.content, sync_edits(changes)), provenance)
+                content = with_header(
+                    edit_values(cluster.content, sync_edits(changes, values)), provenance
+                )
         except UneditableFileError as exc:
             problems += [f"{exc}: {problem}" for problem in exc.problems]
             content = cluster.content
@@ -287,7 +281,10 @@ class SyncService:
             removals=removals(decided),
             rebooting=rebooting(values, decided),
             problems=tuple(problems),
-            warnings=tuple(_mc_files_warnings(values, decided)),
+            warnings=(
+                *_mc_files_warnings(values, decided),
+                *zone_label_lines(values, cluster_name),
+            ),
             addons_to_install=found.addon_drift if found else (),
             version_differences=found.version_differences if found else (),
             addons_error=found.error if found else None,
