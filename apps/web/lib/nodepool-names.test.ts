@@ -78,9 +78,9 @@ describe("a cluster file", () => {
   it("marks the NodePools the file had before the edit, and an added one", () => {
     const named = fileNames(ADDED, BASE, "prod-lark-site1");
     expect(named).toEqual([
-      { index: 0, infraEnv: ZONE, name: null, rendered: `prod-lark-site1-${ZONE}`, existing: true },
-      { index: 1, infraEnv: "c200-mtl-az2", name: "prod-lark-site1-storage", rendered: "prod-lark-site1-storage", existing: true },
-      { index: 2, infraEnv: ZONE, name: null, rendered: `prod-lark-site1-${ZONE}`, existing: false },
+      { index: 0, infraEnv: ZONE, name: null, rendered: `prod-lark-site1-${ZONE}`, existing: true, labelledZone: null },
+      { index: 1, infraEnv: "c200-mtl-az2", name: "prod-lark-site1-storage", rendered: "prod-lark-site1-storage", existing: true, labelledZone: null },
+      { index: 2, infraEnv: ZONE, name: null, rendered: `prod-lark-site1-${ZONE}`, existing: false, labelledZone: null },
     ]);
     const added = withName(ADDED, 2, `${ZONE}-b`)!;
     expect(fileNames(added, BASE, "prod-lark-site1")?.[2]).toMatchObject({ name: `${ZONE}-b`, existing: false });

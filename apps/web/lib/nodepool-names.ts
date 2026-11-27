@@ -12,6 +12,7 @@
  */
 
 import { itemRange, keyLines, load, sorted } from "@/lib/infra-envs";
+import { labelledZone } from "@/lib/zone-labels";
 
 export const SUFFIX_INPUT = "name_suffix";
 /** A label value's limit: the name labels each of the NodePool's Nodes. */
@@ -97,6 +98,8 @@ export interface FileName {
   rendered: string | null;
   /** The file before the edit has this NodePool: its name is kept, never changed here. */
   existing: boolean;
+  /** The zone its `nodeLabels` give (`topology.kubernetes.io/zone`), `null` for none: a new one's must be its InfraEnv's (ADR-0072). */
+  labelledZone: string | null;
 }
 
 function entries(doc: Record<string, unknown> | null): Record<string, unknown>[] {
@@ -116,7 +119,7 @@ export function fileNames(content: string, base: string, clusterName: string): F
   return entries(doc).map((entry, index) => {
     const rendered = renderedName(entry, clusterName);
     const existing = rendered !== null && left.delete(rendered);
-    return { index, infraEnv: text(entry.infraEnvName) || null, name: text(entry.name) || null, rendered, existing };
+    return { index, infraEnv: text(entry.infraEnvName) || null, name: text(entry.name) || null, rendered, existing, labelledZone: labelledZone(entry) };
   });
 }
 

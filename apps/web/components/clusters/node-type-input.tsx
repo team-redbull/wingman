@@ -7,6 +7,7 @@ import { fieldInputClassName, type FieldInputContext, type FormValues } from "@/
 import { describeNodeType, nodeTypeFor, parseInfraEnvName, placedLabel, zoneLabel } from "@/lib/node-types";
 import { composeName, SUFFIX_INPUT } from "@/lib/nodepool-names";
 import { cn, plural } from "@/lib/utils";
+import { ZONE_LABEL } from "@/lib/zone-labels";
 import {
   NODE_TYPE, chooseNodeType, formPools, listedType, setZoneReplicas, spreadOverZones, spreadType, zoneCounts, zoneValue,
 } from "@/lib/zone-form";
@@ -26,8 +27,6 @@ export interface ZoneContext {
 }
 
 const POOL_PATH = /^nodepools\[(\d+)\]\.(infra_env|replicas)$/;
-/** The label each zone's NodePool sets on its Nodes (the naming convention; ADR-0072's 2026-11-28 amendment). */
-const ZONE_LABEL = "topology.kubernetes.io/zone";
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 /**

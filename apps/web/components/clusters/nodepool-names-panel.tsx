@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Lock, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fieldInputClassName } from "@/components/clusters/dynamic-variable-form";
+import { NewNodePoolZoneLabel } from "@/components/clusters/new-nodepool-zone-label";
 import {
   composeName,
   fileNames,
@@ -15,6 +16,7 @@ import {
   type FileName,
 } from "@/lib/nodepool-names";
 import { cn } from "@/lib/utils";
+import { withZoneLabel, ZONE_LABEL } from "@/lib/zone-labels";
 
 /** An existing NodePool: its name, kept as it is. */
 function ExistingRow({ pool }: { pool: FileName }) {
@@ -45,8 +47,8 @@ function addedProblem(pool: FileName, twice: boolean): string | null {
   return nameProblem(pool.name) ?? (twice ? "Another nodepool has this name: give it another suffix" : null);
 }
 
-/** A nodepool the edit adds: its InfraEnv, then a suffix written into the file as its `name`. */
-function AddedRow({ pool, twice, onName }: { pool: FileName; twice: boolean; onName: (name: string) => void }) {
+/** A nodepool the edit adds: its InfraEnv, then a suffix written into the file as its `name`, and its zone label. */
+function AddedRow({ pool, twice, onName, onZone }: { pool: FileName; twice: boolean; onName: (name: string) => void; onZone: (zone: string) => void }) {
   const infraEnv = pool.infraEnv;
   const written = infraEnv && pool.name && followsRule(pool.name, infraEnv) ? pool.name.slice(infraEnv.length + 1) : "";
   const [draft, setDraft] = useState<string | null>(null);
@@ -97,6 +99,7 @@ function AddedRow({ pool, twice, onName }: { pool: FileName; twice: boolean; onN
           {problem}
         </p>
       )}
+      <NewNodePoolZoneLabel pool={pool} onWrite={onZone} />
     </li>
   );
 }
@@ -107,7 +110,8 @@ function AddedRow({ pool, twice, onName }: { pool: FileName; twice: boolean; onN
  * (renaming one would replace every node; one that does not follow the rule
  * is marked, never renamed); one the edit adds is named `<InfraEnv>` or
  * `<InfraEnv>-<suffix>` from a suffix written as its `name`, every other line
- * kept. One the edit removes is named: merging deletes it and its nodes.
+ * kept, and labels its Nodes with its zone (ADR-0072: **Add its zone label**
+ * writes it). One the edit removes is named: merging deletes it and its nodes.
  */
 export function NodePoolNamesPanel({ text, base, clusterName, onChange }: {
   text: string;
@@ -119,15 +123,17 @@ export function NodePoolNamesPanel({ text, base, clusterName, onChange }: {
 }) {
   const names = useMemo(() => fileNames(text, base, clusterName), [text, base, clusterName]);
   const removed = useMemo(() => removedNames(text, base, clusterName), [text, base, clusterName]);
-  const [refused, setRefused] = useState<number | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
   if (!names || names.length === 0) return null;
   const counts = new Map<string, number>();
   for (const n of names) if (n.rendered) counts.set(n.rendered, (counts.get(n.rendered) ?? 0) + 1);
-  const write = (index: number, name: string) => {
-    const edited = withName(text, index, name);
-    setRefused(edited === null ? index : null);
+  const apply = (edited: string | null, what: string) => {
+    setRefused(edited === null ? what : null);
     if (edited !== null) onChange(edited);
   };
+  const write = (index: number, name: string) => apply(withName(text, index, name), "write its name");
+  const writeZone = (index: number, zone: string) =>
+    apply(withZoneLabel(text, index, zone), `write ${ZONE_LABEL}: ${zone} in its nodeLabels`);
   return (
     <section className="border-b border-zinc-800 bg-card text-card-foreground" aria-label="NodePool names" data-testid="edit-nodepool-names">
       <p className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 text-xs font-medium">
@@ -140,7 +146,13 @@ export function NodePoolNamesPanel({ text, base, clusterName, onChange }: {
           pool.existing ? (
             <ExistingRow key={pool.index} pool={pool} />
           ) : (
-            <AddedRow key={pool.index} pool={pool} twice={(counts.get(pool.rendered ?? "") ?? 0) > 1} onName={(name) => write(pool.index, name)} />
+            <AddedRow
+              key={pool.index}
+              pool={pool}
+              twice={(counts.get(pool.rendered ?? "") ?? 0) > 1}
+              onName={(name) => write(pool.index, name)}
+              onZone={(zone) => writeZone(pool.index, zone)}
+            />
           )
         )}
       </ul>
@@ -153,7 +165,7 @@ export function NodePoolNamesPanel({ text, base, clusterName, onChange }: {
       {refused !== null && (
         <p role="alert" className="flex items-start gap-1.5 px-3 pb-2.5 text-xs text-status-warning-fg" data-testid="edit-nodepool-names-refused">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-          This nodepool&apos;s lines are not in a layout this can edit: write its name in the file below.
+          This nodepool&apos;s lines are not in a layout this can edit: {refused} in the file below.
         </p>
       )}
     </section>

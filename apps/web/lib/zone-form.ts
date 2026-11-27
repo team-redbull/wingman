@@ -20,6 +20,7 @@
  */
 
 import { nodeTypeOf, parseInfraEnvName, zoneLabel } from "@/lib/node-types";
+import { ZONE_LABEL } from "@/lib/zone-labels";
 import type { NodeType, NodeTypeZone } from "@/types";
 
 export const NODE_TYPE = "node_type";
@@ -169,9 +170,6 @@ export function zoneProblems(form: Record<string, unknown>, nodeTypes: NodeTypes
   });
   return found;
 }
-
-/** The label each zone's NodePool sets on its Nodes: Wingman's, never the person's (ADR-0072's 2026-11-28 amendment). */
-const ZONE_LABEL = "topology.kubernetes.io/zone";
 
 /** Why the nodepool's node labels may not give the zone label: another value than a zone's own. */
 function zoneLabelProblem(pool: Pool, nodeTypes: NodeTypes): string | null {
