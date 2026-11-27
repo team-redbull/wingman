@@ -1,4 +1,4 @@
-"""Live cluster status and InfraEnvs, read from the MCE hubs (``CLUSTER_STATUS_ENABLED``).
+"""Live status, InfraEnvs and node types, read from the MCE hubs (``CLUSTER_STATUS_ENABLED``).
 
 The HostedCluster is ``ocp4-<clusterName>`` in ``hcp-<clusterName>``,
 where ``clusterName`` is the file's own ``clusterName`` key or, by default,
@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from wingman_day1.application.clusters import ClusterService
 from wingman_day1.domain.errors import AmbiguousNameError, HubError, ResourceNotFoundError
 from wingman_day1.domain.names import HostedClusterNaming, HostedClusterRef
+from wingman_day1.domain.node_types import NodeType, node_types
 from wingman_day1.domain.status import LiveStatus, live_status
 from wingman_day1.ports import HubApi
 
@@ -85,6 +86,11 @@ class StatusService:
         """InfraEnv names on an MCE; errors propagate (the form falls back to free text)."""
         found = await self._infra_env_hub.infra_envs(mce, namespace=self._infraenv_namespace)
         return [infra_env.name for infra_env in found]
+
+    async def node_types(self, mce: str) -> tuple[NodeType, ...]:
+        """The node types an MCE's InfraEnvs make, with their zones (ADR-0072); errors propagate."""
+        found = await self._infra_env_hub.infra_envs(mce, namespace=self._infraenv_namespace)
+        return node_types(found)
 
     async def watch(
         self, name: str, mce: str, *, interval: float, sleep: Sleep = asyncio.sleep

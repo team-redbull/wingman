@@ -90,7 +90,7 @@ class FakeHubApi:
             unavailable: MCEs whose hub cannot be reached.
             denied: MCEs whose hub refuses Wingman's token (403).
             free_of_any_type: Per MCE, how many free Agents it has of any InfraEnv
-                asked for (a hub with room for every node type, for tests).
+                asked for (a hub with room for every server pool, for tests).
         """
         self._hosted_clusters = {
             (mce, hc.namespace, hc.name): hc

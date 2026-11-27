@@ -19,7 +19,7 @@ const SUMMARY: { icon: LucideIcon; text: string; emphasis?: boolean }[] = [
   { icon: Unplug, text: "Drains the node and deletes its Machine." },
   {
     icon: Server,
-    text: "Takes the server out of the hosted cluster and stops there: it stays in the MCE, a free Agent in its InfraEnv, with its BareMetalHost. Taking it out of the MCE is another workflow, remove-server-from-mce.",
+    text: "Takes the server out of the hosted cluster and stops there: it stays in the MCE, a free server of its node type in its zone, with its BareMetalHost. Taking it out of the MCE is another workflow, remove-server-from-mce.",
   },
   {
     icon: Replace,

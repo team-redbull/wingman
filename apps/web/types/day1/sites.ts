@@ -33,3 +33,17 @@ export interface OpenShiftVersions {
   /** Why `versions` is short or empty: a missing or broken file under the day1 repo's `upgrade/`. */
   problems: string[];
 }
+
+/** One zone of a node type on an MCE: the InfraEnv that serves it (ADR-0072). */
+export interface NodeTypeZone {
+  /** The InfraEnv's `topology.kubernetes.io/zone` label, else its name's zone; `null`: unnamed. */
+  zone: string | null;
+  infra_env: string;
+}
+
+/** `GET /api/day1/mces/{mce}/node-types`: a node type (`r760-mtl`), InfraEnvs that differ only by zone. */
+export interface NodeType {
+  name: string;
+  /** In zone order. */
+  zones: NodeTypeZone[];
+}

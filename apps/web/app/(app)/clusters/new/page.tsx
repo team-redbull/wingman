@@ -57,7 +57,7 @@ const inputCls =
   "w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow";
 
 function formatVariableName(name: string) {
-  return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return name === "infra_env" ? "Node type" : name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 const asOption = (value: string): ComboboxOption => ({ value, label: value });
@@ -1486,7 +1486,7 @@ export default function NewClusterPage() {
               {mce && infraEnvs === null && (
                 <p data-testid="infraenv-off" className="flex items-start gap-1.5 text-xs text-muted-foreground">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-px" aria-hidden />
-                  Type each nodepool&apos;s InfraEnv: this deployment does not read the MCE (live status is off).
+                  Type each nodepool&apos;s node type and zone as one name, like r760-mtl-az1: this deployment does not read the MCE (live status is off), so it has no list to pick from.
                 </p>
               )}
               {ratio.length > 0 && (
@@ -1527,7 +1527,7 @@ export default function NewClusterPage() {
               )}
               {infraEnvsError && (
                 <div data-testid="infraenv-hint">
-                  <ProblemList error={infraEnvsError} title={`InfraEnvs could not be listed from ${mce}; type their names below`} />
+                  <ProblemList error={infraEnvsError} title={`The node types could not be listed from ${mce}; type each nodepool's with its zone, like r760-mtl-az1`} />
                 </div>
               )}
               {hasConfigs && Boolean(catalogError) && (

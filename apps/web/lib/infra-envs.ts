@@ -36,8 +36,8 @@ export function infraEnvNames(value: unknown): string[] {
 
 /** Why a typed name cannot be added; `null` when it can. */
 export function nameProblem(name: string, own: string | undefined, chosen: readonly string[]): string | null {
-  if (!DNS_LABEL.test(name)) return "An InfraEnv name is lowercase letters, digits and '-'";
-  if (name === own) return "That is the nodepool's own InfraEnv";
+  if (!DNS_LABEL.test(name)) return "A node type and zone is one name of lowercase letters, digits and '-'";
+  if (name === own) return "That is the nodepool's own node type and zone";
   if (chosen.includes(name)) return "Already listed";
   if (chosen.length >= MAX_ADDITIONAL) return `At most ${MAX_ADDITIONAL}`;
   return null;

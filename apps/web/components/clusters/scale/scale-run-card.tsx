@@ -2,6 +2,7 @@
 
 import { CircleCheck, CircleX, Loader2 } from "lucide-react";
 import { humanize } from "@/lib/nodes";
+import { placedLabel } from "@/lib/node-types";
 import { ownPolicy, runChoice } from "@/lib/scale-leave";
 import { failureHint, fromTo, isRunning, runTarget, stateWord } from "@/lib/scale-model";
 import { cn } from "@/lib/utils";
@@ -38,7 +39,7 @@ function Plan({ result }: { result: ScaleResult }) {
         <thead className="text-left text-muted-foreground">
           <tr>
             <th scope="col" className="py-1 pr-3 font-medium">NodePool</th>
-            <th scope="col" className="hidden py-1 pr-3 font-medium sm:table-cell">InfraEnv</th>
+            <th scope="col" className="hidden py-1 pr-3 font-medium sm:table-cell">Node type · zone</th>
             <th scope="col" className="py-1 pr-3 font-medium">Replicas</th>
             {down && <th scope="col" className="py-1 font-medium">Scale-down policy</th>}
           </tr>
@@ -47,7 +48,7 @@ function Plan({ result }: { result: ScaleResult }) {
           {result.nodepools.map((np) => (
             <tr key={np.name} data-testid={`scale-run-pool-${np.name}`}>
               <td className="py-1.5 pr-3 font-mono break-all">{np.name}</td>
-              <td className="hidden py-1.5 pr-3 font-mono text-muted-foreground break-all sm:table-cell">{np.infra_env ?? "—"}</td>
+              <td className="hidden py-1.5 pr-3 font-mono text-muted-foreground break-all sm:table-cell">{np.infra_env ? placedLabel(np.infra_env) : "—"}</td>
               <td className={cn("py-1.5 pr-3 tabular-nums whitespace-nowrap", np.before !== np.after && "font-medium")}>
                 {fromTo(np.before, np.after)}
               </td>

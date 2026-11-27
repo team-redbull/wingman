@@ -30,7 +30,7 @@ export function InfraEnvsPreset({
       label="Also draws from"
       empty={names.length === 0}
       problems={problems}
-      hint="A preset: beside its own InfraEnv, which names the NodePool; a cluster may change it."
+      hint="A preset: beside its own node type and zone, which names the NodePool; a cluster may change it."
       labelsInput={false}
       className="sm:col-span-2"
     >

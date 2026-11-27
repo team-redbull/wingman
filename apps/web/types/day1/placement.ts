@@ -1,6 +1,6 @@
 // ── MCE placement (docs/notes/2026-11-12-mce-placement-api.md, ADR-0050) ─────
 
-/** A placement check: the version, the free pods, the servers of each node type, whether Wingman could read the MCE. */
+/** A placement check: the version, the free pods, the free servers in each server pool, whether Wingman could read the MCE. */
 export interface PlacementCheck {
   check: "version" | "free_pods" | "servers" | "readable";
   /** `not_checked`: live MCE reads are off; it does not block the pick. */
@@ -9,7 +9,7 @@ export interface PlacementCheck {
   detail: string;
 }
 
-/** What the new cluster needs of one node type (an InfraEnv, or several): its nodepools' replicas, summed. */
+/** What the new cluster needs of one server pool (an InfraEnv, or several): its nodepools' replicas, summed. */
 export interface PlacementNeed {
   /** One InfraEnv, or several joined by " + " for nodepools that draw from them (ADR-0064). */
   infra_env: string;
@@ -17,9 +17,9 @@ export interface PlacementNeed {
   replicas: number;
 }
 
-/** One node type's part of a candidate's `servers` check. */
-export interface PlacementNodeType {
-  /** One InfraEnv, or several joined by " + ": node types that share one are a single row, no server counted twice. */
+/** One server pool's part of a candidate's `servers` check. */
+export interface PlacementServerPool {
+  /** One InfraEnv, or several joined by " + ": server pools that share one are a single row, no server counted twice. */
   infra_env: string;
   infra_envs?: string[];
   needed: number;
@@ -58,8 +58,8 @@ export interface PlacementCandidate {
   behind_on: "owner_clusters" | "clusters" | "spare_servers" | "name" | null;
   /** Always the four, in this order: version, free_pods, servers, readable. */
   checks: PlacementCheck[];
-  /** One entry per need: the servers of that node type this MCE has free for it. */
-  node_types: PlacementNodeType[];
+  /** One entry per need: the servers of that server pool this MCE has free for it. */
+  server_pools: PlacementServerPool[];
   /** The releases this MCE hosts, newest first. */
   versions: string[];
   /** Cluster files plus open create merge requests. */
@@ -83,9 +83,9 @@ export interface Placement {
   owner: string | null;
   flavor: string | null;
   min_free_pods: number;
-  /** `false` when live MCE reads are off: free pods and servers were not checked, `pods` is null, `node_types` empty. */
+  /** `false` when live MCE reads are off: free pods and servers were not checked, `pods` is null, `server_pools` empty. */
   live_reads: boolean;
-  /** The summed needs the `servers` check used, by InfraEnv; empty when no nodepool names a node type yet. */
+  /** The summed needs the `servers` check used, by InfraEnv; empty when no nodepool names a server pool yet. */
   needs: PlacementNeed[];
   /** Every version some candidate hosts, newest first. */
   versions: string[];

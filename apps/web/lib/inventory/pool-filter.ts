@@ -1,27 +1,12 @@
 /**
  * The selected MCE's pool table, narrowed (ADR-0057's 2026-11-24 amendment):
  * to the InfraEnvs picked by name (kept across MCEs), a search on the name,
- * the zone and size the platform's names carry, and pools with servers; sorted
+ * the zone and size the platform's names carry (`lib/node-types.ts`), and pools with servers; sorted
  * by name or by available. Nothing is recounted: the rows are day1's.
  */
 
+import { parseInfraEnvName } from "@/lib/node-types";
 import type { PoolCount } from "@/types/inventory";
-
-/** An InfraEnv's name under the platform's convention, `<flavor>-<size>-<zone>`. */
-export interface InfraEnvName {
-  flavor: string;
-  /** `mtl` (bare metal) or `kv<cpu>` (a KubeVirt VM of that many CPUs). */
-  size: string;
-  zone: string;
-}
-
-const CONVENTION = /^([a-z0-9]+)-(mtl|kv[0-9]+)-([a-z0-9]+)$/;
-
-/** `c200-kv32-az2` as its flavor, size and zone; `null` for a name off the convention (`dell-r660-site1-128c-1024gb-5tb`). */
-export function parseInfraEnvName(name: string): InfraEnvName | null {
-  const match = CONVENTION.exec(name);
-  return match ? { flavor: match[1], size: match[2], zone: match[3] } : null;
-}
 
 /** The parts of a name the table filters by. */
 export type Facet = "zone" | "size";

@@ -271,7 +271,7 @@ async def test_on_a_replace_nodepools_infraenvs_never_change(
 # ── Placement ────────────────────────────────────────────────────────────────
 
 
-async def test_placement_takes_a_need_of_several_infraenvs_as_one_node_type(
+async def test_placement_takes_a_need_of_several_infraenvs_as_one_server_pool(
     client: httpx.AsyncClient, auth: Auth, support: Any
 ) -> None:
     response = await client.get(

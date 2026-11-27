@@ -1,4 +1,4 @@
-"""What an MCE has room for: free pods, servers of each node type, spare servers (ADR-0050).
+"""What an MCE has room for: free pods, free servers per server pool, spare servers (ADR-0050).
 
 **Free pods** are counted on the MCE's workers only (the user, 2026-11-12: a
 production MCE has three masters, three infra nodes that run HAProxy and are
@@ -9,7 +9,7 @@ has the infra role, is not Ready, is cordoned, or has a ``NoSchedule`` or
 ``status.allocatable.pods``, less the pods bound to them that are not
 ``Succeeded`` or ``Failed``: what the scheduler counts against a node's limit.
 
-**Servers of each node type**: for every InfraEnv the new cluster's
+**Free servers in each server pool**: for every InfraEnv the new cluster's
 nodepools use, the MCE's free Agents there (the Agent provider's rule, as in
 the nodes view: ``node_pools.why_not_free``), each joined to its server in
 server-scan (``node_pools.ServerFinder``) and counted when that server is
@@ -19,8 +19,10 @@ Agent that carries a used-Agent label (``used_agents``: herzi's
 free server: the new cluster's NodePools exclude it and herzi removes it; it
 is counted apart (``used``).
 
-A nodepool that draws from several InfraEnvs (ADR-0064) is one node type,
-``a + b``: a free Agent of either counts for it. Node types that share an
+A nodepool's **server pool** is the InfraEnvs it draws from: one InfraEnv, a
+zone of a node type (``r760-mtl-az1``, ADR-0072), or several (ADR-0064).
+A nodepool that draws from several InfraEnvs (ADR-0064) is one server pool,
+``a + b``: a free Agent of either counts for it. Server pools that share an
 InfraEnv are judged together, so no free server counts twice: their row is
 all their InfraEnvs against all their replicas, and every part of it must
 hold too (Hall's condition), so a nodepool that draws only from ``a`` is short
@@ -58,10 +60,10 @@ BLOCKING_TAINTS: Final = frozenset({"NoSchedule", "NoExecute"})
 SPARE_STATE: Final = "INSTALLED_TO_INVENTORY"
 """server-scan's ``openshift_state`` of a server registered to an MCE and in no cluster."""
 UNUSABLE_HEALTH: Final = frozenset({"CRITICAL", "UNKNOWN"})
-TYPE_SEPARATOR: Final = " + "
-"""Joins the InfraEnvs of a node type that has several, sorted (ADR-0064)."""
+POOL_SEPARATOR: Final = " + "
+"""Joins the InfraEnvs of a server pool that has several, sorted (ADR-0064)."""
 MAX_EXACT: Final = 10
-"""Node types judged together up to this many are checked part by part; more, each alone."""
+"""Server pools judged together up to this many are checked part by part; more, each alone."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,11 +184,11 @@ def spare_servers(rows: Iterable[ServerRow], scan_name: str) -> SpareServers | N
     return SpareServers(total=len(spare), usable=sum(1 for row in spare if usable(row)))
 
 
-# ── Servers of each node type ────────────────────────────────────────────────
+# ── Free servers in each server pool ────────────────────────────────────────────────
 
 
 class Supply(StrEnum):
-    """Whether an MCE has the servers of one node type that a new cluster needs."""
+    """Whether an MCE has the servers of one server pool that a new cluster needs."""
 
     ENOUGH = "pass"
     SHORT = "fail"
@@ -196,22 +198,22 @@ class Supply(StrEnum):
 _SEVERITY: Final = {Supply.SHORT: 0, Supply.UNKNOWN: 1, Supply.ENOUGH: 2}
 
 
-def node_type(infra_envs: Iterable[str]) -> str:
-    """The node type of a nodepool that draws from ``infra_envs``: ``a``, or ``a + b``, sorted."""
-    return TYPE_SEPARATOR.join(sorted(set(infra_envs)))
+def server_pool(infra_envs: Iterable[str]) -> str:
+    """The server pool of a nodepool that draws from ``infra_envs``: ``a``, or ``a + b``, sorted."""
+    return POOL_SEPARATOR.join(sorted(set(infra_envs)))
 
 
 def infra_envs_in(node: str) -> tuple[str, ...]:
-    """The InfraEnvs of a node type."""
-    return tuple(node.split(TYPE_SEPARATOR))
+    """The InfraEnvs of a server pool."""
+    return tuple(node.split(POOL_SEPARATOR))
 
 
 @dataclass(frozen=True, slots=True)
-class NodeTypeSupply:
-    """One node type (InfraEnv, or several) on one MCE: what the new cluster needs, and is free."""
+class PoolSupply:
+    """One server pool (InfraEnvs) on one MCE: what the new cluster needs, and is free."""
 
     infra_env: str
-    """The node type: one InfraEnv, or several joined by `` + `` (ADR-0064)."""
+    """The server pool: one InfraEnv, or several joined by `` + `` (ADR-0064)."""
     needed: int
     free_agents: int | None
     """Free Agents in its InfraEnvs; ``None`` when the MCE's Agents could not be read."""
@@ -221,7 +223,7 @@ class NodeTypeSupply:
     """Free Agents server-scan has no server for: neither healthy nor not."""
     health_checked: bool = True
     """``False`` when this deployment has no server-scan: free Agents are counted as they are."""
-    within: NodeTypeSupply | None = None
+    within: PoolSupply | None = None
     """A part of it that falls shorter, for the nodepools that draw only on that part."""
     used: int = 0
     """Free Agents left out: they carry a used-Agent label, and herzi removes them."""
@@ -282,17 +284,17 @@ class NodeTypeSupply:
 
 
 def summed_needs(nodepools: Iterable[tuple[str, int]]) -> tuple[tuple[str, int], ...]:
-    """Replicas per node type, summed over the nodepools that use it, sorted by type."""
+    """Replicas per server pool, summed over the nodepools that use it, sorted by pool."""
     needs: dict[str, int] = {}
     for node, replicas in nodepools:
         if replicas > 0:
-            key = node_type(infra_envs_in(node))
+            key = server_pool(infra_envs_in(node))
             needs[key] = needs.get(key, 0) + replicas
     return tuple(sorted(needs.items()))
 
 
 def judged_together(needs: Sequence[tuple[str, int]]) -> list[list[tuple[str, int]]]:
-    """The needs in groups whose node types share InfraEnvs, each group in the needs' order."""
+    """The needs in groups whose server pools share InfraEnvs, each group in the needs' order."""
     groups: list[list[tuple[str, int]]] = []
     for need in needs:
         mine = set(infra_envs_in(need[0]))
@@ -302,21 +304,21 @@ def judged_together(needs: Sequence[tuple[str, int]]) -> list[list[tuple[str, in
     return sorted(groups, key=lambda group: needs.index(group[0]))
 
 
-def node_type_supply(
+def pool_supply(
     needs: Sequence[tuple[str, int]],
     agents: Sequence[AgentObservation] | None,
     rows: Sequence[ServerRow] | None,
     *,
     server_scan: bool = True,
     used_labels: Sequence[str] = (),
-) -> tuple[NodeTypeSupply, ...]:
+) -> tuple[PoolSupply, ...]:
     """For each need, the MCE's free Agents of that type and how many are healthy in server-scan.
 
     ``agents`` is ``None`` when the MCE's Agents could not be read, ``rows``
     when server-scan could not be. ``server_scan`` is ``False`` when this
     deployment has none: the free Agents are then counted without their health.
     A free Agent carrying one of ``used_labels`` is no free server, counted as
-    ``used``. Needs whose node types share an InfraEnv are one row
+    ``used``. Needs whose server pools share an InfraEnv are one row
     (:func:`judged_together`).
     """
     finder = ServerFinder(rows) if rows is not None else None
@@ -324,7 +326,7 @@ def node_type_supply(
     return tuple(_judged(group, count) for group in judged_together(needs))
 
 
-def _judged(group: Sequence[tuple[str, int]], count: _Count) -> NodeTypeSupply:
+def _judged(group: Sequence[tuple[str, int]], count: _Count) -> PoolSupply:
     """A group's row: all of it, with the part that falls shortest when that one is worse."""
     whole = count.supply(group)
     if len(group) == 1:
@@ -343,7 +345,7 @@ def _parts(group: Sequence[tuple[str, int]]) -> list[Sequence[tuple[str, int]]]:
 
 
 class _Count:
-    """The MCE's free Agents per InfraEnv and their health, counted once: a node type sums its own.
+    """The MCE's free Agents per InfraEnv and their health, counted once: a pool sums its own.
 
     Every Agent is in one InfraEnv, so a sum over a set of InfraEnvs counts
     each free server once.
@@ -377,21 +379,21 @@ class _Count:
             elif row is not None and usable(row):
                 _add(self._healthy, agent.infra_env)
 
-    def supply(self, needs: Sequence[tuple[str, int]]) -> NodeTypeSupply:
+    def supply(self, needs: Sequence[tuple[str, int]]) -> PoolSupply:
         """What the needs' InfraEnvs, together, have free for all of the needs."""
         envs = {env for node, _ in needs for env in infra_envs_in(node)}
-        label, needed = node_type(envs), sum(replicas for _, replicas in needs)
+        label, needed = server_pool(envs), sum(replicas for _, replicas in needs)
         if not self._known:
-            return NodeTypeSupply(label, needed, None, None)
+            return PoolSupply(label, needed, None, None)
         free = sum(self._free.get(env, 0) for env in envs)
         used = sum(self._used.get(env, 0) for env in envs)
         if not self._checked:
-            return NodeTypeSupply(label, needed, free, None, health_checked=False, used=used)
+            return PoolSupply(label, needed, free, None, health_checked=False, used=used)
         if not self._health_known:
-            return NodeTypeSupply(label, needed, free, None, used=used)
+            return PoolSupply(label, needed, free, None, used=used)
         healthy = sum(self._healthy.get(env, 0) for env in envs)
         missing = sum(self._missing.get(env, 0) for env in envs)
-        return NodeTypeSupply(
+        return PoolSupply(
             label, needed, free, healthy=healthy, not_in_server_scan=missing, used=used
         )
 

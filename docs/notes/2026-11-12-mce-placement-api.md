@@ -19,6 +19,12 @@ shows the pick as soon as the three are chosen. With the MCE hubs on
 `false`, and `free_pods`, `servers` and `readable` are `not_checked` (they do
 not block the pick; section 9).
 
+Renamed 2026-11-27 (ADR-0072): what this note called a node type, the
+InfraEnv (or InfraEnvs) a nodepool draws from, is a **server pool**, and each
+candidate's `node_types` is `server_pools`. A node type is now what a
+customer picks, an InfraEnv without its zone (`r760-mtl`); each of its zones
+is a server pool of one InfraEnv (`r760-mtl-az1`).
+
 ## 1. The rule
 
 **The free pods rule** (the user, 2026-11-12): free = allocatable pods − pods
@@ -28,7 +34,7 @@ user's estimate is about 67 pods, not yet measured).
 
 **Inputs**: the site, the environment (`prod` or `prep`), the OpenShift
 version, the owner (the cluster's mador, ADR-0028), and the flavor with its
-nodepools: each nodepool's node type (its InfraEnv) and replicas. The flavor
+nodepools: each nodepool's server pool (its InfraEnv) and replicas. The flavor
 matters only to the `servers` check (how many servers of each type the new
 cluster needs); it does not change the ranking.
 
@@ -43,7 +49,7 @@ whose check is unknown is never picked either):
 |---|---|---|
 | `version` | the MCE hosts the version: it is in the MCE's list from the upgrade ladder (ADR-0034) | no version was asked for yet |
 | `free_pods` | at least `PLACEMENT_MIN_FREE_PODS` (default 70) free pods on its workers | the MCE could not be read |
-| `servers` | for every node type the nodepools use, the MCE has at least as many healthy free servers of that type as the new cluster needs | the MCE's Agents or server-scan could not be read, or a free Agent server-scan has no server for is needed to reach the count |
+| `servers` | for every server pool the nodepools use, the MCE has at least as many healthy free servers of that type as the new cluster needs | the MCE's Agents or server-scan could not be read, or a free Agent server-scan has no server for is needed to reach the count |
 | `readable` | Wingman read the MCE's nodes and pods | never: it passes or fails |
 
 With live MCE reads off, `free_pods`, `servers` and `readable` are
@@ -66,7 +72,7 @@ use are the pods on them that are not `Succeeded` or `Failed`. The MCE's
 nodes and pods are read when the form asks (a 5-second cache, shared by
 everyone), never from a source minutes old.
 
-**Servers of each node type.** The *needs* are, per node type (InfraEnv),
+**Servers of each server pool.** The *needs* are, per server pool (InfraEnv),
 the replicas of the nodepools that use it, summed. For each type, the MCE's
 *free* servers are its Agents in that InfraEnv (label
 `infraenvs.agent-install.openshift.io`) that the Agent provider would take:
@@ -171,7 +177,7 @@ get the pick, and again whenever a nodepool's InfraEnv or replicas change.
         {"check": "servers", "status": "pass", "detail": "dell-r660-site1-128c-1024gb-5tb: 4 healthy free of 3 needed; hp-gen11-site1-64c-512gb: 2 healthy free of 2 needed."},
         {"check": "readable", "status": "pass", "detail": "Wingman read its nodes and pods."}
       ],
-      "node_types": [
+      "server_pools": [
         {"infra_env": "dell-r660-site1-128c-1024gb-5tb", "needed": 3, "free_agents": 4, "healthy": 4,
          "not_in_server_scan": 0, "health_checked": true, "status": "pass",
          "detail": "dell-r660-site1-128c-1024gb-5tb: 4 healthy free of 3 needed"},
@@ -205,7 +211,7 @@ get the pick, and again whenever a nodepool's InfraEnv or replicas change.
         {"check": "servers", "status": "fail", "detail": "dell-r660-site1-128c-1024gb-5tb: 1 healthy free of 3 needed; hp-gen11-site1-64c-512gb: 0 healthy free of 2 needed."},
         {"check": "readable", "status": "pass", "detail": "Wingman read its nodes and pods."}
       ],
-      "node_types": ["…"],
+      "server_pools": ["…"],
       "versions": ["4.17.58", "4.16.55"],
       "clusters": 0,
       "open_creates": 0,
@@ -228,7 +234,7 @@ get the pick, and again whenever a nodepool's InfraEnv or replicas change.
   `unknown`, and `pods` is `null`. It is never picked.
 - `needs` (top level) are the summed needs the `servers` check used, sorted
   by InfraEnv; empty when no nodepool names a type yet.
-- `node_types`, per candidate, one entry per need: `free_agents` is `null`
+- `server_pools`, per candidate, one entry per need: `free_agents` is `null`
   when the MCE's Agents could not be read; `healthy` is `null` when
   server-scan could not be read or is not configured; `health_checked` is
   `false` when it is not configured; `not_in_server_scan` counts the free
@@ -395,7 +401,7 @@ server-scan when it is configured.
         {"check": "servers", "status": "not_checked", "detail": "Not checked: live MCE reads are off (CLUSTER_STATUS_ENABLED=false)."},
         {"check": "readable", "status": "not_checked", "detail": "Not checked: live MCE reads are off (CLUSTER_STATUS_ENABLED=false)."}
       ],
-      "node_types": [],
+      "server_pools": [],
       "pods": null
     }
   ]
@@ -404,7 +410,7 @@ server-scan when it is configured.
 
 - `not_checked` is not `unknown`: it does not block. `eligible` is "every
   check passes or is `not_checked`", so the version alone can take an MCE out.
-- `pods` is `null` and `node_types` is empty; the top-level `needs` still
+- `pods` is `null` and `server_pools` is empty; the top-level `needs` still
   echo what was asked.
 - The form shows the pick and says the free pods and servers were not
   checked because live MCE reads are off. The MR description says so too, and

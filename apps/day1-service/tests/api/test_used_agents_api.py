@@ -120,7 +120,7 @@ async def dell_on_a(client: httpx.AsyncClient, headers: dict[str, str]) -> dict[
     )
     assert response.status_code == 200, response.text
     candidate = next(c for c in response.json()["candidates"] if c["mce"] == A)
-    return candidate["node_types"][0]
+    return candidate["server_pools"][0]
 
 
 # ── Placement ────────────────────────────────────────────────────────────────

@@ -47,7 +47,7 @@ function PoolRow({ pool, text, onChange, options, loading, onRefused }: {
     <li className="grid gap-x-4 gap-y-1.5 px-3 py-2.5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]" data-testid={`edit-nodepool-${pool.index}`}>
       <div className="min-w-0 text-xs">
         <p className="font-mono font-medium text-foreground break-all">{pool.first}</p>
-        <p className="text-[11px] text-muted-foreground">{pool.name ? `NodePool ${pool.name}` : "its own InfraEnv: names the NodePool"}</p>
+        <p className="text-[11px] text-muted-foreground">{pool.name ? `NodePool ${pool.name}` : "its own node type and zone: names the NodePool"}</p>
       </div>
       <AlsoDrawsFrom
         value={pool.additional}
@@ -57,7 +57,7 @@ function PoolRow({ pool, text, onChange, options, loading, onRefused }: {
         loading={loading}
         readOnly={pool.replace}
         label={`${pool.first} also draws from`}
-        note={pool.replace ? "upgradeType Replace: a change of its InfraEnvs would replace every node, so they stay as they are." : undefined}
+        note={pool.replace ? "upgradeType Replace: a change of where it draws from would replace every node, so it stays as it is." : undefined}
         testId={`edit-nodepool-${pool.index}-infra-envs`}
       />
     </li>
@@ -77,10 +77,10 @@ function InfraEnvsPanel({ text, onChange, mce }: { text: string; onChange: (text
   const [refused, setRefused] = useState<number | null>(null);
   if (!pools || pools.length === 0) return null;
   return (
-    <section className="border-b border-zinc-800 bg-card text-card-foreground" aria-label="InfraEnvs per nodepool" data-testid="edit-infra-envs">
+    <section className="border-b border-zinc-800 bg-card text-card-foreground" aria-label="Node types per nodepool" data-testid="edit-infra-envs">
       <p className="flex items-center gap-1.5 px-3 pt-2.5 text-xs font-medium">
         <Layers className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-        InfraEnvs per nodepool
+        Node types per nodepool
         <span className="font-normal text-muted-foreground">· a change edits the file below</span>
       </p>
       <ul className="divide-y divide-border">

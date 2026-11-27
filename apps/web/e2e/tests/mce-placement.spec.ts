@@ -14,7 +14,7 @@ import { fulfillProblem, injectAdminAuth, json, mockDashboardApis, mockPlacement
 import { ClusterNewPage } from "../pages/cluster-new.page";
 import type {
   ClusterPreview, CreateClusterRequest, Mce, NameSuggestion, Placement, PlacementCandidate, PlacementCheck, PlacementNeed,
-  PlacementNodeType, SpecEntry, TemplateField,
+  PlacementServerPool, SpecEntry, TemplateField,
 } from "../../types";
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ const PASS = (detail: string) => ({ status: "pass" as const, detail });
 const DELL = "dell-r660-site1-128c-1024gb-5tb";
 const HP = "hp-gen11-site1-64c-512gb";
 
-/** Each MCE's free Agents and, of them, the healthy servers, per node type (a mock of day1's join). */
+/** Each MCE's free Agents and, of them, the healthy servers, per server pool (a mock of day1's join). */
 const FREE: Record<string, Record<string, { agents: number; healthy: number }>> = {
   [B]: { [DELL]: { agents: 4, healthy: 4 }, [HP]: { agents: 3, healthy: 2 } },
   [A]: { [DELL]: { agents: 5, healthy: 5 }, [HP]: { agents: 3, healthy: 3 } },
@@ -81,8 +81,8 @@ function needsOf(query: URLSearchParams): PlacementNeed[] {
   return [...summed].sort(([a], [b]) => a.localeCompare(b)).map(([infra_env, replicas]) => ({ infra_env, replicas }));
 }
 
-/** One node type's part of the servers check, from `FREE`. */
-function nodeType(mce: string, need: PlacementNeed): PlacementNodeType {
+/** One server pool's part of the servers check, from `FREE`. */
+function serverPool(mce: string, need: PlacementNeed): PlacementServerPool {
   const free = FREE[mce]?.[need.infra_env] ?? { agents: 0, healthy: 0 };
   return {
     infra_env: need.infra_env,
@@ -95,8 +95,8 @@ function nodeType(mce: string, need: PlacementNeed): PlacementNodeType {
   };
 }
 
-/** The servers check a candidate's node types make: one failing type fails it, one unknown makes it unknown. */
-function serversCheck(types: PlacementNodeType[]): PlacementCheck {
+/** The servers check a candidate's server pools make: one failing type fails it, one unknown makes it unknown. */
+function serversCheck(types: PlacementServerPool[]): PlacementCheck {
   const status = types.some((t) => t.status === "fail") ? "fail" : types.some((t) => t.status === "unknown") ? "unknown" : "pass";
   const detail = types.length > 0 ? `${types.map((t) => t.detail).join("; ")}.` : "No nodepool names a node type yet.";
   return { check: "servers", status, detail };
@@ -108,7 +108,7 @@ const PODS = (free: number, allocatable: number, counted: number) => ({
 });
 
 function candidate(name: string, needs: PlacementNeed[], overrides: Partial<PlacementCandidate>): PlacementCandidate {
-  const nodeTypes = overrides.node_types ?? needs.map((need) => nodeType(name, need));
+  const serverPools = overrides.server_pools ?? needs.map((need) => serverPool(name, need));
   return {
     mce: name,
     eligible: true,
@@ -118,10 +118,10 @@ function candidate(name: string, needs: PlacementNeed[], overrides: Partial<Plac
     checks: [
       { check: "version", ...PASS("Hosts OpenShift 4.18.22.") },
       { check: "free_pods", ...PASS("212 free pods; a new cluster needs 70.") },
-      serversCheck(nodeTypes),
+      serversCheck(serverPools),
       { check: "readable", ...PASS("Wingman read its nodes and pods.") },
     ],
-    node_types: nodeTypes,
+    server_pools: serverPools,
     versions: VERSIONS,
     clusters: 2,
     open_creates: 0,
@@ -155,7 +155,7 @@ function placement(query: URLSearchParams, overrides: Partial<Placement> = {}): 
     // Without a version: the versions, the numbers, no pick
     return { ...base, pick: null, why: null, problems: ["Choose an OpenShift version."], candidates: [], ...overrides };
   }
-  const cTypes = needs.map((need) => nodeType(C, need));
+  const cPools = needs.map((need) => serverPool(C, need));
   return {
     ...base,
     pick: B,
@@ -173,10 +173,10 @@ function placement(query: URLSearchParams, overrides: Partial<Placement> = {}): 
         checks: [
           { check: "version", status: "fail", detail: "Hosts 4.16 to 4.17 only (4.17.30, 4.16.27), not 4.18.22." },
           { check: "free_pods", status: "fail", detail: "40 free pods; a new cluster needs 70." },
-          serversCheck(cTypes),
+          serversCheck(cPools),
           { check: "readable", ...PASS("Wingman read its nodes and pods.") },
         ],
-        node_types: cTypes,
+        server_pools: cPools,
         versions: ["4.17.30", "4.16.27"],
         spare: null,
         spare_detail: `server-scan names no server for ${C}, so its spare servers are unknown.`,
@@ -187,18 +187,18 @@ function placement(query: URLSearchParams, overrides: Partial<Placement> = {}): 
   };
 }
 
-/** `placement` with candidate A's node types replaced (and its servers check and eligibility made from them). */
-function withATypes(query: URLSearchParams, types: (needs: PlacementNeed[]) => PlacementNodeType[]): Placement {
+/** `placement` with candidate A's server pools replaced (and its servers check and eligibility made from them). */
+function withAPools(query: URLSearchParams, types: (needs: PlacementNeed[]) => PlacementServerPool[]): Placement {
   const all = placement(query);
-  const nodeTypes = types(all.needs);
-  const servers = serversCheck(nodeTypes);
+  const serverPools = types(all.needs);
+  const servers = serversCheck(serverPools);
   return {
     ...all,
     why: `${B} is the only MCE that passes every check.`,
     candidates: all.candidates.map((c) =>
       c.mce === A
         ? {
-            ...c, node_types: nodeTypes, eligible: servers.status === "pass", rank: null, behind_on: null,
+            ...c, server_pools: serverPools, eligible: servers.status === "pass", rank: null, behind_on: null,
             checks: c.checks.map((check) => (check.check === "servers" ? servers : check)),
           }
         : c
@@ -299,10 +299,10 @@ test.describe("MCE placement: Wingman's pick", () => {
       /^Ranked for owner 7\.\s*An MCE must host the version/
     );
     // Each candidate's healthy free servers of the type, against the need, in its row's reasons
-    await expect(form.candidate(B).getByTestId(`placement-node-type-${DELL}`)).toHaveText(
+    await expect(form.candidate(B).getByTestId(`placement-server-pool-${DELL}`)).toHaveText(
       `${DELL}: 4 healthy free of 2 needed`
     );
-    await expect(form.candidate(A).getByTestId(`placement-node-type-${DELL}`)).toHaveAttribute("data-status", "pass");
+    await expect(form.candidate(A).getByTestId(`placement-server-pool-${DELL}`)).toHaveAttribute("data-status", "pass");
 
     // One place for the pick: its row, marked, with why in the mark's tooltip
     await expect(form.placementPick).toHaveCount(1);
@@ -405,10 +405,10 @@ test.describe("MCE placement: Wingman's pick", () => {
     await expect(failing.getByTestId("placement-check-version")).toHaveText("Hosts 4.16 to 4.17 only (4.17.30, 4.16.27), not 4.18.22.");
     await expect(failing.getByTestId("placement-check-free_pods")).toHaveText("40 free pods; a new cluster needs 70.");
     await expect(failing.getByTestId("placement-check-readable")).toHaveCount(0);
-    // The servers check is told per node type, not as one more sentence
+    // The servers check is told per server pool, not as one more sentence
     await expect(failing.getByTestId("placement-check-servers")).toHaveCount(0);
-    await expect(failing.getByTestId(`placement-node-type-${DELL}`)).toHaveText(`${DELL}: 1 healthy free of 2 needed`);
-    await expect(failing.getByTestId(`placement-node-type-${DELL}`)).toHaveAttribute("data-status", "fail");
+    await expect(failing.getByTestId(`placement-server-pool-${DELL}`)).toHaveText(`${DELL}: 1 healthy free of 2 needed`);
+    await expect(failing.getByTestId(`placement-server-pool-${DELL}`)).toHaveAttribute("data-status", "fail");
     // A number Wingman does not have is a dash; why is its tooltip
     const spare = failing.getByTestId("placement-cell-spare");
     await expect(spare.getByRole("button", { name: "Spare servers unknown" })).toHaveText("—");
@@ -425,12 +425,12 @@ test.describe("MCE placement: Wingman's pick", () => {
     await expect(form.placementReason).toHaveCount(0);
   });
 
-  test("an MCE short only of servers of a node type is explained and cannot be chosen", async ({ page }) => {
+  test("an MCE short only of servers of a server pool is explained and cannot be chosen", async ({ page }) => {
     await setup(page, {
       answer: (query) =>
-        withATypes(query, (needs) =>
+        withAPools(query, (needs) =>
           needs.map((need) => ({
-            ...nodeType(A, need), healthy: 1, status: "fail" as const,
+            ...serverPool(A, need), healthy: 1, status: "fail" as const,
             detail: `${need.infra_env}: 1 healthy free of ${need.replicas} needed`,
           }))
         ),
@@ -440,10 +440,10 @@ test.describe("MCE placement: Wingman's pick", () => {
     await expect.poll(async () => (await form.candidate(A).getAttribute("data-eligible")) ?? "").toBe("false");
 
     const short = form.candidate(A);
-    // Its version, free pods and readability pass: only the node type is listed, and why
+    // Its version, free pods and readability pass: only the server pool is listed, and why
     await expect(short.locator("[data-testid^='placement-check-']")).toHaveCount(0);
-    await expect(short.getByTestId(`placement-node-type-${DELL}`)).toHaveText(`${DELL}: 1 healthy free of 2 needed`);
-    await expect(short.getByTestId(`placement-node-type-${DELL}`)).toHaveAttribute("data-status", "fail");
+    await expect(short.getByTestId(`placement-server-pool-${DELL}`)).toHaveText(`${DELL}: 1 healthy free of 2 needed`);
+    await expect(short.getByTestId(`placement-server-pool-${DELL}`)).toHaveAttribute("data-status", "fail");
     await expect(short).not.toContainText("Passes every check");
     await expect(short).toHaveAttribute("data-state", "fail");
     await expect(short.getByTestId("placement-short")).toHaveText("1 of 2 servers");
@@ -451,12 +451,12 @@ test.describe("MCE placement: Wingman's pick", () => {
     await expect(form.candidateRadio(B)).toBeChecked();
   });
 
-  test("a node type Wingman cannot count is unknown, and that MCE is not offered", async ({ page }) => {
+  test("a server pool Wingman cannot count is unknown, and that MCE is not offered", async ({ page }) => {
     await setup(page, {
       answer: (query) =>
-        withATypes(query, (needs) =>
+        withAPools(query, (needs) =>
           needs.map((need) => ({
-            ...nodeType(A, need), healthy: null, not_in_server_scan: 0, status: "unknown" as const,
+            ...serverPool(A, need), healthy: null, not_in_server_scan: 0, status: "unknown" as const,
             detail: `${need.infra_env}: 5 free Agents for ${need.replicas} needed; server-scan did not answer, so their health is unknown`,
           }))
         ),
@@ -464,7 +464,7 @@ test.describe("MCE placement: Wingman's pick", () => {
     const form = new ClusterNewPage(page);
     await fillForm(form);
 
-    const unknown = form.candidate(A).getByTestId(`placement-node-type-${DELL}`);
+    const unknown = form.candidate(A).getByTestId(`placement-server-pool-${DELL}`);
     await expect(unknown).toHaveAttribute("data-status", "unknown");
     await expect(unknown).toHaveText(
       `Unknown: ${DELL}: 5 free Agents for 2 needed; server-scan did not answer, so their health is unknown`
@@ -493,7 +493,7 @@ test.describe("MCE placement: Wingman's pick", () => {
     );
     expect(calls.placements.every((q) => q.getAll("need").join("") === "")).toBe(true);
     expect(lastPlacement(calls).getAll("need")).toEqual([""]);
-    await expect(form.candidate(B).getByTestId("placement-node-types")).toHaveCount(0);
+    await expect(form.candidate(B).getByTestId("placement-server-pools")).toHaveCount(0);
 
     await page.getByPlaceholder(`e.g. ${DELL}`).fill(DELL);
     await expect.poll(() => lastPlacement(calls).getAll("need")).toEqual([`${DELL}:2`]);
@@ -729,7 +729,7 @@ test.describe("MCE placement: always", () => {
     // One quiet line says what was not checked and why; no per-type lines, no "servers counted"
     await expect(page.getByTestId("placement-live-reads-off")).toHaveText("Free pods and servers not checked (live status off).");
     await expect(page.getByTestId("placement-needs")).toHaveCount(0);
-    await expect(page.getByTestId("placement-node-types")).toHaveCount(0);
+    await expect(page.getByTestId("placement-server-pools")).toHaveCount(0);
     // server-scan's error is the spare dashes' tooltip, not a second line
     await expect(page.getByTestId("placement-server-scan")).toHaveCount(0);
     await expect(

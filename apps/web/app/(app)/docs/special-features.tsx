@@ -172,11 +172,14 @@ maxConcurrentControlPlanes: 1`}
           </p>
         </FeaturePanel>
 
-        <FeaturePanel icon={Network} tint="bg-emerald-500/10 text-emerald-500" title="InfraEnv dropdown" where="New Cluster → nodepool fields">
+        <FeaturePanel icon={Network} tint="bg-emerald-500/10 text-emerald-500" title="Node type dropdown" where="New Cluster → nodepool fields">
           <p>
-            A template input named <InlineCode>infra_env</InlineCode> becomes a dropdown of the InfraEnvs on the
-            chosen MCE&apos;s hub, which prevents typos in the field that decides which bare-metal hosts the
-            nodepool gets:
+            A template input named <InlineCode>infra_env</InlineCode> becomes the <strong>Node type</strong>{" "}
+            dropdown: the kinds of server on the chosen MCE, each in the zones it has there. Under the platform&apos;s
+            naming convention an InfraEnv is a node type in one zone (<InlineCode>r760-mtl-az1</InlineCode> is{" "}
+            <InlineCode>r760-mtl</InlineCode> in <InlineCode>az1</InlineCode>); the zone is the InfraEnv&apos;s{" "}
+            <InlineCode>topology.kubernetes.io/zone</InlineCode> label, else its name&apos;s, and a name off the
+            convention is a node type of its own. The pick decides which bare-metal hosts the nodepool gets:
           </p>
           <CodeBlock language="cluster-template.j2 snippet">
 {`nodepool:
@@ -185,7 +188,7 @@ maxConcurrentControlPlanes: 1`}
           </CodeBlock>
           <p>
             It needs live status to be on and the MCE to have a hub token configured. Otherwise the field is plain
-            text; if listing fails, the form says why and you type the names.
+            text, a node type and its zone as one name; if listing fails, the form says why and you type them.
           </p>
           <Callout type="tip" title="Which namespace is listed">
             By default, InfraEnvs are listed across the whole hub. The day1 service&apos;s{" "}
@@ -196,13 +199,14 @@ maxConcurrentControlPlanes: 1`}
 
         <FeaturePanel icon={Tag} tint="bg-sky-500/10 text-sky-500" title="NodePool names" where="New Cluster → nodepool fields, a flavor's nodepools, Edit cluster">
           <p>
-            A new NodePool is named after the InfraEnv it draws from: <InlineCode>{"<InfraEnv>"}</InlineCode>, or{" "}
-            <InlineCode>{"<InfraEnv>-<suffix>"}</InlineCode>. The InfraEnv part is fixed; the <strong>Name suffix</strong>{" "}
-            beside it is yours, and lets several NodePools draw from one InfraEnv, one zone. The form shows the whole
+            A new NodePool is named after the node type and zone it draws from:{" "}
+            <InlineCode>{"<node type>-<zone>"}</InlineCode>, or <InlineCode>{"<node type>-<zone>-<suffix>"}</InlineCode>. That part
+            is fixed; the <strong>Name suffix</strong> beside it is yours, and lets several NodePools draw from one
+            node type in one zone. The form shows the whole
             name as you type. There is no cluster prefix: each cluster&apos;s NodePools sit in its own namespace,{" "}
             <InlineCode>{"hcp-<clusterName>"}</InlineCode>.
           </p>
-          <CodeBlock language="Three NodePools on one zone's InfraEnv">
+          <CodeBlock language="Three NodePools of one node type in one zone">
 {`nodepool:
   - infraEnvName: c200-mtl-az1
     name: c200-mtl-az1          # no suffix

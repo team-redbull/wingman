@@ -95,8 +95,8 @@ export function FlavorsSection() {
           <InlineCode>nm-conf</InlineCode>). Replicas and node labels are preset or locked per nodepool.
           <strong> Tuning profiles</strong> come from <InlineCode>tuning/</InlineCode> in the day1 repo (see Tuning
           profiles below); locking them locks the same profiles on every nodepool. Where your operator turns it
-          on, <strong>Other inputs</strong> has <strong>Also draws from</strong>: InfraEnvs a nodepool may take
-          nodes from beside its own, as a preset each cluster may change. Where the specs project&apos;s template
+          on, <strong>Other inputs</strong> has <strong>Also draws from</strong>: node types and zones a nodepool
+          may take nodes from beside its own, as a preset each cluster may change. Where the specs project&apos;s template
           writes it, a nodepool&apos;s <strong>Scale-down policy</strong> (which nodes leave first when it scales
           down) is a preset or locked; a lock fixes a policy, never the platform default. Each nodepool&apos;s card
           collapses to its InfraEnv or hardware, replicas and number of machine configs; a new one opens.

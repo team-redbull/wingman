@@ -35,7 +35,7 @@ BMH_LABEL: Final = "agent-install.openshift.io/bmh"
 """On an Agent: its BareMetalHost's name, which is the server's name in server-scan."""
 AGENT_MACHINE_REF_LABEL: Final = "agentMachineRef"
 INFRA_ENV_LABEL: Final = "infraenvs.agent-install.openshift.io"
-"""The InfraEnv (the node type) an Agent was discovered in."""
+"""The InfraEnv (the server pool) an Agent was discovered in."""
 """On an Agent: the AgentMachine that took it. A labelled Agent is not free."""
 PROVIDER_ID_PREFIX: Final = "agent://"
 
@@ -155,7 +155,7 @@ class AgentObservation:
 
     @property
     def infra_env(self) -> str | None:
-        """Its InfraEnv, the node type, from the ``infraenvs.agent-install.openshift.io`` label."""
+        """Its InfraEnv (server pool), from the ``infraenvs.agent-install.openshift.io`` label."""
         return self.labels.get(INFRA_ENV_LABEL) or None
 
     @property

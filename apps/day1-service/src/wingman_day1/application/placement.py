@@ -9,7 +9,7 @@ needs:
   there (each MR's diff says where, and its file says the owner);
 - each candidate's free pods, from its own nodes and pods, read when asked
   (a cache of seconds, shared; never the minutes another source would be);
-- each candidate's healthy free servers of every node type the new cluster
+- each candidate's healthy free free servers in every server pool the new cluster
   needs: its free Agents in those InfraEnvs, joined to server-scan's servers,
   less the used ones (a used-Agent label: herzi removes them, ``used_agents``).
   The needs come from the form (each nodepool's InfraEnvs and replicas), else
@@ -20,7 +20,7 @@ needs:
 
 Without live MCE reads (no hub: ``CLUSTER_STATUS_ENABLED`` off) placement
 still runs, on the day1 repo and server-scan: the free pods, the servers of
-each node type and the hub read are ``not_checked`` and do not block a pick.
+each server pool and the hub read are ``not_checked`` and do not block a pick.
 
 A source that cannot be read makes its numbers unknown, never zero: an MCE
 whose nodes or pods cannot be read fails the ``readable`` check; server-scan
@@ -59,8 +59,8 @@ from wingman_day1.domain.mce_capacity import (
     FreePods,
     free_pods,
     infra_envs_in,
-    node_type,
-    node_type_supply,
+    pool_supply,
+    server_pool,
     spare_servers,
     summed_needs,
 )
@@ -130,7 +130,7 @@ def mador_of(content: str) -> str | None:
 
 
 def need_problems(needs: Sequence[Need]) -> list[str]:
-    """Why a need is not a node type (DNS labels) with 1 to ``MAX_REPLICAS`` replicas."""
+    """Why a need is not a server pool (DNS labels) with 1 to ``MAX_REPLICAS`` replicas."""
     problems: list[str] = []
     for infra_env, replicas in needs:
         for name in infra_envs_in(infra_env):
@@ -149,7 +149,7 @@ def file_needs(content: str) -> list[Need]:
     except InvalidClusterFileError:
         return []
     return [
-        (node_type(pool.infra_envs), pool.replicas)
+        (server_pool(pool.infra_envs), pool.replicas)
         for pool in pools
         if pool.infra_env_name and pool.replicas is not None
     ]
@@ -172,7 +172,7 @@ def preset_needs(nodepools: object, ratio: Sequence[int]) -> list[Need]:
         if isinstance(replicas, bool) or not isinstance(replicas, int) or replicas < 1:
             replicas = ratio[index] if index < len(ratio) else TEMPLATE_REPLICAS
         more = names_in(pool.get(INPUT)) or []
-        needs.append((node_type([infra_env.strip(), *(m.strip() for m in more)]), replicas))
+        needs.append((server_pool([infra_env.strip(), *(m.strip() for m in more)]), replicas))
     return needs
 
 
@@ -245,7 +245,7 @@ class PlacementService:
         ``needs`` are the nodepools' ``(InfraEnv, replicas)``; ``None`` takes
         the flavor's presets. An unknown site or flavor is
         ``ResourceNotFoundError``; a version that is not a release, an owner
-        that is not a mador number, or a need that is not a node type with 1
+        that is not a mador number, or a need that is not a server pool with 1
         to 1000 replicas, is ``InvalidInputError``.
         """
         problems = owner_problems_of(owner)
@@ -357,8 +357,8 @@ class PlacementService:
             spare_detail=spare_detail,
             pods=pods,
             hub_error=hub_error,
-            node_types=(
-                node_type_supply(
+            server_pools=(
+                pool_supply(
                     inputs.needs,
                     agents,
                     rows,

@@ -11,7 +11,7 @@ from wingman_day1.domain.machines import (
     INFRA_ENV_LABEL,
     AgentObservation,
 )
-from wingman_day1.domain.mce_capacity import NodeTypeSupply, Supply, node_type_supply
+from wingman_day1.domain.mce_capacity import PoolSupply, Supply, pool_supply
 from wingman_day1.domain.servers import ServerRow
 from wingman_day1.domain.status import Condition
 from wingman_day1.domain.used_agents import (
@@ -85,8 +85,8 @@ def test_placement_leaves_used_free_agents_out_and_counts_them_apart() -> None:
         agent("s4", used=HERZI_LABEL, bound=True),
     ]
     rows = [row("s1"), row("s2"), row("s3"), row("s4")]
-    (dell,) = node_type_supply([(DELL, 2)], agents, rows, used_labels=(HERZI_LABEL,))
-    assert dell == NodeTypeSupply(DELL, 2, free_agents=1, healthy=1, used=2)
+    (dell,) = pool_supply([(DELL, 2)], agents, rows, used_labels=(HERZI_LABEL,))
+    assert dell == PoolSupply(DELL, 2, free_agents=1, healthy=1, used=2)
     assert dell.status is Supply.SHORT, "two used Agents would have made it enough"
     assert dell.detail == (
         "dell-r660: 1 healthy free of 2 needed; 2 used, left out (herzi removes them)"
@@ -95,22 +95,20 @@ def test_placement_leaves_used_free_agents_out_and_counts_them_apart() -> None:
 
 def test_without_used_labels_every_free_agent_counts_as_before() -> None:
     agents = [agent("s1"), agent("s2", used=HERZI_LABEL)]
-    (dell,) = node_type_supply([(DELL, 2)], agents, [row("s1"), row("s2")])
+    (dell,) = pool_supply([(DELL, 2)], agents, [row("s1"), row("s2")])
     assert (dell.free_agents, dell.healthy, dell.used, dell.status) == (2, 2, 0, Supply.ENOUGH)
 
 
 def test_the_used_count_is_said_without_server_scan_too() -> None:
     agents = [agent("s1"), agent("s2", used=HERZI_LABEL)]
-    (dell,) = node_type_supply(
-        [(DELL, 1)], agents, None, server_scan=False, used_labels=(HERZI_LABEL,)
-    )
-    assert dell == NodeTypeSupply(DELL, 1, 1, None, health_checked=False, used=1)
+    (dell,) = pool_supply([(DELL, 1)], agents, None, server_scan=False, used_labels=(HERZI_LABEL,))
+    assert dell == PoolSupply(DELL, 1, 1, None, health_checked=False, used=1)
     assert dell.detail.endswith("; 1 used, left out (herzi removes it)")
 
 
 def test_another_key_marks_used_agents_when_the_deployment_names_it() -> None:
     agents = [agent("s1", used=HERZI_LABEL), agent("s2", used="example.com/used")]
-    (dell,) = node_type_supply([(DELL, 1)], agents, None, used_labels=("example.com/used",))
+    (dell,) = pool_supply([(DELL, 1)], agents, None, used_labels=("example.com/used",))
     assert (dell.free_agents, dell.used) == (1, 1), "the setting is the one source of the keys"
 
 

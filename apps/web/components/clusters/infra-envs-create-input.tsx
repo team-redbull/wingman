@@ -39,7 +39,7 @@ export function infraEnvsCreateInput(
       label={`Nodepool ${index + 1} also draws from`}
       note={
         <>
-          Beside {own ? <span className="font-mono">{own}</span> : "its own InfraEnv"}, which names the NodePool. A new
+          Beside {own ? <span className="font-mono">{own}</span> : "its own node type and zone"}, which names the NodePool. A new
           node takes the first free Agent of any of them.
         </>
       }

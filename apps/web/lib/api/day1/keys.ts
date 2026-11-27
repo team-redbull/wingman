@@ -86,6 +86,7 @@ const fleet = {
   /** Every MCE: `"all"` where a site's name goes (a follow-up: a site named `all` would share it). */
   allMces: ["mces", "all"] as const,
   infraEnvs: (mce: string) => ["mce-infraenvs", mce] as const,
+  nodeTypes: (mce: string) => ["mce-node-types", mce] as const,
   openshiftVersions: (mce: string | undefined) => ["mce-openshift-versions", mce] as const,
   machineConfigs: ["machine-configs"] as const,
   tuningProfiles: ["tuning-profiles"] as const,
