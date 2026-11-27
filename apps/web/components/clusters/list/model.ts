@@ -1,6 +1,7 @@
 /**
  * The clusters list's pure logic: its filters, sort and grouping by owner
- * number. The page (app/(app)/clusters/page.tsx) holds the state and the table.
+ * number. The page (app/(app)/clusters/page.tsx) holds the table and its
+ * order; use-list-filters the filters, and filters-bar shows them.
  */
 
 import { OWNER_KEYS, type OwnerKey } from "@/lib/clusters";
@@ -58,6 +59,18 @@ export function compareBy(field: SortField, a: ClusterStatus, b: ClusterStatus):
   }
 }
 
+/** The rows in a column's order, within each owner group when grouped (the group first). */
+export function sortRows(rows: readonly ClusterStatus[], groupBy: GroupBy, field: SortField, dir: SortDir): ClusterStatus[] {
+  return [...rows].sort((a, b) => {
+    if (groupBy !== "none") {
+      const group = compareOwner(ownerOf(a, groupBy), ownerOf(b, groupBy));
+      if (group !== 0) return group;
+    }
+    const cmp = compareBy(field, a, b);
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
 /** Whether a lowercased search finds the cluster: in its name, site, MCE (an admin's), flavor, mastertag or owner numbers. */
 export function matchesSearch(c: ClusterStatus, q: string): boolean {
   return (
@@ -67,7 +80,7 @@ export function matchesSearch(c: ClusterStatus, q: string): boolean {
 }
 
 /** How many items have each key. */
-export function countBy<T>(items: T[], keyOf: (item: T) => string): Map<string, number> {
+export function countBy<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, number> {
   const counts = new Map<string, number>();
   for (const item of items) counts.set(keyOf(item), (counts.get(keyOf(item)) ?? 0) + 1);
   return counts;
