@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { NodeType } from "@/types";
-import { infraEnvsOf, nodeTypeFor, nodeTypeOf, parseInfraEnvName, placedLabel, splitInfraEnv, zoneLabel, zoneOf } from "./node-types";
+import {
+  describeNodeType, infraEnvsOf, nodeTypeFor, nodeTypeOf, parseInfraEnvName, placedLabel, sizeLabel, splitInfraEnv, zoneLabel, zoneOf,
+} from "./node-types";
 
 const LEGACY = "dell-r660-site1-128c-1024gb-5tb";
 const R760: NodeType = {
@@ -18,10 +20,15 @@ describe("an InfraEnv's name", () => {
     expect(parseInfraEnvName("c200-kv32-az2")).toEqual({ flavor: "c200", size: "kv32", zone: "az2" });
   });
 
-  it("off the convention is not guessed", () => {
-    for (const name of [LEGACY, "hp-gen12-site1-64c-512gb", "c200-kv-az1", "c200-gpu-az1", "C200-MTL-AZ1", "c200-mtl"]) {
-      expect(parseInfraEnvName(name)).toBeNull();
-    }
+  it("off the convention is not guessed: the workflows' grammar exactly", () => {
+    const off = [LEGACY, "hp-gen12-site1-64c-512gb", "c200-kv-az1", "c200-gpu-az1", "C200-MTL-AZ1", "c200-mtl", "760-mtl-az1", "c200-kv0-az1", "c200-kv032-az1", "c200-mtl-zone1", "c200-mtl-az0"];
+    for (const name of off) expect(parseInfraEnvName(name)).toBeNull();
+    expect(splitInfraEnv("c200-mtl-zone-a")).toEqual({ nodeType: "c200-mtl-zone-a", zone: null });
+  });
+
+  it("keeps a flavor's variant letter: another node type", () => {
+    expect(parseInfraEnvName("c200n-mtl-az12")).toEqual({ flavor: "c200n", size: "mtl", zone: "az12" });
+    expect(nodeTypeOf("c200d-kv16-az2")).toBe("c200d-kv16");
   });
 });
 
@@ -45,6 +52,15 @@ describe("a node type", () => {
     expect(nodeTypeFor("r760-mtl-az9", [R760])).toBe(R760);
     expect(nodeTypeFor("g12-mtl-az1", [R760])).toBeNull();
     expect(nodeTypeFor("r760-mtl-az1", null)).toBeNull();
+  });
+
+  it("says what the convention means: bare metal or a VM's vCPUs, and the zones", () => {
+    expect(sizeLabel("mtl")).toBe("bare metal");
+    expect(sizeLabel("kv32")).toBe("VM · 32 vCPU");
+    expect(describeNodeType(R760)).toBe("bare metal · az1 · az2");
+    expect(describeNodeType({ name: "c200-kv32", zones: [{ zone: "az1", infra_env: "c200-kv32-az1" }] })).toBe("VM · 32 vCPU · az1");
+    expect(describeNodeType(OLD)).toBe("az3");
+    expect(describeNodeType({ name: LEGACY, zones: [{ zone: null, infra_env: LEGACY }] })).toBeUndefined();
   });
 
   it("gives a zone from the hub when it lists the InfraEnv, else from the name", () => {

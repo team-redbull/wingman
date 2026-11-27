@@ -19,7 +19,7 @@
  * (`wingman_day1.domain.zone_inputs`).
  */
 
-import { nodeTypeOf, zoneLabel } from "@/lib/node-types";
+import { nodeTypeOf, parseInfraEnvName, zoneLabel } from "@/lib/node-types";
 import type { NodeType, NodeTypeZone } from "@/types";
 
 export const NODE_TYPE = "node_type";
@@ -142,8 +142,9 @@ export function withZoneInfraEnvs(form: Record<string, unknown>, nodeTypes: Node
 
 /**
  * Why each nodepool's node type and zones stop the review, by index: a node
- * type this MCE does not have (a flavor's preset, say), a zone's replicas
- * not a whole number, no replica in any zone.
+ * type this MCE does not have (a flavor's preset, say), a zone label in its
+ * node labels that is not each zone's own, a zone's replicas not a whole
+ * number, no replica in any zone.
  */
 export function zoneProblems(form: Record<string, unknown>, nodeTypes: NodeTypes, fixed: (index: number) => boolean): Record<number, string> {
   const found: Record<number, string> = {};
@@ -154,6 +155,11 @@ export function zoneProblems(form: Record<string, unknown>, nodeTypes: NodeTypes
       found[i] = `This MCE has no node type ${name}: pick one it has`;
       return;
     }
+    const label = zoneLabelProblem(pool, nodeTypes);
+    if (label) {
+      found[i] = label;
+      return;
+    }
     const type = spreadType(pool, nodeTypes);
     if (!type) return;
     const counts = zoneCounts(pool, type.zones, fixed(i));
@@ -162,6 +168,20 @@ export function zoneProblems(form: Record<string, unknown>, nodeTypes: NodeTypes
     else if (counts.every((c) => c === 0)) found[i] = "Every zone has 0 replicas: give one at least a replica";
   });
   return found;
+}
+
+/** The label each zone's NodePool sets on its Nodes: Wingman's, never the person's (ADR-0072's 2026-11-28 amendment). */
+const ZONE_LABEL = "topology.kubernetes.io/zone";
+
+/** Why the nodepool's node labels may not give the zone label: another value than a zone's own. */
+function zoneLabelProblem(pool: Pool, nodeTypes: NodeTypes): string | null {
+  const labels = isMap(pool.node_labels) ? pool.node_labels : {};
+  if (!(ZONE_LABEL in labels)) return null;
+  const infraEnvs = zoneInfraEnvs(pool, nodeTypes) ?? (text(pool.infra_env) ? [text(pool.infra_env)] : []);
+  const zones = infraEnvs.map((env) => parseInfraEnvName(env)?.zone).filter((z): z is string => Boolean(z));
+  return zones.some((zone) => zone !== labels[ZONE_LABEL])
+    ? `Leave ${ZONE_LABEL} out of its node labels: Wingman sets each zone's own (${zones.join(", ")})`
+    : null;
 }
 
 /** The servers a logical nodepool needs, `<zone's InfraEnv>:<replicas>` per zone with any; `null` for one NodePool. */

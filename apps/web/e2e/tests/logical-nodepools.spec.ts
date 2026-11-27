@@ -111,8 +111,11 @@ test.describe("A logical nodepool on the create form", () => {
   test("is a node type and a NodePool per zone, each with its replicas, a zone at 0 included", async ({ page }) => {
     const { form, previews, needs } = await openCreate(page, flavor({}));
     await page.getByTestId("infra-env-select-nodepools[0].infra_env").click();
+    await expect(form.option("r760-mtl")).toContainText("bare metal · az1 · az2 · az3");
+    await expect(form.option("g12-mtl")).toContainText("bare metal · az1");
     await form.option("r760-mtl").click();
     await expect(page.getByTestId("nodepool-0-zones-note")).toContainText("In 3 zones on this MCE (az1, az2, az3): one NodePool in each");
+    await expect(page.getByTestId("nodepool-0-zones-note")).toContainText("its own zone on its Nodes (topology.kubernetes.io/zone)");
     for (const infraEnv of AZ) await expect(zone(page, infraEnv).getByRole("spinbutton")).toHaveValue("2");
     await zone(page, AZ[1]).getByRole("spinbutton").fill("0");
     await page.getByLabel("Nodepool 1 name suffix").fill("gpu");
@@ -139,7 +142,9 @@ test.describe("A logical nodepool on the create form", () => {
     const { form, previews } = await openCreate(page, flavor({}));
     await page.getByTestId("infra-env-select-nodepools[0].infra_env").click();
     await form.option("g12-mtl").click();
-    await expect(page.getByTestId("nodepool-0-zones-note")).toHaveText("In one zone on this MCE (az1): one NodePool.");
+    await expect(page.getByTestId("nodepool-0-zones-note")).toHaveText(
+      "In one zone on this MCE (az1): one NodePool, its Nodes labelled topology.kubernetes.io/zone=az1."
+    );
     await expect(page.getByTestId("nodepool-0-zones")).toHaveCount(0);
     await form.review();
     await expect(form.reviewDialog).toBeVisible();
@@ -157,6 +162,16 @@ test.describe("A logical nodepool on the create form", () => {
     await form.review();
     await expect(form.reviewDialog).toBeVisible();
     expect(sent(previews)).toMatchObject({ replicas: 3, node_type: "r760-mtl", zones: AZ.map((z) => ({ infra_env: z, replicas: 3 })) });
+  });
+
+  test("a zone label in the node labels stops the review: each zone's NodePool gets its own", async ({ page }) => {
+    const { form, previews } = await openCreate(page, flavor({ node_type: "r760-mtl", node_labels: { "topology.kubernetes.io/zone": "az1" } }));
+    await expect(page.getByTestId("nodepool-0-zones-problem")).toHaveText(
+      "Leave topology.kubernetes.io/zone out of its node labels: Wingman sets each zone's own (az1, az2, az3)"
+    );
+    await form.review();
+    await expect(page.getByText("Nodepool 1 › Node type: Leave topology.kubernetes.io/zone out of its node labels", { exact: false })).toBeVisible();
+    expect(previews).toHaveLength(0);
   });
 
   test("a flavor's older InfraEnv is one zone until it is spread over every zone", async ({ page }) => {
@@ -220,11 +235,13 @@ const DETAIL: ClusterDetail = {
   segments_manager: null,
 };
 
-async function openCluster(page: Page) {
+const NOT_LINKED = { cluster: NAME, site: SITE, mce: MCE, state: "not_linked", is_drifted: false, spec_name: null, spec_version: null, current_spec_version: null, value_drift: [], addon_drift: [], version_differences: [], error: null, update: null };
+
+async function openCluster(page: Page, drift: Record<string, unknown> = NOT_LINKED) {
   await base(page);
   await page.route(/\/api\/day1\/clusters\/[^/]+\/status\?/, (r) => json(r, {}, 501));
   await page.route(`**/api/day1/clusters/${NAME}?**`, (r) => json(r, DETAIL));
-  await page.route(`**/api/day1/clusters/${NAME}/drift?**`, (r) => json(r, { cluster: NAME, site: SITE, mce: MCE, state: "not_linked", is_drifted: false, spec_name: null, spec_version: null, current_spec_version: null, value_drift: [], addon_drift: [], version_differences: [], error: null, update: null }));
+  await page.route(`**/api/day1/clusters/${NAME}/drift?**`, (r) => json(r, drift));
   await page.route(`**/api/day2/clusters/${NAME}/**`, (r) => json(r, r.request().url().includes("/history") ? [] : { cluster: NAME, mce: MCE, id: `hosted:${SITE}:prod:${MCE}:${NAME}`, kind: "hosted", site: SITE, env: "prod", ocp_version: "4.16.27", installed: [], excluded: [], warnings: [], argocd_note: "" }));
   await go(page, `/clusters/${NAME}?site=${SITE}&mce=${MCE}`);
 }
@@ -239,12 +256,25 @@ test.describe("A logical nodepool on the cluster page", () => {
     await expect(page.getByTestId("nodepool-row-1")).toContainText("r760-mtl · az2");
   });
 
+  test("the drift tab names the zone labels the next sync adds, never as drift", async ({ page }) => {
+    const zoneLabels = AZ.map((z, index) => ({ nodepool: { index, name: `${z}-gpu` }, zone: z.slice(-3) }));
+    await openCluster(page, { ...NOT_LINKED, state: "in_sync", spec_name: "zoned", spec_version: "1.0.0", current_spec_version: "1.0.0", zone_labels: zoneLabels });
+    await page.getByRole("tab", { name: "Drift" }).click();
+    await expect(page.getByText("The cluster holds every value", { exact: false })).toBeVisible();
+    await expect(page.getByTestId("drift-zone-labels")).toContainText(
+      `the next Sync to flavor adds it to ${AZ.map((z) => `${z}-gpu (${z.slice(-3)})`).join(", ")}`
+    );
+  });
+
   test("is shown in Edit cluster, and a zone whose configuration differs is said", async ({ page }) => {
     await openCluster(page);
     await page.getByRole("button", { name: "Edit" }).click();
     const panel = page.getByTestId("edit-logical-pools");
     await expect(panel.getByTestId("edit-logical-pool-0")).toContainText("r760-mtl · gpu · 3 zones: az1 2 · az2 0 · az3 1");
-    await page.getByLabel("Cluster file").fill(YAML.replace("replicas: 0\n  configs:\n  - name: workers-chrony-configuration", "replicas: 0\n  configs:\n  - name: nic-ring-buffer"));
+    const zoned = YAML.replace(/(name: (r760-mtl-az(\d))-gpu\n)/g, "$1  nodeLabels:\n    topology.kubernetes.io/zone: az$3\n");
+    await page.getByLabel("Cluster file").fill(zoned);
+    await expect(panel.getByRole("status")).toHaveCount(0);
+    await page.getByLabel("Cluster file").fill(zoned.replace("replicas: 0\n  configs:\n  - name: workers-chrony-configuration", "replicas: 0\n  configs:\n  - name: nic-ring-buffer"));
     await expect(panel.getByRole("status")).toContainText(`${AZ[1]}-gpu has another configuration than the first zone's`);
   });
 });

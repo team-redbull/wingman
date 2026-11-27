@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProblemList } from "@/components/common/problem-list";
 import { ValueDriftList } from "@/components/clusters/value-drift";
 import { approvalHref } from "@/lib/approvals";
-import type { AddonDrift, ClusterDrift, FlavorUpdate, ValueDrift, VersionDifference } from "@/types";
+import type { AddonDrift, ClusterDrift, FlavorUpdate, ValueDrift, VersionDifference, ZoneLabelAdded } from "@/types";
 
 function Notice({ icon: Icon, tone, children }: { icon: typeof CheckCircle2; tone: string; children: React.ReactNode }) {
   return (
@@ -52,6 +52,19 @@ function VersionDifferences({ differences }: { differences: VersionDifference[] 
 }
 
 /** What the panel looks like while drift is read: the notice line, then a few addon rows. */
+/** Zone labels the next sync adds (ADR-0072's 2026-11-28 amendment): Wingman's, the naming convention's, never drift. */
+function ZoneLabels({ entries }: { entries: ZoneLabelAdded[] }) {
+  if (entries.length === 0) return null;
+  return (
+    <p className="rounded-lg border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground" data-testid="drift-zone-labels">
+      <Info className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />
+      Not the flavor&apos;s: every NodePool labels its Nodes with its zone (<code className="font-mono">topology.kubernetes.io/zone</code>),
+      and the next Sync to flavor adds it to{" "}
+      <span className="font-mono text-foreground break-all">{entries.map((e) => `${e.nodepool.name} (${e.zone})`).join(", ")}</span>.
+    </p>
+  );
+}
+
 function DriftSkeleton() {
   return (
     <div className="space-y-4">
@@ -326,6 +339,7 @@ export function ClusterDriftPanel({
           </div>
           {updateNotice}
           <VersionDifferences differences={drift.version_differences ?? []} />
+          <ZoneLabels entries={drift.zone_labels ?? []} />
         </div>
       );
     case "drifted": {
@@ -357,6 +371,7 @@ export function ClusterDriftPanel({
           {lockedValues}
           {addons.length > 0 && <MissingAddons entries={addons} isAdmin={isAdmin} onFix={onFix} />}
           <VersionDifferences differences={drift.version_differences ?? []} />
+          <ZoneLabels entries={drift.zone_labels ?? []} />
         </div>
       );
     }

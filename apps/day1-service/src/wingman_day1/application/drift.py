@@ -45,6 +45,7 @@ from wingman_day1.domain.errors import Day2UnavailableError, InvalidClusterFileE
 from wingman_day1.domain.machine_configs import MachineConfigCatalog
 from wingman_day1.domain.paths import ClusterRef
 from wingman_day1.domain.specs import ClusterSpec
+from wingman_day1.domain.sync_effects import ZoneLabelAdded, zone_labels_added
 from wingman_day1.domain.value_drift import ValueDrift, value_drift
 from wingman_day1.ports import Day2Addons, RepoReads
 
@@ -90,6 +91,8 @@ class ClusterDrift:
     """Why the verdict (or a part of it) could not be determined."""
     update: FlavorUpdate | None = None
     """The flavor's newest version when the cluster is on an older one."""
+    zone_labels: tuple[ZoneLabelAdded, ...] = ()
+    """Zone labels a sync adds, the naming convention's: never drift (ADR-0072)."""
 
     @property
     def is_drifted(self) -> bool | None:
@@ -224,6 +227,7 @@ class DriftService:
     ) -> ClusterDrift:
         """``cluster`` against ``spec``: its locked values and its add-ons."""
         provenance = cluster.provenance
+        added: tuple[ZoneLabelAdded, ...] = ()
 
         def verdict(
             state: DriftState,
@@ -244,6 +248,7 @@ class DriftService:
                 addon_drift=drift,
                 version_differences=differences,
                 error=error,
+                zone_labels=added,
             )
 
         current = spec.metadata.version
@@ -255,6 +260,7 @@ class DriftService:
                 current=current,
                 error=f"the cluster file cannot be read: {exc}",
             )
+        added = zone_labels_added(values, cluster.hosted_cluster.cluster_name)
         locked = value_drift(
             spec.locks(),
             values,

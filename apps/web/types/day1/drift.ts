@@ -97,6 +97,14 @@ export interface ClusterDrift {
   version_differences: VersionDifference[];
   error: string | null;
   update: FlavorUpdate | null;
+  /** NodePools whose InfraEnv names a zone their Nodes are not labelled with: the next sync adds it, never drift (ADR-0072). */
+  zone_labels?: ZoneLabelAdded[];
+}
+
+/** A zone label a sync adds to a NodePool: `topology.kubernetes.io/zone`, the naming convention's. */
+export interface ZoneLabelAdded {
+  nodepool: { index: number; name: string };
+  zone: string;
 }
 
 /** A row of `GET /clusters/drift-summary`. */

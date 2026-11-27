@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Layers } from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
 import { fieldInputClassName, type FieldInputContext, type FormValues } from "@/components/clusters/dynamic-variable-form";
-import { nodeTypeFor, placedLabel, zoneLabel } from "@/lib/node-types";
+import { describeNodeType, nodeTypeFor, parseInfraEnvName, placedLabel, zoneLabel } from "@/lib/node-types";
 import { composeName, SUFFIX_INPUT } from "@/lib/nodepool-names";
 import { cn, plural } from "@/lib/utils";
 import {
@@ -26,6 +26,8 @@ export interface ZoneContext {
 }
 
 const POOL_PATH = /^nodepools\[(\d+)\]\.(infra_env|replicas)$/;
+/** The label each zone's NodePool sets on its Nodes (the naming convention; ADR-0072's 2026-11-28 amendment). */
+const ZONE_LABEL = "topology.kubernetes.io/zone";
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 /**
@@ -58,13 +60,9 @@ function ProblemLine({ problem, testId }: { problem: string | undefined; testId:
   );
 }
 
-/** The MCE's node types as options, each with the zones it has (none named for one off the convention). */
+/** The MCE's node types as options, each said as the convention means it: bare metal or a VM, and its zones. */
 const options = (nodeTypes: readonly NodeType[]) =>
-  nodeTypes.map((t) => ({
-    value: t.name,
-    label: t.name,
-    description: t.zones.some((z) => z.zone) ? t.zones.map((z) => zoneLabel(z.zone)).join(" · ") : undefined,
-  }));
+  nodeTypes.map((t) => ({ value: t.name, label: t.name, description: describeNodeType(t) }));
 
 /** What the picked node type gives, or an older flavor's one InfraEnv with the way to spread it. */
 function ZonesNote({ index, pool, zones }: { index: number; pool: Record<string, unknown>; zones: ZoneContext }) {
@@ -77,10 +75,10 @@ function ZonesNote({ index, pool, zones }: { index: number; pool: Record<string,
         {type.zones.length > 1 ? (
           <>
             In {plural(type.zones.length, "zone")} on this MCE ({where}): one NodePool in each, every one with this
-            nodepool&apos;s configuration. Set each zone&apos;s replicas below.
+            nodepool&apos;s configuration and its own zone on its Nodes ({ZONE_LABEL}). Set each zone&apos;s replicas below.
           </>
         ) : (
-          <>In one zone on this MCE ({where}): one NodePool.</>
+          <>In one zone on this MCE ({where}): one NodePool{type.zones[0]?.zone && parseInfraEnvName(type.zones[0].infra_env) ? `, its Nodes labelled ${ZONE_LABEL}=${type.zones[0].zone}` : ""}.</>
         )}
       </p>
     );

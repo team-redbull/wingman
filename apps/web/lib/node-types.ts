@@ -17,13 +17,15 @@ import type { NodeType } from "@/types";
 
 /** An InfraEnv's name under the platform's convention, `<flavor>-<size>-<zone>`. */
 export interface InfraEnvName {
+  /** With its variant letter: `c200n` (an extra NIC) is another node type than `c200`. */
   flavor: string;
   /** `mtl` (bare metal) or `kv<cpu>` (a KubeVirt VM of that many CPUs). */
   size: string;
   zone: string;
 }
 
-const CONVENTION = /^([a-z0-9]+)-(mtl|kv[0-9]+)-([a-z0-9]+)$/;
+/** The convention's grammar exactly, as the platform's workflows parse it: a flavor starts with a letter and carries its variant letter, a VM's vCPUs are positive, a zone is `az<n>`. */
+const CONVENTION = /^([a-z][0-9a-z]*)-(mtl|kv[1-9][0-9]*)-(az[1-9][0-9]*)$/;
 
 /** `c200-kv32-az2` as its flavor, size and zone; `null` for a name off the convention (`dell-r660-site1-128c-1024gb-5tb`). */
 export function parseInfraEnvName(name: string): InfraEnvName | null {
@@ -50,6 +52,19 @@ export const nodeTypeOf = (infraEnv: string): string => splitInfraEnv(infraEnv).
 export function placedLabel(infraEnv: string, zone: string | null = splitInfraEnv(infraEnv).zone): string {
   const { nodeType } = splitInfraEnv(infraEnv);
   return zone ? `${nodeType} · ${zone}` : nodeType;
+}
+
+/** The size in a customer's words, as the convention means it: `mtl` bare metal, `kv32` a VM of 32 vCPUs. */
+export function sizeLabel(size: string): string {
+  return size === "mtl" ? "bare metal" : `VM · ${size.slice(2)} vCPU`;
+}
+
+/** A node type in a customer's words: `bare metal · az1 · az2`; its zones alone off the convention, if named. */
+export function describeNodeType(type: NodeType): string | undefined {
+  const parsed = type.zones.map((z) => parseInfraEnvName(z.infra_env)).find((p) => p !== null);
+  const zones = type.zones.some((z) => z.zone) ? type.zones.map((z) => zoneLabel(z.zone)) : [];
+  const parts = [...(parsed ? [sizeLabel(parsed.size)] : []), ...zones];
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 /** `az1`, or "one zone" for an unnamed zone. */

@@ -211,7 +211,7 @@ async def test_the_template_must_write_the_kv_clusters_zone(
     )
     draft = (await client.get(DRAFT, headers=auth(support.ALICE))).json()
     assert draft["yaml"] is None
-    assert "does not write the KV cluster's zone" in draft["problems"][0]
+    assert "must render node_labels as nodeLabels" in " ".join(draft["problems"]), draft["problems"]
 
 
 # ── Who may ──────────────────────────────────────────────────────────────────

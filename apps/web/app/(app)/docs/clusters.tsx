@@ -70,7 +70,9 @@ export function ClustersSection() {
           with the nodepool&apos;s configuration (configs, node labels, tuning profiles, scale-down policy, name
           suffix), and you set <strong>each zone&apos;s replicas</strong>: they start at the nodepool&apos;s (the
           flavor&apos;s preset, else 2), a zone may have 0 and keeps its NodePool, and the nodepool needs one replica
-          at least. The NodePools are named <InlineCode>{"<node type>-<zone>[-<suffix>]"}</InlineCode>. Without the
+          at least. The NodePools are named <InlineCode>{"<node type>-<zone>[-<suffix>]"}</InlineCode>, and each
+          labels its Nodes with its own zone (<InlineCode>topology.kubernetes.io/zone</InlineCode>, the naming
+          convention&apos;s; Wingman writes it, so leave it out of the node labels). Without the
           MCE&apos;s list you type the node type and its zone as one name (<InlineCode>r760-mtl-az1</InlineCode>): one
           NodePool, in that zone. Where your operator turns it on, a nodepool may also{" "}
           <strong>draw from</strong> other node types or zones: its own still names its NodePool, and a new node takes the first free server of any of them; Wingman

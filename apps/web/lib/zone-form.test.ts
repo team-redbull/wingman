@@ -99,6 +99,20 @@ describe("a logical nodepool on the create form", () => {
     });
     expect(zoneProblems(form, null, () => false)).toEqual({});
   });
+
+  it("stops the review for a zone label the person gives that is not each zone's own", () => {
+    const zone = "topology.kubernetes.io/zone";
+    const form = {
+      nodepools: [
+        { node_type: "r760-mtl", replicas: 1, node_labels: { [zone]: "az1" } },
+        { infra_env: "r760-mtl-az2", replicas: 1, node_labels: { [zone]: "az2" } },
+        { infra_env: "dell-a", replicas: 1, node_labels: { [zone]: "east" } },
+      ],
+    };
+    expect(zoneProblems(form, TYPES, () => false)).toEqual({
+      0: `Leave ${zone} out of its node labels: Wingman sets each zone's own (az1, az2, az3)`,
+    });
+  });
 });
 
 describe("a cluster file's NodePools", () => {

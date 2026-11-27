@@ -10,6 +10,7 @@ own form:
 - ``platform`` is ``kubevirt`` or the Agent default; a file without the key
   is on the Agent platform, as the template writes it;
 - replicas compare as numbers, node labels as a mapping (no key is ``{}``),
+  without the zone key Wingman writes on each zone's NodePool (ADR-0072),
   a scale-down policy as the entry's annotation's text (ADR-0062);
 - configs compare by name, each as often, in any order (ADR-0029); a lock's
   ``{name: nm-conf, hardware: <hw>}`` is the file's
@@ -55,9 +56,10 @@ from wingman_day1.domain.locks import (
 )
 from wingman_day1.domain.logical_pools import flavor_positions
 from wingman_day1.domain.machine_configs import MachineConfigCatalog, network_config_name
-from wingman_day1.domain.nodepool_names import rendered_name
+from wingman_day1.domain.nodepool_names import infra_env_of, rendered_name
 from wingman_day1.domain.tuning_profiles import TUNING_FILE_KEY, file_value, tuning_names
 from wingman_day1.domain.tuning_rule import compare
+from wingman_day1.domain.zone_labels import with_own_zone, without_zone
 
 _KUBEVIRT: Final = "kubevirt"
 _AGENT: Final = "agent"
@@ -309,11 +311,30 @@ def _nodepool_drift(
     want = lock.value
     if key == "replicas" and isinstance(want, str) and want.isdigit():
         want = int(want)
-    if key == "nodeLabels" and have is MISSING and want == {}:
-        return None  # the template writes no nodeLabels for an empty mapping
+    if key == "nodeLabels":
+        return _labels_drift(lock, file_key, found, have, ref)
     if have is not MISSING and same_value(want, have):
         return None
     return ValueDrift(lock.path, file_key, want, have, nodepool=ref)
+
+
+def _labels_drift(
+    lock: Lock, file_key: InputPath, entry: Mapping[str, object], have: object, ref: NodepoolRef
+) -> ValueDrift | None:
+    """Locked node labels against the entry's, its zone key Wingman's own (ADR-0072).
+
+    The template writes no ``nodeLabels`` for an empty mapping; a sync writes the
+    flavor's labels with the entry's own zone, so it never drops it.
+    """
+    infra_env = infra_env_of(entry)
+    mine = without_zone(have, infra_env)
+    if lock.value == {} and (have is MISSING or mine == {}):
+        return None
+    if have is not MISSING and same_value(lock.value, mine):
+        return None
+    return ValueDrift(
+        lock.path, file_key, with_own_zone(lock.value, have, infra_env), have, nodepool=ref
+    )
 
 
 def _top_level_drift(lock: Lock, file_key: InputPath, context: _Context) -> ValueDrift | None:

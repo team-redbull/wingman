@@ -230,6 +230,13 @@ class ValueDriftOut(BaseModel):
 DriftStateOut = Literal["in_sync", "drifted", "unknown", "not_linked"]
 
 
+class ZoneLabelOut(BaseModel):
+    """A zone label a sync adds to a NodePool (ADR-0072): the naming convention's, never drift."""
+
+    nodepool: NodepoolRefOut
+    zone: str
+
+
 class ClusterDriftOut(BaseModel):
     """A cluster's drift (``GET /clusters/{name}/drift``)."""
 
@@ -251,6 +258,8 @@ class ClusterDriftOut(BaseModel):
     error: str | None
     update: FlavorUpdateOut | None
     """The flavor's newest version when the cluster is on an older one: never drift (ADR-0044)."""
+    zone_labels: list[ZoneLabelOut] = []
+    """NodePools whose InfraEnv names a zone their nodeLabels lack: a sync adds it (ADR-0072)."""
 
     @classmethod
     def of(cls, drift: ClusterDrift) -> ClusterDriftOut:
@@ -269,6 +278,13 @@ class ClusterDriftOut(BaseModel):
             version_differences=[VersionDifferenceOut.of(d) for d in drift.version_differences],
             error=drift.error,
             update=FlavorUpdateOut.of(drift.update),
+            zone_labels=[
+                ZoneLabelOut(
+                    nodepool=NodepoolRefOut(index=z.nodepool.index, name=z.nodepool.name),
+                    zone=z.zone,
+                )
+                for z in drift.zone_labels
+            ],
         )
 
 

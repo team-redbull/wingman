@@ -65,6 +65,12 @@ do. Paths are relative to the day1 service (`/api/day1`, `/api/auth`,
     instead of `infra_env`: day1 writes one NodePool per zone with the entry's
     other inputs. A flavor's `spec.day1.values.nodepools[]` may preset
     `node_type`, never `zones`.
+9c. **New (2026-11-28, ADR-0072's amendment): each zone's NodePool labels its
+    Nodes with its zone.** A create writes `nodeLabels.topology.kubernetes.io/zone`
+    on every NodePool of a convention InfraEnv; a request whose `node_labels`
+    gives the key another value, or a flavor that sets it, is a 422.
+    `GET /clusters/{name}/drift` has `zone_labels: [{nodepool: {index, name},
+    zone}]`: NodePools that lack it, which a sync adds (never drift).
 
 10. **List items** (`ClusterStatus`): `spec_name`/`spec_version` are `null`
     for clusters not linked to a spec (was the sentinel

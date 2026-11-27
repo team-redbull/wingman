@@ -175,7 +175,8 @@ maxConcurrentControlPlanes: 1`}
         <FeaturePanel icon={Network} tint="bg-emerald-500/10 text-emerald-500" title="Node type dropdown" where="New Cluster → nodepool fields">
           <p>
             A template input named <InlineCode>infra_env</InlineCode> becomes the <strong>Node type</strong>{" "}
-            dropdown: the kinds of server on the chosen MCE, each in the zones it has there. Under the platform&apos;s
+            dropdown: the kinds of server on the chosen MCE, each said as the convention means it (bare metal, or a
+            VM and its vCPUs) with the zones it has there. Under the platform&apos;s
             naming convention an InfraEnv is a node type in one zone (<InlineCode>r760-mtl-az1</InlineCode> is{" "}
             <InlineCode>r760-mtl</InlineCode> in <InlineCode>az1</InlineCode>); the zone is the InfraEnv&apos;s{" "}
             <InlineCode>topology.kubernetes.io/zone</InlineCode> label, else its name&apos;s, and a name off the
