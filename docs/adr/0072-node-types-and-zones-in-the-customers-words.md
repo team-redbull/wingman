@@ -237,7 +237,10 @@ so the NodePools it wrote carried no zone label. KV create already wrote one.
    zone key on a convention entry, so a zone-spread cluster has no false
    drift, and neither has an older cluster without the label. A sync that
    sets drifted node labels writes the flavor's labels with the entry's own
-   zone (the file's, else its InfraEnv's), so it never drops one.
+   zone (the file's, else its InfraEnv's), so it never drops one. *(Superseded
+   in part by the third 2026-11-28 amendment: the zone key is compared without
+   on every entry, and a sync keeps the file's zone label only, never adding
+   its InfraEnv's.)*
 4. **A sync adds a missing zone label.** Every NodePool of a convention
    InfraEnv whose `nodeLabels` lack its zone gets it from the next sync to
    the flavor, a person's or a new version's rollout, and the sync preview
@@ -247,13 +250,17 @@ so the NodePools it wrote carried no zone label. KV create already wrote one.
    one-zone NodePool alike, since the convention asks it of every NodePool.
    An in-sync cluster is not synced for this alone, and a zone label that
    differs from its InfraEnv's zone is left for a person: Wingman does not
-   guess which is right.
+   guess which is right. *(Superseded by the third 2026-11-28 amendment: a
+   sync never adds a zone label to an existing NodePool, and the drift read
+   lists them as `missing_zone_labels`, to tell; a new NodePool is the fix.)*
 5. **The rest of the one configuration** ignores the key: Edit cluster's
    "another configuration than the first zone's" compares node labels
    without it. The create form says each zone's NodePool labels its Nodes
    with its zone, stops the review for a node label that gives the key, and
    the rendered preview shows it; the drift tab names the labels the next sync
-   adds, apart from the flavor's drift.
+   adds, apart from the flavor's drift. *(The drift tab's part is superseded by
+   the third 2026-11-28 amendment: it says the NodePools have no zone label,
+   which a sync never adds.)*
 6. **The Node type dropdown in the convention's words.** An option's value
    stays the node type (`c200-mtl`: the convention's "c200 bare metal across
    all zones is `flavor=c200, size=mtl`"), and its description says what the
@@ -284,3 +291,56 @@ Both now use the convention's grammar exactly: `^[a-z][0-9a-z]*-(mtl|kv[1-9][0-9
 another node type (`c200n-mtl` is not `c200-mtl`), and a name off the grammar
 (`c200-mtl-zone-a`) stays a node type of its own in one zone. Verified by
 `test_node_types.py` and `lib/node-types.test.ts`.
+
+## Amendment (2026-11-28): an existing NodePool is never relabelled; a new one is the fix
+
+The user (2026-11-28), on the first amendment's item 4 (a sync adds a missing
+zone label): "No no, the fix will be create new Nodepool". Changing an
+existing NodePool's `nodeLabels` is not safe enough: HyperShift's docs
+disagree on whether a NodePool's `nodeLabels` change applies to its Nodes in
+place or only to new ones, and under `upgradeType: Replace` a NodePool change
+can roll every worker. A cluster made before Wingman labelled zones keeps its
+NodePools as they are; zone-labelled Nodes come from a new NodePool.
+
+1. **Wingman never adds, changes or removes the zone label on an existing
+   NodePool.** A sync (a person's, a rollout's) adds none where it is missing
+   (`sync_effects.sync_edits` sets the drifted values only), and its preview
+   says nothing of zone labels. A locked `node_labels` is compared without the
+   zone key on every entry, a convention InfraEnv's or not (a flavor never sets
+   it, the first amendment's item 2), and a sync that sets drifted node labels
+   writes the flavor's labels with the zone label the file has, if it has one
+   (`zone_labels.with_own_zone` never adds one), so it never drops one a
+   person wrote on an InfraEnv off the convention either.
+2. **The drift read tells, it does not fix.** `GET /clusters/{name}/drift`
+   lists a cluster's NodePools of a convention InfraEnv whose `nodeLabels` lack
+   their zone as `missing_zone_labels: [{nodepool: {index, name}, zone}]`
+   (renamed from 3.71.0's `zone_labels`, read only by Wingman's web;
+   `zone_labels.zone_labels_missing`), apart from `value_drift`: the cluster
+   stays in sync. The drift tab says, in the customer's words, that these
+   NodePools were made before Wingman labelled zones, that their Nodes carry
+   no zone label, that a sync never changes an existing NodePool, and that a
+   new NodePool is the way to zone-labelled Nodes.
+3. **A NodePool an edit adds labels its Nodes with its zone.** Modelled on
+   ADR-0071's names (`nodepool_names.edit_problems`): an entry whose NodePool
+   the old file had, by either name shape, is never checked; one it did not
+   have is new, and a new entry of a convention InfraEnv without
+   `nodeLabels.topology.kubernetes.io/zone`, or with another value than its
+   InfraEnv's zone, is refused (422) saying what to write
+   (`zone_labels.edit_problems`, through `cluster_file.edit_problems`: Edit
+   cluster's modify and the edit of a pending merge request). Edit cluster's
+   **NodePool names** offers **Add its zone label** for such an entry, which
+   writes the label into the text as the names panel writes a name (one
+   entry's lines, every other line kept, `lib/zone-labels.ts` `withZoneLabel`),
+   and says so when the layout is not one it edits.
+
+Creates stay as the first amendment made them: every NodePool Wingman writes
+for a convention InfraEnv is labelled. A sync and an import never add a
+NodePool (a flavor position the file lacks is a decision for a person, item 12;
+an import writes the header only), so no write of theirs needs a zone label.
+
+Verified by `test_zone_labels.py` (no zone label added by a sync, kept when
+the file has one, `with_own_zone` never adds one, the missing list, an edit's
+new NodePool without or with a wrong zone label refused, an existing one
+unchecked) and `test_zone_labels_api.py` (an older file in sync with
+`missing_zone_labels`, a sync preview with nothing to change and no zone line,
+a drifted sync that writes the flavor's labels alone, an edit's refusal).

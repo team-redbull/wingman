@@ -208,6 +208,11 @@ function ClusterPageDocs() {
               <strong> Nodepools by node type</strong> above the file shows each nodepool spread over zones (its
               NodePools of one node type and suffix) with each zone&apos;s replicas, and says when a zone&apos;s
               configuration is no longer the others&apos;: the text edits each NodePool, so change every zone alike.
+              A NodePool you add labels its Nodes with its zone (<InlineCode>topology.kubernetes.io/zone</InlineCode>{" "}
+              in its <InlineCode>nodeLabels</InlineCode>): <strong>NodePool names</strong> says so and{" "}
+              <strong>Add its zone label</strong> writes it, and the MR is refused without it. An existing NodePool is
+              never relabelled, which could roll its nodes: one made before Wingman labelled zones keeps its Nodes
+              unlabelled, and a new NodePool is the way to Nodes labelled with their zone.
               Keep the automation keys as they are. If the file changed since you opened it (CI or the workflow
               committed), the MR is refused and nothing is overwritten: <strong>Reload</strong> and edit again.
               Where nodepools may draw from several node types or zones, <strong>Node types per nodepool</strong> above the

@@ -230,8 +230,8 @@ class ValueDriftOut(BaseModel):
 DriftStateOut = Literal["in_sync", "drifted", "unknown", "not_linked"]
 
 
-class ZoneLabelOut(BaseModel):
-    """A zone label a sync adds to a NodePool (ADR-0072): the naming convention's, never drift."""
+class MissingZoneLabelOut(BaseModel):
+    """A NodePool whose Nodes carry no zone label (ADR-0072): information, never drift or synced."""
 
     nodepool: NodepoolRefOut
     zone: str
@@ -258,8 +258,9 @@ class ClusterDriftOut(BaseModel):
     error: str | None
     update: FlavorUpdateOut | None
     """The flavor's newest version when the cluster is on an older one: never drift (ADR-0044)."""
-    zone_labels: list[ZoneLabelOut] = []
-    """NodePools whose InfraEnv names a zone their nodeLabels lack: a sync adds it (ADR-0072)."""
+    missing_zone_labels: list[MissingZoneLabelOut] = []
+    """NodePools whose InfraEnv names a zone their nodeLabels lack, made before Wingman labelled
+    zones: a sync never changes an existing NodePool, a new one gets its zone (ADR-0072)."""
 
     @classmethod
     def of(cls, drift: ClusterDrift) -> ClusterDriftOut:
@@ -278,12 +279,11 @@ class ClusterDriftOut(BaseModel):
             version_differences=[VersionDifferenceOut.of(d) for d in drift.version_differences],
             error=drift.error,
             update=FlavorUpdateOut.of(drift.update),
-            zone_labels=[
-                ZoneLabelOut(
-                    nodepool=NodepoolRefOut(index=z.nodepool.index, name=z.nodepool.name),
-                    zone=z.zone,
+            missing_zone_labels=[
+                MissingZoneLabelOut(
+                    nodepool=NodepoolRefOut(index=z.index, name=z.name), zone=z.zone
                 )
-                for z in drift.zone_labels
+                for z in drift.missing_zone_labels
             ],
         )
 

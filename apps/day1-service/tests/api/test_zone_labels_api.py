@@ -1,9 +1,10 @@
-"""Zone labels over HTTP (ADR-0072's 2026-11-28 amendment): refused when given, Wingman's in drift.
+"""Zone labels over HTTP (ADR-0072's 2026-11-28 amendments): refused when given, never synced.
 
 Each zone's NodePool labels its Nodes with its zone: a create writes it (the
 logical nodepools' tests), a request or a flavor that gives the key is
-refused, and an older file that lacks it is in sync, with the label a sync
-adds named apart from the flavor's drift.
+refused, and an older file that lacks it is in sync, its NodePools listed as
+missing the label apart from the flavor's drift; a sync never adds it, and an
+edit that adds a NodePool must give its zone.
 """
 
 from __future__ import annotations
@@ -75,35 +76,73 @@ async def test_a_request_or_a_flavor_that_gives_the_zone_label_is_refused(
     ]
 
 
-async def test_an_older_file_without_zone_labels_is_in_sync_and_a_sync_adds_them(
+def older_file(tiers: list[str]) -> str:
+    return (
+        '# specName: "agent-labelled"\n# specVersion: "1.0.0"\n'
+        'owner:\n  merkaz: "1234"\n  anaf: "56"\n  mador: "7"\nmastertag: 4.18.56-x86_64\n'
+        "nodepool:\n"
+        + "".join(
+            f"- infraEnvName: {z}\n  name: {z}\n  replicas: 1\n  nodeLabels:\n    tier: {tier}\n"
+            for z, tier in zip(AZ, tiers, strict=True)
+        )
+    )
+
+
+async def test_an_older_file_without_zone_labels_is_in_sync_and_a_sync_adds_none(
     client: httpx.AsyncClient, auth: Auth, support: Any, gitlab: InMemoryGitLab
 ) -> None:
     stored = flavor(
         {"node_type": "r760-mtl", "node_labels": {"tier": "gpu"}}, "nodepools[0].node_labels"
     )
     await push(client, support, gitlab, "specs/agent-labelled.yaml", yaml.safe_dump(stored))
-    older = (
-        '# specName: "agent-labelled"\n# specVersion: "1.0.0"\n'
-        'owner:\n  merkaz: "1234"\n  anaf: "56"\n  mador: "7"\nmastertag: 4.18.56-x86_64\n'
-        "nodepool:\n"
-        + "".join(
-            f"- infraEnvName: {z}\n  name: {z}\n  replicas: 1\n  nodeLabels:\n    tier: gpu\n"
-            for z in AZ
-        )
-    )
-    await push(client, support, gitlab, FILE, older)
+    await push(client, support, gitlab, FILE, older_file(["gpu", "gpu"]))
     drift = (
         await client.get(f"/api/day1/clusters/{NAME}/drift", headers=auth(support.VIEWER))
     ).json()
-    assert (drift["state"], drift["value_drift"]) == ("in_sync", []), "Wingman's, never drift"
-    assert drift["zone_labels"] == [
+    assert (drift["state"], drift["value_drift"]) == ("in_sync", []), "never drift"
+    assert drift["missing_zone_labels"] == [
         {"nodepool": {"index": i, "name": z}, "zone": z[-3:]} for i, z in enumerate(AZ)
     ]
+    assert "zone_labels" not in drift, "renamed in 3.72"
     preview = await client.post(
         f"/api/day1/clusters/{NAME}/sync/preview", json={}, headers=auth(support.ALICE)
     )
     assert preview.status_code == 200, preview.text
     plan = preview.json()
+    assert (plan["diff"], plan["can_sync"]) == ("", False), "nothing to sync for a zone label"
+    assert not any(ZONE in w for w in plan["warnings"])
+
+    await push(client, support, gitlab, FILE, older_file(["cpu", "gpu"]))
+    plan = (
+        await client.post(
+            f"/api/day1/clusters/{NAME}/sync/preview", json={}, headers=auth(support.ALICE)
+        )
+    ).json()
     added = [line[1:].strip() for line in plan["diff"].splitlines() if line.startswith("+ ")]
-    assert added == [f'nodeLabels: {{"tier": "gpu", "{ZONE}": "{z[-3:]}"}}' for z in AZ]
-    assert any(w.startswith(f"adds {ZONE}: az1 to nodepool {AZ[0]}") for w in plan["warnings"])
+    assert added == ['nodeLabels: {"tier": "gpu"}'], "the flavor's labels, no zone added"
+    assert not any(ZONE in w for w in plan["warnings"])
+
+
+async def test_an_edit_that_adds_a_nodepool_without_its_zone_label_is_refused(
+    client: httpx.AsyncClient, auth: Auth, support: Any, gitlab: InMemoryGitLab
+) -> None:
+    await push(client, support, gitlab, FILE, older_file(["gpu", "gpu"]))
+    alice, path = auth(support.ALICE), f"/api/day1/clusters/{NAME}"
+
+    async def modify(text: str) -> httpx.Response:
+        cluster = (await client.get(path, headers=alice)).json()
+        body = {"updated_yaml": text, "last_commit_id": cluster["last_commit_id"]}
+        return await client.patch(path, json=body, headers=alice)
+
+    third = "- infraEnvName: r760-mtl-az3\n  name: r760-mtl-az3\n  replicas: 1\n"
+    assert problems(await modify(older_file(["gpu", "gpu"]) + third)) == [
+        f"nodepool[2].nodeLabels: a new NodePool labels its Nodes with its zone (ADR-0072): "
+        f"write {ZONE}: az3 in its nodeLabels (InfraEnv r760-mtl-az3's zone)"
+    ]
+    wrong = third + f"  nodeLabels:\n    {ZONE}: az1\n"
+    (problem,) = problems(await modify(older_file(["gpu", "gpu"]) + wrong))
+    assert problem.endswith(f"is in zone az3: write {ZONE}: az3")
+    zoned = await modify(older_file(["gpu", "gpu"]) + wrong.replace("az1", "az3"))
+    assert zoned.status_code == 200, zoned.text
+    kept = await modify(older_file(["cpu", "gpu"]))
+    assert kept.status_code == 200, "an existing NodePool without its zone label: never checked"

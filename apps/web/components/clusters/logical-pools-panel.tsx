@@ -5,6 +5,7 @@ import { AlertTriangle, Layers } from "lucide-react";
 import { load } from "@/lib/infra-envs";
 import { groupLabel, logicalPools, type LogicalPool } from "@/lib/logical-pools";
 import { plural } from "@/lib/utils";
+import { ZONE_LABEL } from "@/lib/zone-labels";
 
 type Entry = Record<string, unknown>;
 
@@ -12,8 +13,6 @@ type Entry = Record<string, unknown>;
 const CONFIG_KEYS = ["configs", "nodeLabels", "tuningConfig", "annotations", "labels"] as const;
 
 /** A NodePool's zone on its Nodes is its own (ADR-0072), never part of the one configuration. */
-const ZONE_LABEL = "topology.kubernetes.io/zone";
-
 function withoutZone(labels: unknown): unknown {
   if (!labels || typeof labels !== "object" || Array.isArray(labels)) return labels;
   return Object.fromEntries(Object.entries(labels).filter(([key]) => key !== ZONE_LABEL));

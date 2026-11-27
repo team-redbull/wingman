@@ -41,7 +41,8 @@ export function DriftSection() {
           with the flavor&apos;s value beside the file&apos;s; for machine configs, the names a sync would add
           and remove. Where Wingman cannot tell a nodepool&apos;s network hardware (it has no network config, or
           two), it says so instead of guessing. Below are the missing add-ons, and add-ons installed at another
-          version.
+          version. NodePools made before Wingman labelled zones are named apart, as information, not drift: their
+          Nodes carry no <InlineCode>topology.kubernetes.io/zone</InlineCode>.
         </Step>
         <Step n={3} title="Sync to flavor">
           <strong>Sync to flavor</strong> (admins) previews one Day1 MR that sets every value the flavor&apos;s
@@ -51,7 +52,9 @@ export function DriftSection() {
           asks for the network hardware where a nodepool needs it, and lists every machine config it would
           remove: confirm each one before the sync can be opened. It never touches <InlineCode>vlanId</InlineCode>,{" "}
           <InlineCode>dhcp_values</InlineCode>, <InlineCode>mcFiles</InlineCode>, <InlineCode>mcConfigMap</InlineCode>,
-          the CI&apos;s block or your comments.
+          the CI&apos;s block or your comments, and it never adds, changes or removes a NodePool&apos;s zone label: changing
+          an existing NodePool&apos;s labels could roll its nodes. Nodes labelled with their zone come from a new NodePool,
+          added in Edit cluster.
         </Step>
         <Step n={4} title="Install what is missing">
           The sync installs the missing add-ons in the same click: once its Day1 MR is open, Wingman asks Day2 for

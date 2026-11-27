@@ -49,6 +49,7 @@ from wingman_day1.domain.replicas_ownership import replicas_problems
 from wingman_day1.domain.scale_down_policy import edit_problems as policy_problems
 from wingman_day1.domain.upgrades import version_problems
 from wingman_day1.domain.used_agents import used_labels
+from wingman_day1.domain.zone_labels import edit_problems as zone_label_problems
 
 AUTOMATION_KEYS: Final = ("vlanId", "dhcp_values", "mcFiles", "mcConfigMap", "tuningConfigmap")
 """Written by the provision-cluster workflow (the segment) and CI; never by Wingman."""
@@ -405,7 +406,9 @@ def edit_problems(
     existing Replace NodePool's excluded Agent labels change (ADR-0065). A
     NodePool the edit adds is named ``<infraEnvName>[-<suffix>]``, and none is
     renamed (``nodepool_names.edit_problems``, ADR-0071; ``cluster_name`` is
-    the chart's ``clusterName`` when the caller knows it).
+    the chart's ``clusterName`` when the caller knows it); one of a convention
+    InfraEnv labels its Nodes with its zone (``zone_labels.edit_problems``,
+    ADR-0072).
     With ``owned.versions`` so must
     the version keys the upgrade workflow owns (``upgrades.version_problems``),
     and with ``owned.replicas`` each NodePool's replicas as ``main`` (the file
@@ -435,6 +438,7 @@ def edit_problems(
     problems += policy_problems(old, new) + agent_label_problems(old, new)
     if _parses(current):  # one that does not names no NodePool to tell the new ones from
         problems += name_problems(old, new, cluster_name=cluster_name)
+        problems += zone_label_problems(old, new, cluster_name=cluster_name)
     return problems + infra_env_problems(old, new, enabled=owned.infra_envs)
 
 

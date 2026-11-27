@@ -1,4 +1,9 @@
-"""Each zone's NodePool labels its Nodes with its zone (ADR-0072's 2026-11-28 amendment)."""
+"""Each zone's NodePool labels its Nodes with its zone (ADR-0072's 2026-11-28 amendments).
+
+A create labels every NodePool of a convention InfraEnv, and so must an edit
+that adds one; an existing NodePool's label is never added, changed or dropped
+by a sync, and one without it is listed.
+"""
 
 from __future__ import annotations
 
@@ -7,17 +12,21 @@ from typing import Any, cast
 from wingman_core.domain.git import RepoPath
 from wingman_core.testing.fixtures import default_fixture_root
 from wingman_day1.domain.cluster_edits import SetValue
+from wingman_day1.domain.cluster_file import edit_problems as file_edit_problems
 from wingman_day1.domain.locks import InputPath, Lock
 from wingman_day1.domain.machine_configs import MachineConfigCatalog
 from wingman_day1.domain.node_types import ZONE_LABEL
-from wingman_day1.domain.sync_effects import sync_edits, zone_label_lines, zone_labels_added
+from wingman_day1.domain.sync_effects import sync_edits
 from wingman_day1.domain.value_drift import value_drift
 from wingman_day1.domain.zone_labels import (
+    ZoneLabelMissing,
+    edit_problems,
     flavor_problems,
-    gaps,
     input_problems,
     rendered_problems,
+    with_own_zone,
     with_zone_labels,
+    zone_labels_missing,
 )
 
 LEGACY = "dell-r660-site1-128c-1024gb-5tb"
@@ -107,37 +116,91 @@ def test_the_zone_label_is_never_a_flavors_drift() -> None:
     assert drift([LOCK], older) == (), "a cluster made before: no false drift"
 
 
-def test_a_sync_of_drifted_labels_keeps_each_zones_own() -> None:
+def test_a_sync_of_drifted_labels_keeps_each_zone_label_the_file_has_and_adds_none() -> None:
     file = [entry(AZ[0], {"tier": "cpu", ZONE_LABEL: "az1"}), entry(AZ[1], {"tier": "cpu"})]
     found = drift([LOCK], file)
     assert [(str(d.file_key), d.flavor_value) for d in found] == [
         ("nodepool[0].nodeLabels", {"tier": "gpu", ZONE_LABEL: "az1"}),
-        ("nodepool[1].nodeLabels", {"tier": "gpu", ZONE_LABEL: "az2"}),
-    ]
-    legacy = drift([LOCK], [entry(LEGACY, {"tier": "gpu", ZONE_LABEL: "east"})])
-    assert [d.flavor_value for d in legacy] == [{"tier": "gpu"}], "off the convention: a person's"
+        ("nodepool[1].nodeLabels", {"tier": "gpu"}),
+    ], "an existing NodePool's zone label is never added"
+    legacy = drift([LOCK], [entry(LEGACY, {"tier": "cpu", ZONE_LABEL: "east"})])
+    assert [d.flavor_value for d in legacy] == [{"tier": "gpu", ZONE_LABEL: "east"}], "nor dropped"
+    assert drift([LOCK], [entry(LEGACY, {"tier": "gpu", ZONE_LABEL: "east"})]) == (), "nor drift"
+    wrong = drift([LOCK], [entry(AZ[1], {"tier": "cpu", ZONE_LABEL: "az1"})])
+    assert [d.flavor_value for d in wrong] == [{"tier": "gpu", ZONE_LABEL: "az1"}], "nor changed"
 
 
-def test_a_sync_adds_each_missing_zone_label_and_says_so() -> None:
-    values = {"nodepool": [entry(AZ[0], {"tier": "gpu"}), entry(AZ[1]), entry(LEGACY)]}
-    assert [(g.index, g.zone) for g in gaps(values)] == [(0, "az1"), (1, "az2")]
-    assert sync_edits([], values) == [
-        SetValue(InputPath(("nodepool", 0, "nodeLabels")), {"tier": "gpu", ZONE_LABEL: "az1"}),
-        SetValue(InputPath(("nodepool", 1, "nodeLabels")), {ZONE_LABEL: "az2"}),
-    ]
-    assert [(z.nodepool.name, z.zone) for z in zone_labels_added(values, "x")] == [
-        (AZ[0], "az1"),
-        (AZ[1], "az2"),
-    ]
-    assert zone_label_lines(values, "x")[0] == (
-        f"adds {ZONE_LABEL}: az1 to nodepool {AZ[0]}: every NodePool labels its Nodes with its "
-        "zone (the naming convention), which Wingman writes"
-    )
+def test_with_own_zone_never_adds_a_zone_label() -> None:
+    assert with_own_zone({"tier": "gpu"}, {"tier": "cpu"}) == {"tier": "gpu"}
+    assert with_own_zone({"tier": "gpu"}, None) == {"tier": "gpu"}
+    assert with_own_zone({}, {ZONE_LABEL: "az2"}) == {ZONE_LABEL: "az2"}
 
 
-def test_a_nodepool_whose_labels_a_sync_sets_gets_its_zone_from_that_edit_alone() -> None:
+def test_a_sync_adds_no_zone_label_and_the_missing_ones_are_listed() -> None:
+    values = {
+        "nodepool": [
+            entry(AZ[0], {"tier": "gpu"}),
+            entry(AZ[1], name=f"{AZ[1]}-b"),
+            {"infraEnvName": AZ[2], "replicas": 1},
+            entry(AZ[2], {ZONE_LABEL: "az3"}),
+            entry(LEGACY),
+        ]
+    }
+    assert sync_edits([]) == [], "a sync never changes an existing NodePool for its zone"
+    assert zone_labels_missing(values, cluster_name="x") == (
+        ZoneLabelMissing(0, AZ[0], "az1"),
+        ZoneLabelMissing(1, f"{AZ[1]}-b", "az2"),
+        ZoneLabelMissing(2, f"x-{AZ[2]}", "az3"),
+    ), "a convention InfraEnv's NodePool without its zone, by its rendered name"
+
+
+def test_a_nodepool_whose_labels_a_sync_sets_gets_no_zone_from_that_edit() -> None:
     values = {"nodepool": [entry(AZ[0], {"tier": "cpu"})]}
-    edits = sync_edits(drift([LOCK], values["nodepool"]), values)
-    assert edits == [
-        SetValue(InputPath(("nodepool", 0, "nodeLabels")), {"tier": "gpu", ZONE_LABEL: "az1"})
+    assert sync_edits(drift([LOCK], values["nodepool"])) == [
+        SetValue(InputPath(("nodepool", 0, "nodeLabels")), {"tier": "gpu"})
     ]
+
+
+# ── An edit that adds a NodePool ─────────────────────────────────────────────
+
+OLDER = {"nodepool": [entry(AZ[0]), entry(AZ[1], {"tier": "gpu"})]}
+
+
+def test_a_nodepool_an_edit_adds_must_label_its_nodes_with_its_zone() -> None:
+    added = {"nodepool": [*OLDER["nodepool"], entry(AZ[2], {"tier": "gpu"})]}
+    assert edit_problems(OLDER, added) == [
+        f"nodepool[2].nodeLabels: a new NodePool labels its Nodes with its zone (ADR-0072): write "
+        f"{ZONE_LABEL}: az3 in its nodeLabels (InfraEnv {AZ[2]}'s zone)"
+    ]
+    wrong = {"nodepool": [*OLDER["nodepool"], entry(AZ[2], {ZONE_LABEL: "az1"})]}
+    assert edit_problems(OLDER, wrong) == [
+        f"nodepool[2].nodeLabels: {ZONE_LABEL} is 'az1', but InfraEnv {AZ[2]} is in zone az3: "
+        f"write {ZONE_LABEL}: az3"
+    ]
+    zoned = {"nodepool": [*OLDER["nodepool"], entry(AZ[2], {"tier": "gpu", ZONE_LABEL: "az3"})]}
+    assert edit_problems(OLDER, zoned) == []
+    beside = {"nodepool": [*OLDER["nodepool"], entry(AZ[0], name=f"{AZ[0]}-b")]}
+    (problem,) = edit_problems(OLDER, beside)
+    assert problem.startswith("nodepool[2].nodeLabels: a new NodePool"), "a second one in a zone"
+
+
+def test_an_existing_nodepool_is_never_checked_and_one_off_the_convention_names_no_zone() -> None:
+    edited = {"nodepool": [entry(AZ[0], {"tier": "cpu"}), entry(AZ[1], {ZONE_LABEL: "az9"})]}
+    assert edit_problems(OLDER, edited) == [], "the file had both NodePools: never checked"
+    legacy = {"nodepool": [*OLDER["nodepool"], entry(LEGACY), {"name": "vms", "replicas": 1}]}
+    assert edit_problems(OLDER, legacy) == [], "no zone Wingman can trust, or no InfraEnv"
+    derived = {"nodepool": [{"infraEnvName": AZ[0], "replicas": 1}]}
+    named = {"nodepool": [{"infraEnvName": AZ[0], "name": f"x-{AZ[0]}", "replicas": 2}]}
+    assert edit_problems(derived, named, cluster_name="x") == [], "the same NodePool, either shape"
+    (renamed,) = edit_problems(derived, {"nodepool": [entry(AZ[0])]}, cluster_name="x")
+    assert renamed.startswith("nodepool[0].nodeLabels: a new NodePool"), "a rename is a new one"
+
+
+def test_every_edit_of_a_file_checks_a_new_nodepools_zone_label() -> None:
+    head = 'owner: {merkaz: "1", anaf: "2", mador: "3"}\nmastertag: 4.18.22\nnodepool:\n'
+    pool = f"- infraEnvName: {AZ[0]}\n  name: {AZ[0]}\n  replicas: 1\n"
+    added = head + pool + pool.replace(AZ[0], AZ[1])
+    (problem,) = file_edit_problems(head + pool, added)
+    assert problem.startswith("nodepool[1].nodeLabels: a new NodePool labels its Nodes")
+    zoned = added + f"  nodeLabels: {{{ZONE_LABEL}: az2}}\n"
+    assert file_edit_problems(head + pool, zoned) == []

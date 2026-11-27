@@ -7,7 +7,8 @@
  *   node type and locked replicas; a flavor's older InfraEnv spread over every
  *   zone; the typed fallback without the MCE's list;
  * - the cluster page: the Node pools tab and Edit cluster group the NodePools
- *   of one node type and suffix;
+ *   of one node type and suffix; the drift tab says which NodePools' Nodes
+ *   carry no zone label, and Edit cluster writes a new NodePool's;
  * - the flavor editor: a nodepool presets its node type.
  * Invented names only.
  */
@@ -256,14 +257,19 @@ test.describe("A logical nodepool on the cluster page", () => {
     await expect(page.getByTestId("nodepool-row-1")).toContainText("r760-mtl · az2");
   });
 
-  test("the drift tab names the zone labels the next sync adds, never as drift", async ({ page }) => {
-    const zoneLabels = AZ.map((z, index) => ({ nodepool: { index, name: `${z}-gpu` }, zone: z.slice(-3) }));
-    await openCluster(page, { ...NOT_LINKED, state: "in_sync", spec_name: "zoned", spec_version: "1.0.0", current_spec_version: "1.0.0", zone_labels: zoneLabels });
+  test("the drift tab says which NodePools' Nodes carry no zone label, and that a new NodePool is the way", async ({ page }) => {
+    const missing = AZ.map((z, index) => ({ nodepool: { index, name: `${z}-gpu` }, zone: z.slice(-3) }));
+    await openCluster(page, { ...NOT_LINKED, state: "in_sync", spec_name: "zoned", spec_version: "1.0.0", current_spec_version: "1.0.0", missing_zone_labels: missing });
     await page.getByRole("tab", { name: "Drift" }).click();
     await expect(page.getByText("The cluster holds every value", { exact: false })).toBeVisible();
-    await expect(page.getByTestId("drift-zone-labels")).toContainText(
-      `the next Sync to flavor adds it to ${AZ.map((z) => `${z}-gpu (${z.slice(-3)})`).join(", ")}`
+    const notice = page.getByTestId("drift-missing-zone-labels");
+    await expect(notice).toContainText("No zone label on these NodePools' Nodes");
+    await expect(notice).toContainText(
+      `${AZ.map((z) => `${z}-gpu (${z.slice(-3)})`).join(", ")} were made before Wingman labelled zones, so their Nodes carry no topology.kubernetes.io/zone.`
     );
+    await expect(notice).toContainText("Not drift: a sync never changes an existing NodePool.");
+    await expect(notice).toContainText("To get Nodes labelled with their zone, add a new NodePool in Edit cluster");
+    await expect(page.getByText("adds it to", { exact: false })).toHaveCount(0);
   });
 
   test("is shown in Edit cluster, and a zone whose configuration differs is said", async ({ page }) => {
@@ -276,5 +282,26 @@ test.describe("A logical nodepool on the cluster page", () => {
     await expect(panel.getByRole("status")).toHaveCount(0);
     await page.getByLabel("Cluster file").fill(zoned.replace("replicas: 0\n  configs:\n  - name: workers-chrony-configuration", "replicas: 0\n  configs:\n  - name: nic-ring-buffer"));
     await expect(panel.getByRole("status")).toContainText(`${AZ[1]}-gpu has another configuration than the first zone's`);
+  });
+
+  test("Edit cluster adds a new NodePool's zone label in one click, and leaves the existing ones as they are", async ({ page }) => {
+    await openCluster(page);
+    await page.getByRole("button", { name: "Edit" }).click();
+    const editor = page.getByLabel("Cluster file");
+    const added = `${YAML}- infraEnvName: ${AZ[2]}\n  name: ${AZ[2]}-b\n  replicas: 1\n`;
+    await editor.fill(added);
+    const row = page.getByTestId("edit-nodepool-name-4");
+    await expect(row.getByTestId("edit-nodepool-name-4-zone-problem")).toHaveText(
+      "A new NodePool labels its Nodes with its zone: add topology.kubernetes.io/zone: az3 to its nodeLabels"
+    );
+    for (const existing of [0, 1, 2, 3]) await expect(page.getByTestId(`edit-nodepool-name-${existing}-zone`)).toHaveCount(0);
+    await row.getByRole("button", { name: "Add its zone label" }).click();
+    await expect(editor).toHaveValue(`${added}  nodeLabels: {"topology.kubernetes.io/zone": "az3"}\n`);
+    await expect(row.getByTestId("edit-nodepool-name-4-zone")).toHaveText("Its Nodes are labelled with its zone, topology.kubernetes.io/zone: az3");
+
+    await editor.fill(`${added}  nodeLabels:\n    topology.kubernetes.io/zone: az1\n`);
+    await expect(row.getByTestId("edit-nodepool-name-4-zone-problem")).toHaveText("Its nodeLabels give topology.kubernetes.io/zone: az1, but its zone is az3");
+    await row.getByRole("button", { name: "Set its zone label to az3" }).click();
+    await expect(editor).toHaveValue(`${added}  nodeLabels:\n    topology.kubernetes.io/zone: az3\n`);
   });
 });

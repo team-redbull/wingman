@@ -253,7 +253,8 @@ def test_a_kubevirt_nodepool_an_edit_adds_draws_from_no_infraenv() -> None:
 
 def test_every_edit_of_a_file_checks_the_names_unless_the_file_did_not_parse() -> None:
     head = 'owner: {merkaz: "1", anaf: "2", mador: "3"}\nmastertag: 4.18.22\n'
-    added = head + LARK + "- infraEnvName: c200-mtl-az3\n  replicas: 1\n"
+    zoned = "  nodeLabels: {topology.kubernetes.io/zone: az3}\n"  # the zone label's check is apart
+    added = head + LARK + "- infraEnvName: c200-mtl-az3\n  replicas: 1\n" + zoned
     (problem,) = file_edit_problems(head + LARK, added)
     assert problem.startswith("nodepool[2]: a new NodePool is named")
     assert file_edit_problems("a: [\n", added) == [], "nothing to tell the new ones from"
