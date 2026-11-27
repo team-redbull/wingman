@@ -10,7 +10,7 @@ import type { ClusterStatus, FleetUpgrade, Mce } from "../../types";
 
 export const SITE1_A = "ocp4-prod-mce-site1-a";
 export const SITE1_B = "ocp4-prod-mce-site1-b";
-const SITE2_A = "ocp4-prod-mce-site2-a";
+export const SITE2_A = "ocp4-prod-mce-site2-a";
 
 function overviewCluster(
   name: string,
