@@ -66,7 +66,11 @@ export function FlavorsSection() {
         We will walk through <InlineCode>agent-baseline</InlineCode>: every nodepool of its clusters gets the
         team&apos;s machine configs, and every cluster gets the redbull team&apos;s cluster-roles add-on. Go to{" "}
         <strong>Flavors</strong> → <strong>New Flavor</strong>; the editor has four parts, listed in the bar at
-        the top, which also counts the problems in each.
+        the top, which also counts the problems in each. Basics, Nodepools and Add-ons collapse: click a
+        part&apos;s header and it shrinks to one line (the name and version, the nodepools and their replicas, the
+        add-ons) with its problem count; <strong>Collapse all</strong> in the bar gives the whole flavor at a
+        glance. Clicking a part in the bar, or a problem, opens what holds it. On an existing flavor, the parts
+        you collapsed stay collapsed the next time you edit it in this browser.
       </p>
       <div className="space-y-4 mb-6">
         <Step n={1} title="Basics">
@@ -94,10 +98,13 @@ export function FlavorsSection() {
           on, <strong>Other inputs</strong> has <strong>Also draws from</strong>: InfraEnvs a nodepool may take
           nodes from beside its own, as a preset each cluster may change. Where the specs project&apos;s template
           writes it, a nodepool&apos;s <strong>Scale-down policy</strong> (which nodes leave first when it scales
-          down) is a preset or locked; a lock fixes a policy, never the platform default.
+          down) is a preset or locked; a lock fixes a policy, never the platform default. Each nodepool&apos;s card
+          collapses to its InfraEnv or hardware, replicas and number of machine configs; a new one opens.
         </Step>
         <Step n={3} title="Add-ons">
-          Pick charts from the catalog and put them in order. The gear opens{" "}
+          Move charts from <strong>Available</strong> (the catalog, by team) to <strong>Selected</strong>, the arrow
+          between them: <strong>Add</strong> takes a chart out of Available, and removing it from Selected puts it
+          back in its place. Drag the selected charts into install order. The gear opens{" "}
           <strong>Configure overrideable fields</strong>: the values a cluster&apos;s creator may set for that
           add-on. Everything else comes from the chart&apos;s defaults.
         </Step>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ChevronRight, Network, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronRight, Network, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +17,7 @@ import { EveryNodepoolPanel } from "./every-nodepool-panel";
 import { NodeLabelsEditor, PresetInput } from "./inputs";
 import { InfraEnvsPreset } from "./infra-envs-preset";
 import { INFRA_ENVS_INPUT } from "@/lib/infra-envs";
+import { NodepoolFrame } from "./nodepool-frame";
 import { PolicyField } from "./policy-field";
 import { TuningField } from "./tuning-field";
 import { chooseConfigsMode, isTuningRule, keepTuningRule } from "./tuning-model";
@@ -266,21 +267,7 @@ function NodepoolCard({
   const ratioProblems = problems(ratioPath);
 
   return (
-    <li className="rounded-xl border bg-card shadow-card" data-testid={`nodepool-${index}`} aria-label={title}>
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive"
-          disabled={!canRemove}
-          onClick={() => update((d) => removeNodepool(d, index))}
-          aria-label={`Remove nodepool ${index + 1}`}
-        >
-          <Trash2 /> Remove
-        </Button>
-      </div>
+    <NodepoolFrame index={index} draft={draft} canRemove={canRemove} onRemove={() => update((d) => removeNodepool(d, index))}>
       <div className="space-y-6 p-4">
         <ValueField
           path={replicasPath}
@@ -479,7 +466,7 @@ function NodepoolCard({
           </div>
         )}
       </div>
-    </li>
+    </NodepoolFrame>
   );
 }
 

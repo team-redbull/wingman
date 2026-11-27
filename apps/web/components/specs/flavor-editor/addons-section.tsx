@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, GripVertical, Package, Plus, Search, Settings2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, GripVertical, Package, Settings2, X } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -21,16 +21,16 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api } from "@/lib/api-client";
+import { addonKey as keyOf, availableAddons } from "@/lib/addon-transfer";
 import { buttonVariants } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ProblemList } from "@/components/common/problem-list";
 import { ConfigureOverrideableDialog, deepMergeValues } from "@/components/specs/configure-overrideable-dialog";
 import { chartRevisions, day2Api, day2Keys } from "@/lib/day2";
 import { cn } from "@/lib/utils";
 import type { CatalogEntry, OverrideableField, SpecAddon } from "@/types";
-
-const keyOf = (a: { team: string; name: string }) => `${a.team}/${a.name}`;
+import { AvailableAddons, flightOf } from "./addon-catalog";
+import { useAddonMoves } from "./use-addon-moves";
 
 function SortableAddonItem({
   addon,
@@ -42,7 +42,7 @@ function SortableAddonItem({
 }: {
   addon: SpecAddon;
   index: number;
-  onRemove: () => void;
+  onRemove: (button: HTMLElement) => void;
   onVersionChange: (version: string) => void;
   onConfigure: () => void;
   availableVersions: string[];
@@ -55,6 +55,7 @@ function SortableAddonItem({
     <div
       ref={setNodeRef}
       style={style}
+      {...flightOf(addon)}
       data-testid={`selected-addon-${addon.team}-${addon.name}`}
       className={cn(
         "flex items-center gap-3 rounded-lg border bg-card p-3 transition-shadow",
@@ -102,8 +103,10 @@ function SortableAddonItem({
       </div>
       <button
         type="button"
-        onClick={onRemove}
+        data-addon-remove
+        onClick={(e) => onRemove(e.currentTarget)}
         aria-label="Remove addon"
+        title={`Remove ${addon.name}: back to Available`}
         className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
       >
         <X className="h-4 w-4" />
@@ -112,98 +115,31 @@ function SortableAddonItem({
   );
 }
 
-function AddonCatalogCard({ addon, isSelected, onAdd }: { addon: CatalogEntry; isSelected: boolean; onAdd: (version: string) => void }) {
-  // The add-on's revision (HEAD when it sets none), so a cluster inherits it without a pin
-  const [selectedVersion, setSelectedVersion] = useState(addon.current_version);
+/** The arrow from Available to Selected: across the lists side by side, down them stacked. */
+function Direction() {
   return (
-    <div
-      data-testid={`addon-card-${addon.team}-${addon.name}`}
-      className={cn(
-        "rounded-xl border bg-card p-4 transition-[border-color,box-shadow,opacity]",
-        isSelected ? "border-primary/50 bg-primary/5 opacity-60" : "hover:border-primary/30 hover:shadow-md"
-      )}
-    >
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/8">
-            <Package className="h-4 w-4 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h4 className="truncate text-sm font-semibold">{addon.name}</h4>
-            <p className="text-xs text-muted-foreground">{addon.team}</p>
-          </div>
-        </div>
-        {isSelected && (
-          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Added</span>
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        <Combobox
-          options={chartRevisions(addon).map((v) => ({ value: v, label: v }))}
-          value={selectedVersion}
-          onValueChange={(v) => v && setSelectedVersion(v)}
-          disabled={isSelected}
-          searchPlaceholder="Search revisions…"
-          emptyMessage="No revision matches."
-          aria-label={`${addon.name} revision`}
-          className="min-w-0 flex-1 text-xs"
-        />
-        <button
-          type="button"
-          onClick={() => onAdd(selectedVersion)}
-          disabled={isSelected}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 shrink-0", isSelected && "cursor-not-allowed opacity-50")}
-        >
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Add
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function TeamSection({
-  team,
-  addons,
-  selected,
-  onAdd,
-}: {
-  team: string;
-  addons: CatalogEntry[];
-  selected: SpecAddon[];
-  onAdd: (addon: CatalogEntry, version: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  return (
-    <div className="space-y-3">
-      <button type="button" onClick={() => setExpanded((v) => !v)} className="group flex w-full items-center gap-2 text-left">
-        {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        <span className="text-sm font-semibold transition-colors group-hover:text-primary">{team}</span>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{addons.length}</span>
-      </button>
-      {expanded && (
-        <div className="grid gap-3 pl-6 sm:grid-cols-2">
-          {addons.map((addon) => (
-            <AddonCatalogCard
-              key={keyOf(addon)}
-              addon={addon}
-              isSelected={selected.some((s) => s.team === addon.team && s.name === addon.name)}
-              onAdd={(version) => onAdd(addon, version)}
-            />
-          ))}
-        </div>
-      )}
+    <div aria-hidden className="flex justify-center lg:self-stretch">
+      <span
+        data-testid="addons-direction"
+        className="flex h-8 w-8 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm lg:sticky lg:top-[12rem] lg:mt-28"
+      >
+        <ArrowRight className="hidden h-4 w-4 lg:block" />
+        <ArrowDown className="h-4 w-4 lg:hidden" />
+      </span>
     </div>
   );
 }
 
 /**
  * Part 3: the day2 charts every cluster of the flavor gets, in install
- * order, each at a revision and with the fields a cluster may override.
+ * order, each at a revision and with the fields a cluster may override. A
+ * transfer list: an add-on moves from Available (the catalog it is not
+ * picked from yet) into Selected, and back when it is removed.
  */
 export function AddonsSection({ addons, onChange }: { addons: SpecAddon[]; onChange: (addons: SpecAddon[]) => void }) {
   const [search, setSearch] = useState("");
   const [configuring, setConfiguring] = useState<{ team: string; name: string } | null>(null);
+  const moves = useAddonMoves();
 
   const { data: catalog, isLoading, error } = useQuery<CatalogEntry[]>({
     queryKey: day2Keys.catalog,
@@ -211,16 +147,7 @@ export function AddonsSection({ addons, onChange }: { addons: SpecAddon[]; onCha
     staleTime: 120_000,
   });
   const catalogByKey = useMemo(() => new Map((catalog ?? []).map((a) => [keyOf(a), a])), [catalog]);
-  const byTeam = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const matching = (catalog ?? []).filter(
-      (a) => !query || a.name.toLowerCase().includes(query) || a.team.toLowerCase().includes(query)
-    );
-    return matching.reduce<Record<string, CatalogEntry[]>>((acc, a) => {
-      (acc[a.team] ??= []).push(a);
-      return acc;
-    }, {});
-  }, [catalog, search]);
+  const available = useMemo(() => availableAddons(catalog ?? [], addons, search), [catalog, addons, search]);
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
@@ -228,6 +155,15 @@ export function AddonsSection({ addons, onChange }: { addons: SpecAddon[]; onCha
     const from = addons.findIndex((a) => keyOf(a) === active.id);
     const to = addons.findIndex((a) => keyOf(a) === over.id);
     onChange(arrayMove(addons, from, to));
+  };
+
+  const add = (addon: CatalogEntry, version: string, button: HTMLElement) => {
+    moves.move(addon, button, "[data-addon-add]", `${addon.name} added to Selected, ${addons.length + 1} of ${addons.length + 1}.`);
+    onChange([...addons, { team: addon.team, name: addon.name, version, overrideable: [] }]);
+  };
+  const remove = (addon: SpecAddon, button: HTMLElement) => {
+    moves.move(addon, button, "[data-addon-remove]", `${addon.name} removed from Selected, back in Available.`);
+    onChange(addons.filter((a) => keyOf(a) !== keyOf(addon)));
   };
 
   const configuringAddon = configuring ? addons.find((a) => keyOf(a) === keyOf(configuring)) : undefined;
@@ -253,54 +189,21 @@ export function AddonsSection({ addons, onChange }: { addons: SpecAddon[]; onCha
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-      {/* Side by side, the catalog stays in view below the editor's tab bar while a long
-          selection scrolls, and its list uses the screen's height, not a fixed 500px */}
-      <div className="min-w-0 space-y-4 lg:sticky lg:top-[4.25rem]" data-testid="addons-available">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">Available</h3>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <input
-              type="text"
-              placeholder="Search..."
-              aria-label="Search addons"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-44 rounded-lg border bg-background py-1.5 pl-8 pr-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-            />
-          </div>
-        </div>
-        {error ? (
-          <ProblemList error={error} title="The chart catalog could not be read" />
-        ) : (
-          <div className="max-h-[500px] space-y-6 overflow-y-auto overscroll-contain pr-2 lg:max-h-[calc(100dvh-13rem)]">
-            {Object.keys(byTeam).length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {search ? "No addons match your search" : "No addons available"}
-              </p>
-            ) : (
-              Object.entries(byTeam)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([team, list]) => (
-                  <TeamSection
-                    key={team}
-                    team={team}
-                    addons={list}
-                    selected={addons}
-                    onAdd={(addon, version) => onChange([...addons, { team: addon.team, name: addon.name, version, overrideable: [] }])}
-                  />
-                ))
-            )}
-          </div>
-        )}
-      </div>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] lg:items-start lg:gap-5">
+      <AvailableAddons available={available} error={error} search={search} onSearch={setSearch} onAdd={add} />
 
-      <div className="min-w-0 space-y-4">
+      <Direction />
+
+      <div className="min-w-0 space-y-4" data-testid="addons-selected">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Selected Addons ({addons.length})</h3>
+          <h3 className="text-sm font-semibold">
+            Selected <span className="font-normal text-muted-foreground tabular" data-testid="addons-selected-count">({addons.length})</span>
+          </h3>
           {addons.length > 1 && <span className="text-xs text-muted-foreground">Drag to set the install order</span>}
         </div>
+        <p role="status" className="sr-only" data-testid="addons-announcement">
+          {moves.message}
+        </p>
         {addons.length === 0 ? (
           <div className="rounded-xl border border-dashed p-8 text-center">
             <Package className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" aria-hidden />
@@ -316,7 +219,7 @@ export function AddonsSection({ addons, onChange }: { addons: SpecAddon[]; onCha
                     key={keyOf(addon)}
                     addon={addon}
                     index={index}
-                    onRemove={() => onChange(addons.filter((a) => keyOf(a) !== keyOf(addon)))}
+                    onRemove={(button) => remove(addon, button)}
                     onVersionChange={(v) => onChange(addons.map((a) => (keyOf(a) === keyOf(addon) ? { ...a, version: v } : a)))}
                     onConfigure={() => setConfiguring({ team: addon.team, name: addon.name })}
                     availableVersions={chartRevisions(catalogByKey.get(keyOf(addon)), addon.version)}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { FieldGroup, inputCls, Segmented, ValueField } from "./controls";
 import { ImageMirrorsGroup } from "./image-mirrors-group";
@@ -189,13 +190,8 @@ export function BasicsSection({
       <ImageMirrorsGroup draft={draft} problems={problems} notEnforced={notEnforced} onValue={onValue} onLocked={onLocked} />
 
       {otherInputs.length > 0 && (
-        <div className="space-y-3">
-          <button
-            type="button"
-            aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((v) => !v)}
-            className="group flex items-center gap-1.5 text-sm font-semibold"
-          >
+        <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+          <CollapsibleTrigger className="group flex items-center gap-1.5 rounded-md text-sm font-semibold">
             <ChevronRight
               aria-hidden
               className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", moreOpen && "rotate-90")}
@@ -204,9 +200,9 @@ export function BasicsSection({
             <span className="font-normal text-muted-foreground">
               · {setCount > 0 ? `${setCount} set` : `${otherInputs.length}`}, presets only
             </span>
-          </button>
-          {moreOpen && (
-            <div className="grid gap-x-5 gap-y-4 pl-6 sm:grid-cols-2">
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <div className="grid gap-x-5 gap-y-4 pl-6 pt-3 sm:grid-cols-2">
               {otherInputs.map((input) => (
                 <PresetInput
                   key={input.name}
@@ -218,8 +214,8 @@ export function BasicsSection({
                 />
               ))}
             </div>
-          )}
-        </div>
+          </CollapsiblePanel>
+        </Collapsible>
       )}
     </div>
   );
