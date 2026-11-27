@@ -3,7 +3,8 @@
 Each zone's NodePool labels its Nodes with its zone: a create writes it (the
 logical nodepools' tests), a request or a flavor that gives the key is
 refused, and an older file that lacks it is in sync, its NodePools listed as
-missing the label apart from the flavor's drift; a sync never adds it.
+missing the label apart from the flavor's drift; a sync never adds it, and an
+edit that adds a NodePool must give its zone.
 """
 
 from __future__ import annotations
@@ -120,3 +121,28 @@ async def test_an_older_file_without_zone_labels_is_in_sync_and_a_sync_adds_none
     added = [line[1:].strip() for line in plan["diff"].splitlines() if line.startswith("+ ")]
     assert added == ['nodeLabels: {"tier": "gpu"}'], "the flavor's labels, no zone added"
     assert not any(ZONE in w for w in plan["warnings"])
+
+
+async def test_an_edit_that_adds_a_nodepool_without_its_zone_label_is_refused(
+    client: httpx.AsyncClient, auth: Auth, support: Any, gitlab: InMemoryGitLab
+) -> None:
+    await push(client, support, gitlab, FILE, older_file(["gpu", "gpu"]))
+    alice, path = auth(support.ALICE), f"/api/day1/clusters/{NAME}"
+
+    async def modify(text: str) -> httpx.Response:
+        cluster = (await client.get(path, headers=alice)).json()
+        body = {"updated_yaml": text, "last_commit_id": cluster["last_commit_id"]}
+        return await client.patch(path, json=body, headers=alice)
+
+    third = "- infraEnvName: r760-mtl-az3\n  name: r760-mtl-az3\n  replicas: 1\n"
+    assert problems(await modify(older_file(["gpu", "gpu"]) + third)) == [
+        f"nodepool[2].nodeLabels: a new NodePool labels its Nodes with its zone (ADR-0072): "
+        f"write {ZONE}: az3 in its nodeLabels (InfraEnv r760-mtl-az3's zone)"
+    ]
+    wrong = third + f"  nodeLabels:\n    {ZONE}: az1\n"
+    (problem,) = problems(await modify(older_file(["gpu", "gpu"]) + wrong))
+    assert problem.endswith(f"is in zone az3: write {ZONE}: az3")
+    zoned = await modify(older_file(["gpu", "gpu"]) + wrong.replace("az1", "az3"))
+    assert zoned.status_code == 200, zoned.text
+    kept = await modify(older_file(["cpu", "gpu"]))
+    assert kept.status_code == 200, "an existing NodePool without its zone label: never checked"

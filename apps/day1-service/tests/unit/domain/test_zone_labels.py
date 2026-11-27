@@ -1,7 +1,8 @@
 """Each zone's NodePool labels its Nodes with its zone (ADR-0072's 2026-11-28 amendments).
 
-A create labels every NodePool of a convention InfraEnv; an existing NodePool's
-label is never added, changed or dropped by a sync, and one without it is listed.
+A create labels every NodePool of a convention InfraEnv, and so must an edit
+that adds one; an existing NodePool's label is never added, changed or dropped
+by a sync, and one without it is listed.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from typing import Any, cast
 from wingman_core.domain.git import RepoPath
 from wingman_core.testing.fixtures import default_fixture_root
 from wingman_day1.domain.cluster_edits import SetValue
+from wingman_day1.domain.cluster_file import edit_problems as file_edit_problems
 from wingman_day1.domain.locks import InputPath, Lock
 from wingman_day1.domain.machine_configs import MachineConfigCatalog
 from wingman_day1.domain.node_types import ZONE_LABEL
@@ -18,6 +20,7 @@ from wingman_day1.domain.sync_effects import sync_edits
 from wingman_day1.domain.value_drift import value_drift
 from wingman_day1.domain.zone_labels import (
     ZoneLabelMissing,
+    edit_problems,
     flavor_problems,
     input_problems,
     rendered_problems,
@@ -156,3 +159,48 @@ def test_a_nodepool_whose_labels_a_sync_sets_gets_no_zone_from_that_edit() -> No
     assert sync_edits(drift([LOCK], values["nodepool"])) == [
         SetValue(InputPath(("nodepool", 0, "nodeLabels")), {"tier": "gpu"})
     ]
+
+
+# ── An edit that adds a NodePool ─────────────────────────────────────────────
+
+OLDER = {"nodepool": [entry(AZ[0]), entry(AZ[1], {"tier": "gpu"})]}
+
+
+def test_a_nodepool_an_edit_adds_must_label_its_nodes_with_its_zone() -> None:
+    added = {"nodepool": [*OLDER["nodepool"], entry(AZ[2], {"tier": "gpu"})]}
+    assert edit_problems(OLDER, added) == [
+        f"nodepool[2].nodeLabels: a new NodePool labels its Nodes with its zone (ADR-0072): write "
+        f"{ZONE_LABEL}: az3 in its nodeLabels (InfraEnv {AZ[2]}'s zone)"
+    ]
+    wrong = {"nodepool": [*OLDER["nodepool"], entry(AZ[2], {ZONE_LABEL: "az1"})]}
+    assert edit_problems(OLDER, wrong) == [
+        f"nodepool[2].nodeLabels: {ZONE_LABEL} is 'az1', but InfraEnv {AZ[2]} is in zone az3: "
+        f"write {ZONE_LABEL}: az3"
+    ]
+    zoned = {"nodepool": [*OLDER["nodepool"], entry(AZ[2], {"tier": "gpu", ZONE_LABEL: "az3"})]}
+    assert edit_problems(OLDER, zoned) == []
+    beside = {"nodepool": [*OLDER["nodepool"], entry(AZ[0], name=f"{AZ[0]}-b")]}
+    (problem,) = edit_problems(OLDER, beside)
+    assert problem.startswith("nodepool[2].nodeLabels: a new NodePool"), "a second one in a zone"
+
+
+def test_an_existing_nodepool_is_never_checked_and_one_off_the_convention_names_no_zone() -> None:
+    edited = {"nodepool": [entry(AZ[0], {"tier": "cpu"}), entry(AZ[1], {ZONE_LABEL: "az9"})]}
+    assert edit_problems(OLDER, edited) == [], "the file had both NodePools: never checked"
+    legacy = {"nodepool": [*OLDER["nodepool"], entry(LEGACY), {"name": "vms", "replicas": 1}]}
+    assert edit_problems(OLDER, legacy) == [], "no zone Wingman can trust, or no InfraEnv"
+    derived = {"nodepool": [{"infraEnvName": AZ[0], "replicas": 1}]}
+    named = {"nodepool": [{"infraEnvName": AZ[0], "name": f"x-{AZ[0]}", "replicas": 2}]}
+    assert edit_problems(derived, named, cluster_name="x") == [], "the same NodePool, either shape"
+    (renamed,) = edit_problems(derived, {"nodepool": [entry(AZ[0])]}, cluster_name="x")
+    assert renamed.startswith("nodepool[0].nodeLabels: a new NodePool"), "a rename is a new one"
+
+
+def test_every_edit_of_a_file_checks_a_new_nodepools_zone_label() -> None:
+    head = 'owner: {merkaz: "1", anaf: "2", mador: "3"}\nmastertag: 4.18.22\nnodepool:\n'
+    pool = f"- infraEnvName: {AZ[0]}\n  name: {AZ[0]}\n  replicas: 1\n"
+    added = head + pool + pool.replace(AZ[0], AZ[1])
+    (problem,) = file_edit_problems(head + pool, added)
+    assert problem.startswith("nodepool[1].nodeLabels: a new NodePool labels its Nodes")
+    zoned = added + f"  nodeLabels: {{{ZONE_LABEL}: az2}}\n"
+    assert file_edit_problems(head + pool, zoned) == []

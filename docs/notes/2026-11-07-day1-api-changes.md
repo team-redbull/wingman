@@ -77,6 +77,11 @@ do. Paths are relative to the day1 service (`/api/day1`, `/api/auth`,
     NodePools whose Nodes carry no zone label, as information (never drift),
     which no sync changes; `POST /clusters/{name}/sync/preview` no longer warns
     `adds topology.kubernetes.io/zone …`. Only Wingman's web read the field.
+    An edit (`PATCH /clusters/{name}`, and the edit of a pending merge
+    request) that adds a NodePool of a convention InfraEnv without
+    `nodeLabels.topology.kubernetes.io/zone`, or with another value than its
+    InfraEnv's zone, is a 422 at `nodepool[i].nodeLabels`; an existing
+    NodePool is never checked.
 
 10. **List items** (`ClusterStatus`): `spec_name`/`spec_version` are `null`
     for clusters not linked to a spec (was the sentinel

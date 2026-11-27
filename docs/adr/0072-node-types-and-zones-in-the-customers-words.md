@@ -320,6 +320,18 @@ NodePools as they are; zone-labelled Nodes come from a new NodePool.
    NodePools were made before Wingman labelled zones, that their Nodes carry
    no zone label, that a sync never changes an existing NodePool, and that a
    new NodePool is the way to zone-labelled Nodes.
+3. **A NodePool an edit adds labels its Nodes with its zone.** Modelled on
+   ADR-0071's names (`nodepool_names.edit_problems`): an entry whose NodePool
+   the old file had, by either name shape, is never checked; one it did not
+   have is new, and a new entry of a convention InfraEnv without
+   `nodeLabels.topology.kubernetes.io/zone`, or with another value than its
+   InfraEnv's zone, is refused (422) saying what to write
+   (`zone_labels.edit_problems`, through `cluster_file.edit_problems`: Edit
+   cluster's modify and the edit of a pending merge request). Edit cluster's
+   **NodePool names** offers **Add its zone label** for such an entry, which
+   writes the label into the text as the names panel writes a name (one
+   entry's lines, every other line kept, `lib/zone-labels.ts` `withZoneLabel`),
+   and says so when the layout is not one it edits.
 
 Creates stay as the first amendment made them: every NodePool Wingman writes
 for a convention InfraEnv is labelled. A sync and an import never add a
@@ -327,7 +339,8 @@ NodePool (a flavor position the file lacks is a decision for a person, item 12;
 an import writes the header only), so no write of theirs needs a zone label.
 
 Verified by `test_zone_labels.py` (no zone label added by a sync, kept when
-the file has one, `with_own_zone` never adds one, the missing list) and
-`test_zone_labels_api.py` (an older file in sync with `missing_zone_labels`,
-a sync preview with nothing to change and no zone line, a drifted sync that
-writes the flavor's labels alone).
+the file has one, `with_own_zone` never adds one, the missing list, an edit's
+new NodePool without or with a wrong zone label refused, an existing one
+unchecked) and `test_zone_labels_api.py` (an older file in sync with
+`missing_zone_labels`, a sync preview with nothing to change and no zone line,
+a drifted sync that writes the flavor's labels alone, an edit's refusal).

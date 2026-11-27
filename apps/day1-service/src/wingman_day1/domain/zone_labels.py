@@ -17,6 +17,11 @@ adds, and never on one that exists:
   refused (:func:`input_problems`); a flavor never presets it
   (:func:`flavor_problems`). The rendered file must hold it
   (:func:`rendered_problems`).
+- **An edit that adds a NodePool** (:func:`edit_problems`, Edit cluster's or
+  a pending merge request's): a new entry of a convention InfraEnv must label
+  its Nodes with its InfraEnv's zone, else it is refused saying what to write;
+  an entry whose NodePool the file had is never checked. A sync and an import
+  never add a NodePool.
 - **An existing NodePool's label is never added, changed or removed** (the
   user, 2026-11-28: "the fix will be create new Nodepool"): changing a
   NodePool's ``nodeLabels`` may apply in place or only to new Nodes, and under
@@ -39,7 +44,7 @@ from dataclasses import dataclass
 from typing import Final, cast
 
 from wingman_day1.domain.node_types import ZONE_LABEL, parse
-from wingman_day1.domain.nodepool_names import infra_env_of, rendered_name
+from wingman_day1.domain.nodepool_names import entry_key, infra_env_of, rendered_name
 from wingman_day1.domain.zone_inputs import zone_infra_envs
 
 INPUT: Final = "node_labels"
@@ -141,6 +146,39 @@ def rendered_problems(inputs: Mapping[str, object], rendered: Mapping[str, objec
             f"nodepool[{index}].{FILE_KEY}: the template wrote no {ZONE_LABEL}: {want}; the specs "
             f"project's cluster-template.j2 must render node_labels as nodeLabels ({GUIDE})"
         )
+    return problems
+
+
+def edit_problems(
+    old: Mapping[str, object], new: Mapping[str, object], *, cluster_name: str | None = None
+) -> list[str]:
+    """Why a NodePool an edit adds may not be proposed: it does not label its Nodes with its zone.
+
+    As ``nodepool_names.edit_problems``: an entry whose NodePool the file had
+    (by either name shape) is never checked, whatever its labels; one it did not
+    have is new, and a new NodePool of a convention InfraEnv labels its Nodes
+    with that InfraEnv's zone. ``cluster_name`` is the chart's ``clusterName``,
+    when known.
+    """
+    before = {entry_key(i, e, cluster_name) for i, e in _pools(old, "nodepool")}
+    problems: list[str] = []
+    for index, entry in _pools(new, "nodepool"):
+        infra_env = infra_env_of(entry)
+        zone = zone_of(infra_env)
+        if zone is None or entry_key(index, entry, cluster_name) in before:
+            continue
+        given = _mapping(entry.get(FILE_KEY)).get(ZONE_LABEL)
+        where = f"nodepool[{index}].{FILE_KEY}"
+        if given is None:
+            problems.append(
+                f"{where}: a new NodePool labels its Nodes with its zone (ADR-0072): write "
+                f"{ZONE_LABEL}: {zone} in its {FILE_KEY} (InfraEnv {infra_env}'s zone)"
+            )
+        elif given != zone:
+            problems.append(
+                f"{where}: {ZONE_LABEL} is {given!r}, but InfraEnv {infra_env} is in zone {zone}: "
+                f"write {ZONE_LABEL}: {zone}"
+            )
     return problems
 
 
