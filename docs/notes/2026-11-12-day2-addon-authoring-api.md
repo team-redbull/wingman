@@ -499,3 +499,162 @@ whose deploy config sets `targetRevision` (its scope ignores every pin's
 revision; the values still apply), and notes the versions the add-on runs on
 with no pin and the clusters whose own folder pins a revision (an emergency
 pin, which the pin's revision does not reach).
+
+## 9. Operators: update channel, version, approval (3.67.0)
+
+ADR-0073. An add-on is an **OLM operator** when its chart's own
+`values.yaml` at the add-on's revision holds a Subscription block
+(`subscription.name` plus `channel`, `namespace`, `source`, `sourceNamespace`,
+`startingCSV` or `installPlanApproval`), at the top level or under one
+top-level key (`operator-olm`, or an alias). Wingman writes three keys of that
+block in the add-on's own values files: `channel`, `startingCSV` and
+`installPlanApproval`.
+
+### `GET /addons/{team}/{addon}/operator`
+
+Any signed-in user (a viewer's destinations are those they may see,
+ADR-0068). For a plain chart `is_operator` is `false` and the rest is empty.
+
+```json
+{
+  "team": "redbull",
+  "chart": "cert-manager",
+  "is_operator": true,
+  "editable": true,
+  "reason": null,
+  "revision": "HEAD",
+  "key_path": "operator-olm.subscription",
+  "subchart": "operator-olm",
+  "chart_values_problem": null,
+  "chart": {"package": "openshift-cert-manager-operator", "namespace": "cert-manager-operator",
+            "channel": "stable-v1", "starting_csv": "", "install_plan_approval": null,
+            "source": null, "source_namespace": null, "install_mode": "own-namespace",
+            "target_namespaces": ["cert-manager-operator"], "defaulted": []},
+  "sig": {
+    "path": "operators/cert-manager/values.yaml",
+    "own": {"channel": "stable-v1.14", "starting_csv": null, "install_plan_approval": null},
+    "effective": {"package": "openshift-cert-manager-operator", "namespace": "cert-manager-operator",
+                  "channel": "stable-v1.14", "starting_csv": "", "install_plan_approval": "Automatic",
+                  "source": "generic-cs", "source_namespace": "openshift-marketplace",
+                  "install_mode": "own-namespace", "target_namespaces": ["cert-manager-operator"],
+                  "defaulted": ["install_plan_approval", "source", "source_namespace"]}
+  },
+  "pins": [
+    {"version": "4.20.9", "minor": "4.20", "target_revision": null,
+     "path": "operators/cert-manager/ocp-versions/4.20.9/values.yaml",
+     "own": {"channel": "stable-v1.15", "starting_csv": null, "install_plan_approval": null},
+     "effective": {"…": "as sig.effective"}, "destinations": 2}
+  ],
+  "versions": [
+    {"version": "4.16.27", "minor": "4.16", "destinations": 3, "pinned": false},
+    {"version": "4.20.9", "minor": "4.20", "destinations": 2, "pinned": true}
+  ],
+  "catalog": {
+    "configured": true,
+    "source": "redbull/operator-catalog@main: mirror/imageset-config-{minor}.yaml, catalogs/{minor}/catalog.json",
+    "minors": [
+      {"minor": "4.20", "files": ["mirror/imageset-config-4.20.yaml", "catalogs/4.20/catalog.json"],
+       "problems": [], "package": {
+         "name": "openshift-cert-manager-operator", "default_channel": "stable-v1",
+         "channels": [
+           {"name": "stable-v1", "is_default": true, "head": "cert-manager-operator.v1.15.1",
+            "versions": ["cert-manager-operator.v1.15.1", "cert-manager-operator.v1.15.0"],
+            "min_version": "1.15.0", "max_version": null}]}}
+    ]
+  },
+  "warnings": [FindingOut]
+}
+```
+
+- `editable: false` with `reason` for an operator Wingman shows but does not
+  edit: two Subscription blocks in one chart, or its chart values unreadable
+  (`chart_values_problem`). `is_operator: false` gives the reason too (no
+  Subscription in the chart's values, or they could not be read).
+- `key_path`: where the block is in a values file; `subchart`: its first key,
+  `null` at the top level.
+- `chart`, `sig.effective` and each pin's `effective`: the settings at that
+  level, merged as Helm merges (chart values, then Sig values, then the
+  pin's). `null` is "not in any of these files": under `operator-olm` such a
+  field is the platform subchart's default instead, named in `defaulted`.
+  `install_mode`: `all-namespaces` (an empty or absent
+  `operatorGroup.targetNamespaces`, or the namespace `openshift-operators`),
+  `own-namespace` (exactly the install namespace), `namespaces` (any other
+  list: `target_namespaces`), `existing-group` (`operatorGroup.enabled:
+  false`: the namespace's own OperatorGroup) or `unknown` (a chart that
+  templates its own Subscription and has no `operatorGroup` values).
+- `own`: what that level's file sets itself (`null`: inherited).
+- `versions`: the OCP versions the add-on's destinations run, each with its
+  minor, its count and whether a pin exists for it.
+- `catalog.configured: false` when `DAY2_OPERATOR_CATALOG_PROJECT` is unset:
+  `minors` is then empty and every field is free text. Otherwise one entry
+  per minor of `versions` and of the pins: `package` is `null` when the
+  minor's files do not have it (or there are none: `files` empty), and
+  `problems` says what could not be read. `versions` are CSV names, newest
+  first; `head` is the channel's head (OLM's "latest").
+- `warnings`: `olm-channel-not-in-catalog`, `olm-version-not-in-channel`,
+  `olm-package-not-in-catalog`, `olm-catalog-missing` (info),
+  `olm-manual-approval` (ADR-0073).
+
+### `GET /teams/{team}/addon-chart?repourl=&revision=&path=` (admin)
+
+For the New add-on form, before the add-on exists: `revision` defaults to
+`HEAD`, `path` to `.`.
+
+```json
+{"repourl": "http://gitlab.fake/redbull/helm-charts/cert-manager.git",
+ "project": "redbull/helm-charts/cert-manager", "revisions": ["main", "1.15.0", "1.14.0"],
+ "problem": null, "operator": {"…": "as GET …/operator, with sig.own all null and no pins"}}
+```
+
+`revisions`: the chart repo's branches, default branch first (empty for a
+repo elsewhere, with `problem`). `operator.versions`: what the team's
+destinations run (the minors whose catalog is offered).
+
+### The settings in a write
+
+```json
+"operator": {"channel": "stable-v1.14", "starting_csv": "", "install_plan_approval": "Automatic"}
+```
+
+Each field: absent leaves it, `null` removes it from that level's file (it
+inherits), a value sets it. `starting_csv: ""` is "Latest in the channel".
+`install_plan_approval` takes `Automatic` only (422 `olm-manual-approval`:
+Manual stalls the GitOps sync). 422 `olm-channel-invalid`,
+`olm-starting-csv-invalid` for a malformed value, `not-an-operator` for a
+chart with no Subscription block, `operator-not-editable` for one with two.
+When only settings change, the file is edited in place (422 `values-layout`
+for a layout Wingman cannot edit exactly: edit the YAML instead); with
+`values` in the same request, the settings are set in that document, written
+whole.
+
+- `POST /addons/{team}`: `operator` (into `values.yaml`), and each
+  `ocp_versions[]` item takes `operator` and may leave `target_revision` out
+  (a values-only pin; 422 `pin-empty` with no revision, values or settings).
+- `POST /addons/{team}/{addon}/ocp-versions`: the same pin shape.
+- `PUT /addons/{team}/{addon}/ocp-versions/{version}`: `operator` too, and
+  `target_revision: ""` drops the revision (a values-only pin).
+- `PUT /addons/{team}/{addon}` (§4) takes, in the same one MR:
+
+```json
+{
+  "last_commit_id": "9f1c…",
+  "operator": {"channel": "stable-v1.14"},
+  "ocp_versions": [
+    {"version": "4.20.10", "from_version": "4.20.9", "operator": {"channel": "stable-v1.15"}},
+    {"version": "4.21.2", "target_revision": "1.16.0", "values": {}, "operator": {"channel": "stable-v1.16"}},
+    {"version": "4.16.27", "from_version": "4.16.27", "target_revision": ""}
+  ],
+  "remove_ocp_versions": ["4.18.3"],
+  "confirm_changes": [], "expected_digest": null, "message": null
+}
+```
+
+  An item with no `from_version` adds a pin; with its own version, changes it;
+  with another, moves the folder (every file deleted at the old version and
+  created at the new, then changed). `target_revision` and `values` as in the
+  pin routes (absent: unchanged, or none for a new pin). 422 `pin-duplicate`
+  for a version given twice, `pin-exists` (409) for a move or add onto a pin
+  that stays, 404 `pin-unknown` for a `from_version` or removal that is not
+  there. Every file it changes, moves or deletes is guarded by
+  `last_commit_id`. Title: `[Wingman/Day2] Update addon <team>/<addon> Sig values and OCP-version pins 4.20.10 (moved from 4.20.9), 4.21.2 (new), 4.16.27, 4.18.3 (removed)`;
+  without a Sig change, `... <addon> OCP-version pins ...`.
