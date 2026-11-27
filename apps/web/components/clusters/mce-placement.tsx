@@ -56,7 +56,7 @@ export function PlacementRule({
           <span className="mt-1 block">
             An MCE must host the version, have{" "}
             {placement ? `at least ${placement.min_free_pods}` : "enough"} free pods on its workers and enough healthy
-            free servers of each node type the nodepools use, and answer Wingman.
+            free servers for each nodepool's node type, zone by zone, and answer Wingman.
           </span>
           <span className="mt-1 block">
             Among those: fewest clusters of this owner, then fewest clusters, then most usable spare servers. The owner
@@ -407,7 +407,7 @@ function CandidateRow({
 
 /**
  * Everything a row's mark stands for: its checks (each failing or unknown
- * one in day1's words, each node type's servers, what was not checked), where
+ * one in day1's words, each server pool's servers, what was not checked), where
  * it ranks behind the pick, and what its numbers are made of.
  */
 function RowDetail({ candidate, state, liveReads }: { candidate: PlacementCandidate; state: RowState; liveReads: boolean }) {
@@ -427,9 +427,9 @@ function RowDetail({ candidate, state, liveReads }: { candidate: PlacementCandid
         )}
       </span>
       {!candidate.eligible &&
-        // The servers check is told per node type, below
+        // The servers check is told per server pool, below
         unmetChecks(candidate)
-          .filter((check) => check.check !== "servers" || candidate.node_types.length === 0)
+          .filter((check) => check.check !== "servers" || candidate.server_pools.length === 0)
           .map((check) => (
             <Line
               key={check.check}
@@ -440,12 +440,12 @@ function RowDetail({ candidate, state, liveReads }: { candidate: PlacementCandid
               {check.detail}
             </Line>
           ))}
-      {candidate.node_types.length > 0 && (
-        <span data-testid="placement-node-types" className="block">
-          {candidate.node_types.map((type) => (
+      {candidate.server_pools.length > 0 && (
+        <span data-testid="placement-server-pools" className="block">
+          {candidate.server_pools.map((type) => (
             <Line
               key={type.infra_env}
-              testId={`placement-node-type-${type.infra_env}`}
+              testId={`placement-server-pool-${type.infra_env}`}
               status={type.status}
               icon={type.status === "fail" ? CircleX : type.status === "unknown" ? CircleHelp : Server}
             >

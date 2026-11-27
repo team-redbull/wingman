@@ -37,13 +37,13 @@ class ExcludedNodesOut(BaseModel):
     """With a ``NoSchedule`` or ``NoExecute`` taint."""
 
 
-class NodeTypeOut(BaseModel):
-    """One node type the new cluster needs, on one candidate MCE."""
+class ServerPoolOut(BaseModel):
+    """One server pool the new cluster needs, on one candidate MCE."""
 
     infra_env: str
-    """The node type: an InfraEnv, or several joined by `` + `` (ADR-0064)."""
+    """The server pool: an InfraEnv, or several joined by `` + `` (ADR-0064)."""
     infra_envs: list[str]
-    """Its InfraEnvs; node types that share one are a single row, so no server counts twice."""
+    """Its InfraEnvs; server pools that share one are a single row, so no server counts twice."""
     needed: int
     free_agents: int | None
     """Free Agents in its InfraEnvs; ``None`` when the MCE's Agents could not be read."""
@@ -59,7 +59,7 @@ class NodeTypeOut(BaseModel):
 
 
 class NeedOut(BaseModel):
-    """Replicas the new cluster needs of one node type, summed over its nodepools."""
+    """Replicas the new cluster needs of one server pool, summed over its nodepools."""
 
     infra_env: str
     """An InfraEnv, or several joined by `` + `` for nodepools that draw from them (ADR-0064)."""
@@ -86,7 +86,7 @@ class PlacementCandidateOut(BaseModel):
     rank: int | None
     behind_on: Literal["owner_clusters", "clusters", "spare_servers", "name"] | None
     checks: list[PlacementCheckOut]
-    node_types: list[NodeTypeOut]
+    server_pools: list[ServerPoolOut]
     versions: list[str]
     clusters: int
     open_creates: int
@@ -110,8 +110,8 @@ class PlacementCandidateOut(BaseModel):
                 PlacementCheckOut(check=c.check.value, status=c.status.value, detail=c.detail)
                 for c in candidate.checks
             ],
-            node_types=[
-                NodeTypeOut(
+            server_pools=[
+                ServerPoolOut(
                     infra_env=t.infra_env,
                     infra_envs=list(t.infra_envs),
                     needed=t.needed,
@@ -123,7 +123,7 @@ class PlacementCandidateOut(BaseModel):
                     status=t.status.value,
                     detail=t.detail,
                 )
-                for t in picture.node_types
+                for t in picture.server_pools
             ],
             versions=list(picture.versions.versions),
             clusters=picture.clusters,
@@ -167,7 +167,7 @@ class PlacementOut(BaseModel):
     live_reads: bool
     """``False`` when live MCE reads are off: free pods and servers were not checked."""
     needs: list[NeedOut]
-    """The servers the new cluster needs, per node type, summed; empty when none is named."""
+    """The servers the new cluster needs, per server pool, summed; empty when none is named."""
     versions: list[str]
     """Every version some candidate hosts, newest first."""
     pick: str | None

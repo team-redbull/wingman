@@ -5,7 +5,7 @@ owner (the cluster's mador, ADR-0028) and the flavor with its nodepools. The
 **candidates** are the MCEs at the site whose name says that environment
 (ADR-0014). Each candidate is **checked**: it hosts the version (ADR-0034),
 it has at least the minimum free pods on its workers, it has enough healthy
-free servers of every node type the nodepools need, and Wingman could read
+free free servers in every server pool the nodepools need, and Wingman could read
 it; one that fails a check is not offered, and one whose check is unknown is
 never picked. The candidates
 that pass are **ranked**: fewest clusters of this owner, then fewest
@@ -17,7 +17,7 @@ get the same pick, and both are accepted.
 
 Placement always runs. Without live MCE reads (``CLUSTER_STATUS_ENABLED``
 off) it decides on Git and server-scan alone: the free pods, the servers of
-each node type and the hub read are ``not_checked``, which does not block a
+each server pool and the hub read are ``not_checked``, which does not block a
 pick, and the form says so (ADR-0050's amendment). An admin may choose
 another candidate that passes every check, with a reason; the choice is
 checked again at create (:func:`admit`) and logged (``placement_log``).
@@ -33,7 +33,7 @@ from enum import StrEnum
 from typing import Final
 
 from wingman_day1.domain.errors import InvalidInputError, PlacementChangedError
-from wingman_day1.domain.mce_capacity import FreePods, NodeTypeSupply, SpareServers, Supply
+from wingman_day1.domain.mce_capacity import FreePods, PoolSupply, SpareServers, Supply
 from wingman_day1.domain.names import Env
 from wingman_day1.domain.openshift_versions import OpenShiftVersions, newest_first
 
@@ -105,7 +105,7 @@ class PlacementInputs:
     flavor: str | None
     min_free_pods: int
     needs: tuple[tuple[str, int], ...] = ()
-    """Replicas the new cluster needs per node type (InfraEnv), summed, sorted."""
+    """Replicas the new cluster needs per server pool (InfraEnv), summed, sorted."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +126,7 @@ class McePicture:
     pods: FreePods | None
     """``None`` when the MCE could not be read; ``hub_error`` says why."""
     hub_error: str | None = None
-    node_types: tuple[NodeTypeSupply, ...] = ()
+    server_pools: tuple[PoolSupply, ...] = ()
     """Per need, the MCE's healthy free servers of that type."""
     agents_error: str | None = None
     """Why the MCE's Agents could not be read, when they could not."""
@@ -253,18 +253,18 @@ _SUPPLY_STATUS: Final = {
 
 
 def servers_check(
-    node_types: Sequence[NodeTypeSupply], agents_error: str | None = None
+    server_pools: Sequence[PoolSupply], agents_error: str | None = None
 ) -> CheckResult:
-    """Enough healthy free servers of every node type the nodepools need.
+    """Enough healthy free free servers in every server pool the nodepools need.
 
     One type short fails the check; one unknown (and none short) makes it
     unknown; with no type needed yet there is nothing to check.
     """
-    if not node_types:
+    if not server_pools:
         return CheckResult(Check.SERVERS, Status.PASS, "No nodepool names a node type yet.")
-    statuses = {_SUPPLY_STATUS[supply.status] for supply in node_types}
+    statuses = {_SUPPLY_STATUS[supply.status] for supply in server_pools}
     status = next(s for s in (Status.FAIL, Status.UNKNOWN, Status.PASS) if s in statuses)
-    detail = "; ".join(supply.detail for supply in node_types) + "."
+    detail = "; ".join(supply.detail for supply in server_pools) + "."
     if agents_error is not None and status is Status.UNKNOWN:
         detail += f" {agents_error}"
     return CheckResult(Check.SERVERS, status, detail)
@@ -296,7 +296,7 @@ def checks_of(picture: McePicture, inputs: PlacementInputs) -> tuple[CheckResult
     return (
         version_check(picture.versions, inputs.version),
         free_pods_check(picture.pods, inputs.min_free_pods),
-        servers_check(picture.node_types, picture.agents_error),
+        servers_check(picture.server_pools, picture.agents_error),
         readable_check(picture.hub_error),
     )
 

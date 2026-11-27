@@ -87,7 +87,7 @@ test("create a cluster from a spec starts provision-cluster and shows its run", 
   await alice.getByPlaceholder("e.g. 1234").fill("1234");
   await alice.getByPlaceholder("e.g. 56").fill("56");
   await alice.getByPlaceholder("e.g. 7").fill("7");
-  // With live MCE reads the InfraEnvs are the MCE's list (each nodepool takes the first, a node type
+  // With live MCE reads the InfraEnvs are the MCE's list (each nodepool takes the first, a server pool
   // the MCE has servers of); without them, each is typed
   const infraEnvPickers = alice.getByRole("combobox", { name: "Infra Env", exact: true });
   if ((await infraEnvPickers.count()) > 0) {

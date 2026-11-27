@@ -1,4 +1,4 @@
-"""Free pods on the workers, servers of each node type, spare servers of an MCE (ADR-0050)."""
+"""Free pods on the workers, free servers per server pool, spare servers of an MCE (ADR-0050)."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from wingman_day1.domain.mce_capacity import (
     ExcludedNodes,
     FreePods,
     NodeObservation,
-    NodeTypeSupply,
+    PoolSupply,
     SpareServers,
     Supply,
     free_pods,
-    node_type_supply,
+    pool_supply,
     spare_servers,
     summed_needs,
     usable,
@@ -171,8 +171,8 @@ def test_free_agents_are_joined_to_server_scan_and_counted_when_healthy() -> Non
         agent("ghost"),
     ]
     rows = [row("s1"), row("s2", maintenance=True), row("s3", health="WARNING"), row("s6")]
-    (dell,) = node_type_supply([(DELL, 3)], agents, rows)
-    assert dell == NodeTypeSupply(DELL, 3, free_agents=4, healthy=2, not_in_server_scan=1)
+    (dell,) = pool_supply([(DELL, 3)], agents, rows)
+    assert dell == PoolSupply(DELL, 3, free_agents=4, healthy=2, not_in_server_scan=1)
     assert dell.status is Supply.UNKNOWN, "the one not in server-scan could be the third"
     assert dell.detail == "dell-r660: 2 healthy free of 3 needed (1 more free, not in server-scan)"
 
@@ -180,26 +180,24 @@ def test_free_agents_are_joined_to_server_scan_and_counted_when_healthy() -> Non
 @pytest.mark.parametrize(
     ("supply", "status"),
     [
-        (NodeTypeSupply(DELL, 3, 5, 3), Supply.ENOUGH),
-        (NodeTypeSupply(DELL, 3, 5, 2), Supply.SHORT),
-        (NodeTypeSupply(DELL, 3, 2, None), Supply.SHORT),
-        (NodeTypeSupply(DELL, 3, 5, None), Supply.UNKNOWN),
-        (NodeTypeSupply(DELL, 3, None, None), Supply.UNKNOWN),
-        (NodeTypeSupply(DELL, 3, 5, 1, not_in_server_scan=2), Supply.UNKNOWN),
-        (NodeTypeSupply(DELL, 3, 5, 1, not_in_server_scan=1), Supply.SHORT),
-        (NodeTypeSupply(DELL, 3, 3, None, health_checked=False), Supply.ENOUGH),
-        (NodeTypeSupply(DELL, 3, 2, None, health_checked=False), Supply.SHORT),
+        (PoolSupply(DELL, 3, 5, 3), Supply.ENOUGH),
+        (PoolSupply(DELL, 3, 5, 2), Supply.SHORT),
+        (PoolSupply(DELL, 3, 2, None), Supply.SHORT),
+        (PoolSupply(DELL, 3, 5, None), Supply.UNKNOWN),
+        (PoolSupply(DELL, 3, None, None), Supply.UNKNOWN),
+        (PoolSupply(DELL, 3, 5, 1, not_in_server_scan=2), Supply.UNKNOWN),
+        (PoolSupply(DELL, 3, 5, 1, not_in_server_scan=1), Supply.SHORT),
+        (PoolSupply(DELL, 3, 3, None, health_checked=False), Supply.ENOUGH),
+        (PoolSupply(DELL, 3, 2, None, health_checked=False), Supply.SHORT),
     ],
 )
-def test_a_node_types_status(supply: NodeTypeSupply, status: Supply) -> None:
+def test_a_node_types_status(supply: PoolSupply, status: Supply) -> None:
     assert supply.status is status
 
 
 def test_unread_agents_or_server_scan_leave_the_counts_unknown() -> None:
-    assert node_type_supply([(DELL, 1)], None, [row("s1")]) == (
-        NodeTypeSupply(DELL, 1, None, None),
-    )
-    assert node_type_supply([(DELL, 1)], [agent("s1")], None) == (NodeTypeSupply(DELL, 1, 1, None),)
-    assert node_type_supply([(DELL, 1)], [agent("s1")], None, server_scan=False) == (
-        NodeTypeSupply(DELL, 1, 1, None, health_checked=False),
+    assert pool_supply([(DELL, 1)], None, [row("s1")]) == (PoolSupply(DELL, 1, None, None),)
+    assert pool_supply([(DELL, 1)], [agent("s1")], None) == (PoolSupply(DELL, 1, 1, None),)
+    assert pool_supply([(DELL, 1)], [agent("s1")], None, server_scan=False) == (
+        PoolSupply(DELL, 1, 1, None, health_checked=False),
     )

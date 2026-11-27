@@ -41,7 +41,7 @@ export function ClustersSection() {
             the pick&apos;s mark says why it won, each row&apos;s check mark (passes, fails, or passes with some
             checks not made) gives its reasons and numbers, and a dash says why a number is missing. A candidate
             must host the version, have enough free pods for a control plane on its workers, have enough healthy
-            free servers of each node type (InfraEnv) the nodepools use, and answer Wingman; among those, the pick
+            free servers for each nodepool's node type, zone by zone, and answer Wingman; among those, the pick
             has the fewest clusters of this owner, then the fewest clusters, then the most usable spare servers.
             The owner&apos;s mador and the nodepools below refine the pick; they are not needed to see one. Where
             this deployment does not read the MCEs live, one line under the table says free pods and servers were

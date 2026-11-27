@@ -53,7 +53,7 @@ export function placementOwner(value: unknown): string | undefined {
  * The servers the new cluster needs, as `need` values: one per nodepool that
  * names an InfraEnv (a DNS label) with 1 to 1000 replicas, in the form's order.
  * A nodepool still being filled in is left out until it is both. One that
- * draws from other InfraEnvs too names them all, `a,b:3`: one node type to
+ * draws from other InfraEnvs too names them all, `a,b:3`: one server pool to
  * day1, which counts no free server twice (ADR-0064).
  */
 export function placementNeeds(nodepools: unknown): string[] {
@@ -130,7 +130,7 @@ export function shortReason(candidate: PlacementCandidate, version: string | nul
     case "free_pods":
       return candidate.pods ? `${candidate.pods.free} free pods` : "too few free pods";
     case "servers": {
-      const type = candidate.node_types.find((t) => t.status === "fail");
+      const type = candidate.server_pools.find((t) => t.status === "fail");
       const free = type ? (type.healthy ?? type.free_agents) : null;
       return type && free !== null ? `${free} of ${type.needed} servers` : "too few servers";
     }

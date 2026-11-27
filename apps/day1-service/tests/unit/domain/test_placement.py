@@ -10,7 +10,7 @@ from wingman_day1.domain.errors import InvalidInputError, PlacementChangedError
 from wingman_day1.domain.mce_capacity import (
     ExcludedNodes,
     FreePods,
-    NodeTypeSupply,
+    PoolSupply,
     SpareServers,
 )
 from wingman_day1.domain.names import Env
@@ -284,7 +284,7 @@ def test_reasons_are_folded_and_cut() -> None:
     assert len(long.reason) == MAX_REASON
 
 
-# ── Servers of each node type ────────────────────────────────────────────────
+# ── Free servers in each server pool ────────────────────────────────────────────────
 
 DELL, HP = "dell-r650", "hp-gen11"
 NEEDS = replace(INPUTS, needs=((DELL, 6), (HP, 2)))
@@ -292,8 +292,8 @@ NEEDS = replace(INPUTS, needs=((DELL, 6), (HP, 2)))
 
 def supply(
     infra_env: str, needed: int, free: int | None, healthy: int | None, **more: object
-) -> NodeTypeSupply:
-    return NodeTypeSupply(infra_env, needed, free, healthy, **more)  # ty: ignore[invalid-argument-type]
+) -> PoolSupply:
+    return PoolSupply(infra_env, needed, free, healthy, **more)  # ty: ignore[invalid-argument-type]
 
 
 def servers(candidate: Candidate) -> tuple[Status, str]:
@@ -303,7 +303,7 @@ def servers(candidate: Candidate) -> tuple[Status, str]:
 
 def test_enough_healthy_free_servers_of_every_type_passes() -> None:
     enough = (supply(DELL, 6, 7, 6), supply(HP, 2, 2, 2))
-    (candidate,) = place(NEEDS, [picture(A, node_types=enough)]).candidates
+    (candidate,) = place(NEEDS, [picture(A, server_pools=enough)]).candidates
     assert servers(candidate) == (
         Status.PASS,
         "dell-r650: 6 healthy free of 6 needed; hp-gen11: 2 healthy free of 2 needed.",
@@ -316,8 +316,8 @@ def test_one_type_short_fails_the_mce_in_plain_words() -> None:
     placement = place(
         NEEDS,
         [
-            picture(A, node_types=short),
-            picture(B, clusters=9, node_types=(supply(DELL, 6, 8, 8), supply(HP, 2, 3, 3))),
+            picture(A, server_pools=short),
+            picture(B, clusters=9, server_pools=(supply(DELL, 6, 8, 8), supply(HP, 2, 3, 3))),
         ],
     )
     candidate = placement.candidate(A)
@@ -329,20 +329,20 @@ def test_one_type_short_fails_the_mce_in_plain_words() -> None:
 
 
 def test_too_few_free_agents_fails_even_when_health_is_unknown() -> None:
-    (candidate,) = place(NEEDS, [picture(A, node_types=(supply(DELL, 6, 3, None),))]).candidates
+    (candidate,) = place(NEEDS, [picture(A, server_pools=(supply(DELL, 6, 3, None),))]).candidates
     assert servers(candidate)[0] is Status.FAIL
 
 
 @pytest.mark.parametrize(
-    ("node_type", "words"),
+    ("server_pool", "words"),
     [
         (supply(DELL, 6, None, None), "the MCE's Agents could not be read"),
         (supply(DELL, 6, 8, None), "their health unknown without server-scan"),
         (supply(DELL, 6, 8, 4, not_in_server_scan=2), "2 more free, not in server-scan"),
     ],
 )
-def test_an_unknown_type_is_unknown_and_never_picked(node_type: NodeTypeSupply, words: str) -> None:
-    placement = place(NEEDS, [picture(A, node_types=(node_type, supply(HP, 2, 2, 2)))])
+def test_an_unknown_type_is_unknown_and_never_picked(server_pool: PoolSupply, words: str) -> None:
+    placement = place(NEEDS, [picture(A, server_pools=(server_pool, supply(HP, 2, 2, 2)))])
     (candidate,) = placement.candidates
     status, detail = servers(candidate)
     assert (status, placement.pick) == (Status.UNKNOWN, None)
@@ -351,13 +351,13 @@ def test_an_unknown_type_is_unknown_and_never_picked(node_type: NodeTypeSupply, 
 
 def test_a_short_type_beats_an_unknown_one() -> None:
     mixed = (supply(DELL, 6, None, None), supply(HP, 2, 2, 1))
-    (candidate,) = place(NEEDS, [picture(A, node_types=mixed)]).candidates
+    (candidate,) = place(NEEDS, [picture(A, server_pools=mixed)]).candidates
     assert servers(candidate)[0] is Status.FAIL
 
 
 def test_without_server_scan_free_agents_count_as_they_are() -> None:
     unchecked = (supply(DELL, 6, 6, None, health_checked=False),)
-    (candidate,) = place(NEEDS, [picture(A, node_types=unchecked)]).candidates
+    (candidate,) = place(NEEDS, [picture(A, server_pools=unchecked)]).candidates
     assert servers(candidate) == (
         Status.PASS,
         "dell-r650: 6 free of 6 needed, their health not checked (server-scan is not configured).",
@@ -372,7 +372,7 @@ def test_no_node_type_named_yet_has_nothing_to_check() -> None:
 def test_the_agents_read_error_is_said_when_it_makes_the_check_unknown() -> None:
     unread = picture(
         A,
-        node_types=(supply(DELL, 6, None, None),),
+        server_pools=(supply(DELL, 6, None, None),),
         agents_error="Its token may not list Agents (403).",
     )
     (candidate,) = place(NEEDS, [unread]).candidates

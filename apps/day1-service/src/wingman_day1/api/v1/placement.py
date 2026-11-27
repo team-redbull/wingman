@@ -17,7 +17,7 @@ from wingman_core.web.auth import AdminUser
 from wingman_day1.api.deps import Placements
 from wingman_day1.api.v1.placement_schemas import PlacementOut
 from wingman_day1.domain.errors import InvalidInputError
-from wingman_day1.domain.mce_capacity import node_type
+from wingman_day1.domain.mce_capacity import server_pool
 from wingman_day1.domain.names import Env
 
 MAX_NEEDS = 64
@@ -44,7 +44,7 @@ async def placement(
         Query(
             max_length=MAX_NEEDS,
             description=(
-                "A nodepool's node type and replicas, <infra_env>:<replicas>, or "
+                "A nodepool's server pool and replicas, <infra_env>:<replicas>, or "
                 "<infra_env>,<infra_env>:<replicas> for one that draws from several; repeated"
             ),
         ),
@@ -74,8 +74,8 @@ def parse_needs(raw: list[str]) -> list[tuple[str, int]]:
     """``<infra_env>[,<infra_env>...]:<replicas>`` each; anything else is a 422 naming it.
 
     A nodepool that draws from several InfraEnvs names them all, comma
-    separated: one node type, ``a + b`` (ADR-0064). An empty ``need=`` says
-    "no needs": the form names no node type yet, so the flavor's presets are
+    separated: one server pool, ``a + b`` (ADR-0064). An empty ``need=`` says
+    "no needs": the form names no server pool yet, so the flavor's presets are
     not used either.
     """
     needs: list[tuple[str, int]] = []
@@ -87,7 +87,7 @@ def parse_needs(raw: list[str]) -> list[tuple[str, int]]:
         if not colon or not infra_env or not count.isascii() or not count.isdigit():
             problems.append(f"need: {item!r} is not <infra_env>:<replicas>")
             continue
-        needs.append((node_type(name.strip() for name in infra_env.split(",")), int(count)))
+        needs.append((server_pool(name.strip() for name in infra_env.split(",")), int(count)))
     if problems:
         raise InvalidInputError("the placement's inputs are not acceptable", problems)
     return needs

@@ -13,7 +13,7 @@ from wingman_day1.domain.mce_capacity import (
     SpareServers,
     Supply,
     free_pods,
-    node_type_supply,
+    pool_supply,
     spare_servers,
 )
 from wingman_day1.domain.names import HostedClusterNaming, HostedClusterRef
@@ -224,7 +224,7 @@ async def test_the_demo_has_a_node_type_short_on_each_of_two_mces() -> None:
     supply = {}
     for mce in ("ocp4-prod-mce-site1-a", "ocp4-prod-mce-site1-b", "ocp4-prod-mce-site1-c"):
         agents = await hub.infra_env_agents(mce, infra_envs=[dell, hp], namespace=None)
-        supply[mce] = [(t.infra_env, t.status) for t in node_type_supply(needs, agents, rows())]
+        supply[mce] = [(t.infra_env, t.status) for t in pool_supply(needs, agents, rows())]
     assert supply == {
         "ocp4-prod-mce-site1-a": [(dell, Supply.ENOUGH), (hp, Supply.SHORT)],
         "ocp4-prod-mce-site1-b": [(dell, Supply.SHORT), (hp, Supply.ENOUGH)],

@@ -3,7 +3,7 @@
 site1 has three prod MCEs: ``-a`` (the fixtures' six cluster files, one of
 them owner 7's), ``-b`` (empty, roomy) and ``-c`` (empty, 40 free pods,
 hosting only 4.16 and 4.17). The create body's nodepools need two servers of
-each of two node types: ``-a`` and ``-b`` have them free and healthy (one of
+each of two server pools: ``-a`` and ``-b`` have them free and healthy (one of
 ``-a``'s Dell servers is in maintenance, one Dell Agent is in no server-scan
 row); ``-c`` has none.
 """
@@ -309,7 +309,7 @@ async def test_without_live_reads_placement_decides_on_git_and_server_scan(
             ("readable", "not_checked"),
         ]
         assert {c["detail"] for c in found[mce]["checks"][1:]} == {NOT_CHECKED}
-        assert (found[mce]["pods"], found[mce]["node_types"], found[mce]["eligible"]) == (
+        assert (found[mce]["pods"], found[mce]["server_pools"], found[mce]["eligible"]) == (
             None,
             [],
             True,
@@ -599,7 +599,7 @@ def test_a_files_mador(content: str, mador: str | None) -> None:
     assert mador_of(content) == mador
 
 
-# ── Servers of each node type ────────────────────────────────────────────────
+# ── Free servers in each server pool ────────────────────────────────────────────────
 
 
 def servers_check(candidate: dict[str, Any]) -> tuple[str, str]:
@@ -621,7 +621,7 @@ async def test_the_needs_the_form_sends_are_checked_per_type(
         {"infra_env": HP, "infra_envs": [HP], "replicas": 2},
     ]
     found = by_mce(body)
-    assert found[A]["node_types"][0] == {
+    assert found[A]["server_pools"][0] == {
         "infra_env": DELL,
         "infra_envs": [DELL],
         "needed": 2,
@@ -756,7 +756,7 @@ async def test_without_server_scan_free_agents_count_as_they_are(
     async with httpx.AsyncClient(transport=transport, base_url="http://day1.test") as client:
         body = await get_placement(client, auth(support.ALICE), version=VERSION, need=f"{DELL}:4")
     found = by_mce(body)
-    assert found[A]["node_types"][0]["health_checked"] is False
+    assert found[A]["server_pools"][0]["health_checked"] is False
     assert servers_check(found[A]) == (
         "pass",
         f"{DELL}: 4 free of 4 needed, their health not checked (server-scan is not configured).",

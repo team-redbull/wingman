@@ -247,7 +247,7 @@ test.describe("Cluster create form", () => {
 
     await form.selectEnv("prod");
     await expect(form.versionSelect).toBeEnabled();
-    // No version yet; an empty `need` says the nodepools name no node type (rather than the flavor's)
+    // No version yet; an empty `need` says the nodepools name no server pool (rather than the flavor's)
     expect(calls.placements.map((q) => q.toString())).toEqual(["site=site1&env=prod&flavor=agent-standard&need="]);
     await expect(page.getByTestId("placement-waiting")).toContainText("once the OpenShift version is chosen");
   });

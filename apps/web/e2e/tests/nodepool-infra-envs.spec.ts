@@ -3,7 +3,7 @@
  * Day1 offers `nodepools[].additional_infra_envs` in the template schema only
  * with `DAY1_MULTI_INFRAENV_NODEPOOLS` on, so the schema is the switch:
  * - the create form's "Also draws from", from the MCE's InfraEnvs, sent with
- *   the nodepool and asked of placement as one node type (`a,b:n`);
+ *   the nodepool and asked of placement as one server pool (`a,b:n`);
  * - the flavor editor's preset, typed;
  * - Edit cluster's InfraEnvs per nodepool, which edits the file's text and
  *   leaves a Replace NodePool's as they are;
@@ -109,7 +109,7 @@ async function openCreate(page: Page, on: boolean): Promise<{ form: ClusterNewPa
 const drawsFrom = (page: Page, index = 0) => page.getByTestId(`nodepool-${index}-infra-envs`);
 
 test.describe("A nodepool's other InfraEnvs on the create form", () => {
-  test("are picked from the MCE's InfraEnvs, sent with the nodepool, and placed as one node type", async ({ page }) => {
+  test("are picked from the MCE's InfraEnvs, sent with the nodepool, and placed as one server pool", async ({ page }) => {
     const { form, calls } = await openCreate(page, true);
     const field = page.locator('[data-field-path="nodepools[0].additional_infra_envs"]');
     await expect(field).toContainText("Also draws from");
