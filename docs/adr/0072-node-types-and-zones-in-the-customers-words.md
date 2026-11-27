@@ -111,6 +111,38 @@ What there was:
     the file has fewer groups than the flavor has nodepools (a cluster made
     before node types from a flavor that preset one zone's InfraEnv per
     position), each position stays one entry, as before.
+13. **The create form.** A nodepool's **Node type** picker lists the MCE's
+    node types with their zones; a node type in several zones gives a row per
+    zone with its replicas (starting at the nodepool's, 0 allowed, read-only
+    under a ratio or a lock) and its NodePool's name, and the request carries
+    `node_type` and every zone. A node type in one zone is one NodePool, sent
+    as that zone's InfraEnv exactly as before. The node types are those of the
+    MCE placement picked last: placement checks the servers each zone needs,
+    so a new pick has every zone the last needs named and the needs settle.
+    Without the MCE's list (live status off, or the read failed) the node type
+    is typed with its zone, one NodePool, and the form says so; a flavor's
+    older InfraEnv preset is one zone until **Use every zone** spreads it.
+14. **The cluster page.** The Node pools card shows a logical nodepool as one
+    row (node type, suffix, each zone's replicas) with its NodePools under it;
+    Edit cluster's **Nodepools by node type** lists them and says when a
+    zone's configuration is no longer the others'. The Scale views, a scale
+    run and the uninstall dialog name each NodePool's node type and zone.
+
+### Left for later
+
+- **Editing a logical nodepool's configuration at once** in Edit cluster:
+  the YAML editor edits each NodePool, and the panel only warns when zones
+  differ; a group-wide edit (configs, labels, tuning, policy written to every
+  zone's entry) is the next step.
+- **Scale by logical nodepool**: update-nodepool scales one NodePool a run,
+  so Scale stays per zone's NodePool.
+- **A zone the MCE gains later** gets no NodePool: sync adds none (ADR-0037);
+  Edit cluster can add one by hand.
+- **Placement per candidate's own zones**: the needs are the last pick's
+  zones; day1 resolving a node type's zones on each candidate MCE would let
+  MCEs with other zone names compete.
+- **Drift lines grouped by logical nodepool** in the web: each zone's
+  difference is its own line today, by its NodePool.
 
 ## Alternatives rejected
 
@@ -137,6 +169,9 @@ What there was:
 - An InfraEnv without the zone label and off the convention is one node type
   in one unnamed zone: nothing groups it with another.
 - The dev fleet's `ocp4-prod-mce-site1-a` has `r760-mtl` in three zones.
+- A specs template that drops a 0 (`default(2, true)`) refuses a create with
+  a zone at 0 (`zone_inputs.rendered_problems`, `docs/upgrade/3.69-to-3.70.md`),
+  rather than write the template's 2.
 - A new cluster's file has more NodePools than its flavor has nodepools: one
   per zone. A 0-replica NodePool is a NodePool still: it shows on the
   cluster page and on the MCE, with no node.
@@ -164,3 +199,11 @@ What there was:
   node type, a create written as three NodePools (one at 0), in sync with
   its flavor, two zones' drift by NodePool, a sync; the locked replicas and
   a nodepool with no replica refused.
+- `apps/web/lib/zone-form.test.ts`: the form's pick, each zone's replicas,
+  the request (a one-zone node type as its InfraEnv, a ratio or a lock in
+  every zone, the typed fallback), the names and a clash, the review's
+  problems, placement's needs, and the file's grouping.
+- The mocked Playwright `logical-nodepools.spec.ts`: the create form's node
+  type, zones, names, request and needs; a preset node type with locked
+  replicas; an older InfraEnv spread; the typed fallback; the Node pools card
+  and Edit cluster's panel.

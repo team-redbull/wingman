@@ -10,6 +10,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 import { injectAdminAuth, mockDashboardApis } from "../fixtures/api-handlers";
 import { ClusterNewPage } from "../pages/cluster-new.page";
 import type { ClusterPreview, Mce, ProvisionRun, SpecEntry, TemplateField } from "../../types";
+import { INFRA_ENVS } from "../fixtures/node-types";
 
 const NAME = "ocp4-prod-rcs-site1-a";
 const WORKFLOW_ID = `provision-cluster-${NAME}`;
@@ -85,7 +86,7 @@ async function setup(page: Page) {
   await page.route("**/api/day1/specs/template/schema", (r) => json(r, SCHEMA));
   await page.route("**/api/day1/sites", (r) => json(r, ["site1"]));
   await page.route(/\/api\/day1\/mces(\?.*)?$/, (r) => json(r, MCES));
-  await page.route("**/api/day1/mces/*/infraenvs", (r) =>
+  await page.route(INFRA_ENVS, (r) =>
     json(r, problem(501, "FEATURE_DISABLED", "Live cluster status is disabled"), 501)
   );
   await page.route("**/api/day2/addons", (r) => json(r, []));

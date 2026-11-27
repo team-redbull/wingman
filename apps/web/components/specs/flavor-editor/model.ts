@@ -412,12 +412,12 @@ export function otherTopInputs(schema: TemplateField[], values: Values): OtherIn
   return [...fromSchema, ...release, ...extra];
 }
 
-/** A nodepool's inputs besides replicas, configs, node labels, its scale-down policy and tuning profiles. */
+/** A nodepool's inputs besides its node type, replicas, configs, node labels, scale-down policy and tuning; its InfraEnv only when preset (ADR-0072). */
 export function otherPoolInputs(schema: TemplateField[], pool: Values): OtherInput[] {
   const fields = schema.find((f) => f.name === "nodepools")?.fields ?? [];
-  const lockable = new Set<string>([...NODEPOOL_LOCKABLE, TUNING]);
+  const lockable = new Set<string>([...NODEPOOL_LOCKABLE, TUNING, "node_type"]);
   const fromSchema = fields
-    .filter((f) => !lockable.has(f.name))
+    .filter((f) => !lockable.has(f.name) && (f.name !== "infra_env" || pool.infra_env !== undefined))
     .map((f) => ({ name: f.name, type: f.type, example: f.example, unread: false }));
   const known = new Set(fields.map((f) => f.name));
   const extra = Object.keys(pool)

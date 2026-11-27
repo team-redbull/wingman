@@ -14,6 +14,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { isApiError } from "@/lib/api-client";
 import { day1Api, day1Keys } from "@/lib/api/day1";
 import { infraEnvNames } from "@/lib/infra-envs";
+import { zoneNeeds } from "@/lib/zone-form";
 import type { Placement, PlacementCandidate, PlacementCheck } from "@/types";
 
 /** The environments a new cluster can be created in. */
@@ -49,18 +50,30 @@ export function placementOwner(value: unknown): string | undefined {
   return OWNER.test(text) ? text : undefined;
 }
 
+/** A zone's `<infra_env>:<replicas>` day1 takes: a DNS label and at most 1000. */
+function isNeed(need: string): boolean {
+  const [infraEnv, replicas] = need.split(":");
+  return INFRA_ENV.test(infraEnv) && Number(replicas) <= MAX_NEED_REPLICAS;
+}
+
 /**
  * The servers the new cluster needs, as `need` values: one per nodepool that
  * names an InfraEnv (a DNS label) with 1 to 1000 replicas, in the form's order.
  * A nodepool still being filled in is left out until it is both. One that
  * draws from other InfraEnvs too names them all, `a,b:3`: one server pool to
- * day1, which counts no free server twice (ADR-0064).
+ * day1, which counts no free server twice (ADR-0064). A nodepool spread over
+ * zones (ADR-0072) needs each zone's replicas there, a zone at 0 none.
  */
 export function placementNeeds(nodepools: unknown): string[] {
   if (!Array.isArray(nodepools)) return [];
   const needs: string[] = [];
   for (const pool of nodepools) {
     if (!pool || typeof pool !== "object" || Array.isArray(pool)) continue;
+    const zoned = zoneNeeds(pool as Record<string, unknown>);
+    if (zoned) {
+      needs.push(...zoned.filter(isNeed));
+      continue;
+    }
     const { infra_env: infraEnv, replicas, additional_infra_envs: more } = pool as Record<string, unknown>;
     const name = typeof infraEnv === "string" ? infraEnv.trim() : "";
     const others = infraEnvNames(more).filter((other) => INFRA_ENV.test(other) && other !== name);

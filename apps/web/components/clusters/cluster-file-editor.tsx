@@ -9,6 +9,7 @@ import { fileNodepools, offersInfraEnvs, withInfraEnvs, type FileNodepool } from
 import { offersPolicy } from "@/lib/nodepool-policy";
 import type { TemplateField } from "@/types";
 import { AlsoDrawsFrom } from "./also-draws-from";
+import { LogicalPoolsPanel } from "./logical-pools-panel";
 import { NodePoolNamesPanel } from "./nodepool-names-panel";
 import { hasPolicies, PolicyPanel } from "./policy-panel";
 
@@ -99,7 +100,8 @@ function InfraEnvsPanel({ text, onChange, mce }: { text: string; onChange: (text
 }
 
 /**
- * The cluster file while it is edited: its text, each NodePool's name above
+ * The cluster file while it is edited: its text, its logical nodepools (one
+ * NodePool per zone, ADR-0072), each NodePool's name above
  * it (an existing one read-only, an added one named from a suffix, ADR-0071),
  * and with `DAY1_MULTI_INFRAENV_NODEPOOLS` on (day1's template schema offers
  * the input) each nodepool's InfraEnvs; each nodepool's scale-down policy when
@@ -121,6 +123,7 @@ export function ClusterFileEditor({ value, onChange, mce, base, clusterName }: {
   });
   return (
     <div>
+      <LogicalPoolsPanel text={value} />
       <NodePoolNamesPanel text={value} base={base} clusterName={clusterName} onChange={onChange} />
       {offersInfraEnvs(schema) && <InfraEnvsPanel text={value} onChange={onChange} mce={mce} />}
       {(offersPolicy(schema) || hasPolicies(value)) && <PolicyPanel text={value} onChange={onChange} />}

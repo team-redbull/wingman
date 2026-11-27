@@ -21,7 +21,10 @@ export function sampleClusterName(mce: Mce): string {
   return `ocp4-${mce.env ?? "prod"}-flavor-preview-${mce.site}`;
 }
 
-function sampleFor(field: TemplateField): unknown {
+/** An example for an input each cluster sets; a nodepool's InfraEnv is a zone of its preset node type (ADR-0072). */
+function sampleFor(field: TemplateField, pool?: Values): unknown {
+  const nodeType = pool?.node_type;
+  if (field.name === "infra_env" && typeof nodeType === "string" && nodeType) return `${nodeType}-az1`;
   if (field.example) return field.type === "integer" && /^\d+$/.test(field.example) ? Number(field.example) : field.example;
   if (field.type === "integer") return 1;
   return `example-${field.name.replace(/_/g, "-")}`;
@@ -71,7 +74,7 @@ export function previewPlan(args: {
       pools.forEach((pool, i) => {
         for (const sub of field.fields ?? []) {
           if (!sub.required || (pool[sub.name] !== undefined && pool[sub.name] !== "")) continue;
-          pool[sub.name] = sampleFor(sub);
+          pool[sub.name] = sampleFor(sub, pool);
           samples.push(nodepoolPath(i, sub.name));
         }
       });

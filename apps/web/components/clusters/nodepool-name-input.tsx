@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { fieldInputClassName, type FieldInputContext, type FormValues } from "@/components/clusters/dynamic-variable-form";
 import { composeName, formNameProblems, isSuffixPath } from "@/lib/nodepool-names";
 import { cn } from "@/lib/utils";
+import { NODE_TYPE, zoneInfraEnvs } from "@/lib/zone-form";
+import type { NodeType } from "@/types";
 
 /** The form's nodepool at `index`, as a map; `undefined` when it has none. */
 function poolAt(form: FormValues, index: number): Record<string, unknown> | undefined {
@@ -18,16 +20,21 @@ function poolAt(form: FormValues, index: number): Record<string, unknown> | unde
  * the whole name under it. The suffix lets several nodepools draw from one
  * node type in one zone; a clash, a bad suffix or a
  * name over 63 characters shows here before day1 is asked. Day1 offers the
- * input only when the specs project's template writes the name.
+ * input only when the specs project's template writes the name. A nodepool
+ * spread over zones (ADR-0072) has a NodePool in each, one suffix for all.
  * `undefined` for any other field.
  */
-export function nodepoolNameInput({ path, value, onChange, locked }: FieldInputContext, form: FormValues): ReactNode | undefined {
+export function nodepoolNameInput(
+  { path, value, onChange, locked }: FieldInputContext, form: FormValues, nodeTypes?: NodeType[] | null
+): ReactNode | undefined {
   if (!isSuffixPath(path)) return undefined;
   const index = Number(/\[(\d+)\]/.exec(path)?.[1] ?? 0);
-  const own = poolAt(form, index)?.infra_env;
+  const pool = poolAt(form, index) ?? {};
+  const zones = zoneInfraEnvs(pool, nodeTypes);
+  const own = zones ? `${String(pool[NODE_TYPE])}-<zone>` : pool.infra_env;
   const infraEnv = typeof own === "string" ? own : "";
   const suffix = typeof value === "string" ? value : "";
-  const problem = formNameProblems(form.nodepools)[index];
+  const problem = formNameProblems(form.nodepools, (p) => zoneInfraEnvs(p, nodeTypes))[index];
   const testId = `nodepool-${index}-name`;
   return (
     <div className="min-w-0 space-y-1" data-testid={testId}>
@@ -50,8 +57,10 @@ export function nodepoolNameInput({ path, value, onChange, locked }: FieldInputC
         />
       </div>
       <p id={`${testId}-preview`} className="text-xs text-muted-foreground" data-testid={`${testId}-preview`}>
-        NodePool{" "}
-        {infraEnv ? (
+        NodePool{zones && zones.length > 1 ? "s" : ""}{" "}
+        {zones ? (
+          <span className="font-mono text-foreground break-all">{zones.map((zone) => composeName(zone, suffix)).join(", ")}</span>
+        ) : infraEnv ? (
           <span className="font-mono text-foreground break-all">{composeName(infraEnv, suffix)}</span>
         ) : (
           "named after its node type and zone, once they are chosen"

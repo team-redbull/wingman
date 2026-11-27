@@ -4,9 +4,8 @@
  * picks the MCE and says why; an admin may choose another MCE that passes every
  * check, with a reason; a failing MCE says why and cannot be chosen; each row
  * is one mark and its numbers, the reasons in tooltips that open on hover,
- * keyboard focus and a tap, and in the radios' descriptions; a pick
- * that changed under the form is a 409; and without placement (501) the form
- * keeps its MCE select. Every API is mocked.
+ * keyboard focus and a tap, and in the radios' descriptions; a pick that changed
+ * under the form is a 409; without placement (501) the form keeps its MCE select. All mocked.
  */
 
 import { test, expect, type Page, type Route } from "@playwright/test";
@@ -16,6 +15,7 @@ import type {
   ClusterPreview, CreateClusterRequest, Mce, NameSuggestion, Placement, PlacementCandidate, PlacementCheck, PlacementNeed,
   PlacementServerPool, SpecEntry, TemplateField,
 } from "../../types";
+import { INFRA_ENVS } from "../fixtures/node-types";
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
@@ -235,7 +235,7 @@ async function setup(
   await page.route("**/api/day1/specs/template/schema", (r) => json(r, SCHEMA));
   await page.route("**/api/day1/sites", (r) => json(r, ["site1"]));
   await page.route(/\/api\/day1\/mces(\?.*)?$/, (r) => json(r, MCES));
-  await page.route("**/api/day1/mces/*/infraenvs", (r) => {
+  await page.route(INFRA_ENVS, (r) => {
     calls.infraEnvMces.push(decodeURIComponent(new URL(r.request().url()).pathname.split("/")[4]));
     return fulfillProblem(r, 501, "FEATURE_DISABLED", "Live cluster status is disabled");
   });

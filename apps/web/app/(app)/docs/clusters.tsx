@@ -65,9 +65,14 @@ export function ClustersSection() {
           (merkaz, anaf, mador: digits only) and, per nodepool, its <strong>node type</strong> and zone, replicas,
           machine configs, node labels and tuning profiles (picked from <InlineCode>tuning/</InlineCode> in the day1
           repo, each with its kind and summary; read-only when the flavor locks them). A node type is the kind of
-          server (<InlineCode>r760-mtl</InlineCode>), offered in each zone the MCE has it in, picked from the MCE&apos;s
-          list when this deployment reads the MCE; otherwise you type the two as one name
-          (<InlineCode>r760-mtl-az1</InlineCode>). Where your operator turns it on, a nodepool may also{" "}
+          server (<InlineCode>r760-mtl</InlineCode>), picked from the MCE&apos;s list when this deployment reads the
+          MCE. A nodepool of a node type the MCE has in several zones is one <strong>NodePool per zone</strong>, every one
+          with the nodepool&apos;s configuration (configs, node labels, tuning profiles, scale-down policy, name
+          suffix), and you set <strong>each zone&apos;s replicas</strong>: they start at the nodepool&apos;s (the
+          flavor&apos;s preset, else 2), a zone may have 0 and keeps its NodePool, and the nodepool needs one replica
+          at least. The NodePools are named <InlineCode>{"<node type>-<zone>[-<suffix>]"}</InlineCode>. Without the
+          MCE&apos;s list you type the node type and its zone as one name (<InlineCode>r760-mtl-az1</InlineCode>): one
+          NodePool, in that zone. Where your operator turns it on, a nodepool may also{" "}
           <strong>draw from</strong> other node types or zones: its own still names its NodePool, and a new node takes the first free server of any of them; Wingman
           counts its free servers over all of them, and never one server twice. Where the specs project&apos;s
           template writes it, each nodepool has a <strong>Scale-down policy</strong>: which nodes leave first when it
@@ -75,7 +80,7 @@ export function ClustersSection() {
           <InlineCode>least-utilized</InlineCode>, which needs the hosted cluster&apos;s metrics API), written as its{" "}
           <InlineCode>redbull.io/scale-down-policy</InlineCode> annotation; the <strong>platform default</strong> writes
           nothing, and CAPI picks at random. A flavor that sizes its nodepools by a ratio (<InlineCode>1:2:1</InlineCode>) asks for one size
-          instead, and each sized nodepool gets its part times that size. A field the flavor <strong>presets</strong> is filled in and can be changed;
+          instead, and each sized nodepool gets its part times that size, in every zone. A flavor that locks a nodepool&apos;s replicas locks every zone&apos;s. A field the flavor <strong>presets</strong> is filled in and can be changed;
           a field it <strong>locks</strong> is shown read-only with the flavor&apos;s value. Machine configs come
           from a picker of the day1 repo&apos;s <InlineCode>mc-files/</InlineCode>: a static config by name, or{" "}
           <InlineCode>nm-conf</InlineCode> with a hardware type, the cluster&apos;s own network config, written as{" "}
@@ -180,7 +185,8 @@ function ClusterPageDocs() {
     <>
       <h3 className="text-base font-semibold mt-6 mb-3">The cluster page</h3>
       <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-        The tabs are <strong>Overview</strong> (the cluster, its HostedCluster and network, nodepools, flavor and,
+        The tabs are <strong>Overview</strong> (the cluster, its HostedCluster and network, nodepools (a nodepool
+        spread over zones as one row with each zone&apos;s replicas, its NodePools under it), flavor and,
         when it is on, live status), <strong>Nodes</strong> (below; admins only), <strong>YAML</strong>, <strong>Drift</strong> and <strong>History</strong>{" "}
         (the cluster file&apos;s commits in the day1 repo, and its chart values&apos; commits in the team repos).
         The header has <strong>GitLab</strong> (the file), <strong>Addons</strong> (its charts) and, for admins,{" "}
@@ -197,6 +203,9 @@ function ClusterPageDocs() {
             <p className="text-sm font-semibold mb-1">Edit</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Edit the file as YAML, then <strong>Review &amp; Submit</strong> shows the diff and opens a modify MR.
+              <strong> Nodepools by node type</strong> above the file shows each nodepool spread over zones (its
+              NodePools of one node type and suffix) with each zone&apos;s replicas, and says when a zone&apos;s
+              configuration is no longer the others&apos;: the text edits each NodePool, so change every zone alike.
               Keep the automation keys as they are. If the file changed since you opened it (CI or the workflow
               committed), the MR is refused and nothing is overwritten: <strong>Reload</strong> and edit again.
               Where nodepools may draw from several node types or zones, <strong>Node types per nodepool</strong> above the
