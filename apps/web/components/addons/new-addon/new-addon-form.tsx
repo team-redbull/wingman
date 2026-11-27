@@ -178,7 +178,9 @@ export function NewAddonForm({
   const repo = repourl ?? (data && chart ? `${data.repourl_prefix}${chart}.git` : "");
   const ns = namespace ?? chart;
   const chartRead = useAddonChart(team, repo, revision, path);
-  const op = editableOperator(chartRead.data?.operator);
+  // An operator is shown either way; its settings are offered and sent only when Wingman edits it.
+  const chartOperator = chartRead.data?.operator?.is_operator ? chartRead.data.operator : null;
+  const op = editableOperator(chartOperator);
   const draft: NewAddonDraft = {
     name,
     repourl: repo,
@@ -218,9 +220,18 @@ export function NewAddonForm({
         chartProblem={chartRead.data?.problem ?? null}
       />
 
-      {op && (
+      {chartOperator && (
         <Section title="Operator" description="Its chart installs an OLM operator: its update channel, version and approval, as OperatorHub's install page has them.">
-          <OperatorSection op={op} draft={operator} onChange={setOperator} note={<>Written into <code>{folder}/values.yaml</code> at <code>{op.key_path}</code>.</>} />
+          <OperatorSection
+            op={chartOperator}
+            draft={operator}
+            onChange={setOperator}
+            note={
+              <>
+                Written into <code>{folder}/values.yaml</code> at <code>{chartOperator.key_path}</code>.
+              </>
+            }
+          />
         </Section>
       )}
 

@@ -29,14 +29,16 @@ function Reach({ detail, version }: { detail: AddonDetail; version: string }) {
 /** A pin marked for removal: its folder goes in the merge request, until undone. */
 function RemovedPin({ detail, card, onUndo, autoFocus }: { detail: AddonDetail; card: PinCard; onUndo: () => void; autoFocus: boolean }) {
   const version = card.from ?? "";
+  const n = reachAt(detail, version);
+  const who = n === 0 ? "a destination that moves to it gets" : n === 1 ? "its destination gets" : `its ${n} destinations get`;
   return (
     <div
       className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-status-error/40 bg-status-error/5 px-3 py-2 text-xs"
       data-testid={`editor-pin-${version}`}
     >
       <span className="min-w-0">
-        <strong>OCP {version}</strong> is removed: <code className="break-all">operators/{detail.name}/ocp-versions/{version}/</code> goes, and
-        its {reachAt(detail, version)} destination(s) get the add-on&apos;s revision and Sig values again.
+        <strong>OCP {version}</strong> is removed: <code className="break-all">operators/{detail.name}/ocp-versions/{version}/</code> goes, and{" "}
+        {who} the add-on&apos;s revision and Sig values again.
       </span>
       <button type="button" className={small} onClick={onUndo} autoFocus={autoFocus} aria-label={`Undo removing the pin for OCP ${version}`}>
         <Undo2 className="h-3 w-3" aria-hidden />

@@ -124,7 +124,7 @@ test.describe("The add-on page's OCP-version pins", () => {
     await card(page).getByRole("button", { name: "Remove the pin for OCP 4.18.22" }).click();
     const form = formDialog(page);
     const removed = form.getByTestId("editor-pin-4.18.22");
-    await expect(removed).toContainText("get the add-on's revision and Sig values again");
+    await expect(removed).toContainText("its destination gets the add-on's revision and Sig values again");
     await removed.getByRole("button", { name: "Undo removing the pin for OCP 4.18.22" }).click();
     await expect(form.getByRole("button", { name: "Preview changes" })).toHaveAttribute("title", "No changes yet");
     await form.getByRole("button", { name: "Remove the pin for OCP 4.18.22" }).click();

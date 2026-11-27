@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Boxes, Pencil } from "lucide-react";
-import { revisionLabel, syncSummary } from "@/lib/day2";
+import { problemOf, revisionLabel, syncSummary } from "@/lib/day2";
 import { cn } from "@/lib/utils";
 import { ignoreDifferencesText } from "@/lib/values";
 import { buttonVariants } from "@/components/ui/button";
@@ -55,6 +55,13 @@ function DeployConfig({ entry }: { entry: CatalogEntry }) {
 function OperatorView({ detail }: { detail: AddonDetail }) {
   const operator = useAddonOperator(detail.team, detail.name, detail.in_catalog);
   const op = operator.data;
+  if (operator.error) {
+    return (
+      <p role="note" className="text-xs text-muted-foreground" data-testid="operator-unread">
+        Whether {detail.name} installs an OLM operator could not be read: {problemOf(operator.error).detail}
+      </p>
+    );
+  }
   if (!op?.is_operator || !op.sig) return null;
   return (
     <div className="space-y-2 rounded-lg border bg-muted/20 p-3" data-testid="operator-view" role="group" aria-label="Operator">

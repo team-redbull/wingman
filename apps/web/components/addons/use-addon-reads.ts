@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import { REPO_URL, day2Api, day2Keys } from "@/lib/day2";
+import { REPO_URL, day2Api, day2Keys, problemOf } from "@/lib/day2";
 import { useDebounced } from "@/hooks/use-debounced";
 import type { AddonChart, AddonDetail, AddonOperator } from "@/types/day2";
 
@@ -16,12 +16,19 @@ export function useAddonDetail(team: string, name: string, enabled = true) {
   });
 }
 
+/** A refusal is not retried (a service without the read answers 404 at once); anything else twice, as every read. */
+function retryUnlessRefused(count: number, error: unknown): boolean {
+  const status = problemOf(error).status;
+  return count < 2 && !(status !== undefined && status >= 400 && status < 500);
+}
+
 /** Whether an add-on installs an OLM operator, and its settings per level with the catalog (ADR-0073). */
 export function useAddonOperator(team: string, name: string, enabled = true) {
   return useQuery<AddonOperator>({
     queryKey: day2Keys.addonOperator(team, name),
     queryFn: () => api.get<AddonOperator>(day2Api.addonOperator(team, name)),
     staleTime: 30_000,
+    retry: retryUnlessRefused,
     enabled,
   });
 }
