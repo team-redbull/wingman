@@ -18,7 +18,7 @@ const REFUSALS = [
   {
     code: "422 VALIDATION_ERROR",
     see: "A red box headed “… fix the following” (or “The change was refused”) listing every problem",
-    why: "The change breaks one or more rules: the naming convention, an automation-owned key, an InfraEnv change that would replace a NodePool and every node, an unconfirmed emergency pin, a lint error the change would add. All of them are listed at once.",
+    why: "The change breaks one or more rules: the naming convention, an automation-owned key, a change of a nodepool's node type or zone that would replace a NodePool and every node, an unconfirmed emergency pin, a lint error the change would add. All of them are listed at once.",
     fix: "Fix every listed problem, then submit again.",
   },
   {
@@ -43,7 +43,7 @@ const REFUSALS = [
     code: "501 FEATURE_DISABLED",
     see: "“Live status is off”, “Live status is off in this deployment”, or “Nodes need live status from the MCE”",
     why: "This deployment does not read the clusters' live status. It is not an error.",
-    fix: "Nothing to fix. InfraEnv names are typed instead of picked, and the Nodes tab lists no NodePools.",
+    fix: "Nothing to fix. Node types are typed with their zone (r760-mtl-az1) instead of picked, and the Nodes tab lists no NodePools.",
   },
   {
     code: "504 AMBIGUOUS_WRITE",

@@ -41,7 +41,7 @@ export function ClustersSection() {
             the pick&apos;s mark says why it won, each row&apos;s check mark (passes, fails, or passes with some
             checks not made) gives its reasons and numbers, and a dash says why a number is missing. A candidate
             must host the version, have enough free pods for a control plane on its workers, have enough healthy
-            free servers for each nodepool's node type, zone by zone, and answer Wingman; among those, the pick
+            free servers for each nodepool&apos;s node type, zone by zone, and answer Wingman; among those, the pick
             has the fewest clusters of this owner, then the fewest clusters, then the most usable spare servers.
             The owner&apos;s mador and the nodepools below refine the pick; they are not needed to see one. Where
             this deployment does not read the MCEs live, one line under the table says free pods and servers were
@@ -62,11 +62,13 @@ export function ClustersSection() {
         </Step>
         <Step n={3} title="Cluster configuration">
           The fields are the inputs of the shared template. With the default template: the owner numbers
-          (merkaz, anaf, mador: digits only) and, per nodepool, its InfraEnv, replicas, machine configs, node
-          labels and tuning profiles (picked from <InlineCode>tuning/</InlineCode> in the day1 repo, each with its
-          kind and summary; read-only when the flavor locks them). InfraEnvs are picked from the MCE&apos;s list when this deployment reads the
-          MCE. Where your operator turns it on, a nodepool may also <strong>draw from</strong> other InfraEnvs: its
-          own InfraEnv still names its NodePool, and a new node takes the first free Agent of any of them; Wingman
+          (merkaz, anaf, mador: digits only) and, per nodepool, its <strong>node type</strong> and zone, replicas,
+          machine configs, node labels and tuning profiles (picked from <InlineCode>tuning/</InlineCode> in the day1
+          repo, each with its kind and summary; read-only when the flavor locks them). A node type is the kind of
+          server (<InlineCode>r760-mtl</InlineCode>), offered in each zone the MCE has it in, picked from the MCE&apos;s
+          list when this deployment reads the MCE; otherwise you type the two as one name
+          (<InlineCode>r760-mtl-az1</InlineCode>). Where your operator turns it on, a nodepool may also{" "}
+          <strong>draw from</strong> other node types or zones: its own still names its NodePool, and a new node takes the first free server of any of them; Wingman
           counts its free servers over all of them, and never one server twice. Where the specs project&apos;s
           template writes it, each nodepool has a <strong>Scale-down policy</strong>: which nodes leave first when it
           scales down (<InlineCode>fewest-pods</InlineCode>, <InlineCode>least-requested</InlineCode>,{" "}
@@ -197,8 +199,8 @@ function ClusterPageDocs() {
               Edit the file as YAML, then <strong>Review &amp; Submit</strong> shows the diff and opens a modify MR.
               Keep the automation keys as they are. If the file changed since you opened it (CI or the workflow
               committed), the MR is refused and nothing is overwritten: <strong>Reload</strong> and edit again.
-              Where nodepools may draw from several InfraEnvs, <strong>InfraEnvs per nodepool</strong> above the
-              file adds and removes the others; a nodepool&apos;s own InfraEnv names its NodePool and stays, and
+              Where nodepools may draw from several node types or zones, <strong>Node types per nodepool</strong> above the
+              file adds and removes the others; a nodepool&apos;s own names its NodePool and stays, and
               a <strong>Replace</strong> NodePool&apos;s stay as they are, since a change would replace every node.
               Where the template writes it, or a nodepool already has one, <strong>Scale-down policy per
               nodepool</strong> sets each one&apos;s annotation in the file; it rolls no node.

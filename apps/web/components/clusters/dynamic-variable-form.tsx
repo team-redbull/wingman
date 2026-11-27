@@ -5,6 +5,7 @@ import jsYaml from "js-yaml";
 import { AlertCircle, Plus, X, ChevronDown, ChevronRight, Lock, Unlock, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/ui/combobox";
+import { placedLabel } from "@/lib/node-types";
 import type { TemplateField } from "@/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -113,7 +114,7 @@ export function seedFromStructure(structure: Record<string, unknown>, schema: Te
   return vals;
 }
 
-const LABELS: Record<string, string> = { tuning_config: "Tuning Profiles", image_content_sources: "Image Mirrors", disable_idms_merge: "MCE Default Mirrors", additional_infra_envs: "Also draws from", scale_down_policy: "Scale-down policy", name_suffix: "Name suffix" };
+const LABELS: Record<string, string> = { infra_env: "Node type", tuning_config: "Tuning Profiles", image_content_sources: "Image Mirrors", disable_idms_merge: "MCE Default Mirrors", additional_infra_envs: "Also draws from", scale_down_policy: "Scale-down policy", name_suffix: "Name suffix" };
 const toLabel = (name: string) => LABELS[name] ?? name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -349,7 +350,6 @@ function ObjectCard({
       )}
         onClick={!expanded ? () => setExpanded(true) : undefined}
       >
-        {/* Drag hint (visual only) */}
         <div className="text-muted-foreground/30 shrink-0">
           <GripVertical className="h-3.5 w-3.5" />
         </div>
@@ -596,19 +596,19 @@ function FieldEditor({
     // Scalar — in spec-build mode, no value input (structure phase only)
     if (mode === "spec-build") return null;
 
-    // infra_env is picked from the MCE hub's InfraEnvs when live status lists them
+    // infra_env is picked from the MCE hub's InfraEnvs when live status lists them, each as its node type and zone (ADR-0072)
     if (field.name === "infra_env" && (mode === "cluster-create" || mode === "cluster-edit") && !isReadOnly) {
       if (infraEnvsLoading || (infraEnvOptions && infraEnvOptions.length > 0)) {
         return (
           <Combobox
             size="lg"
-            options={(infraEnvOptions ?? []).map((env) => ({ value: env, label: env }))}
+            options={(infraEnvOptions ?? []).map((env) => ({ value: env, label: placedLabel(env) }))}
             value={typeof value === "string" ? value : null}
             onValueChange={(env) => onChange(env ?? "")}
             disabled={infraEnvsLoading}
-            placeholder={infraEnvsLoading ? "Loading infra envs…" : "Select infra env…"}
-            searchPlaceholder="Search infra envs…"
-            emptyMessage="No infra env matches."
+            placeholder={infraEnvsLoading ? "Loading node types…" : "Select a node type and zone…"}
+            searchPlaceholder="Search node types…"
+            emptyMessage="No node type matches."
             aria-label={toLabel(field.name)}
             data-testid={`infra-env-select-${path}`}
           />

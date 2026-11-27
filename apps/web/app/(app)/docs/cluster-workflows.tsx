@@ -67,8 +67,8 @@ function UninstallDocs() {
         <InlineCode>uninstall-server-from-hc</InlineCode> workflow on it, once the server&apos;s name is typed again.
         Wingman starts the workflow and shows its run beside the server, with the step it is on, and the workflow
         does the work and its own checks. In short, it drains the node and deletes its Machine, takes the server out
-        of the hosted cluster, and stops once its Agent is free: the server stays in the MCE, in its InfraEnv, with
-        its BareMetalHost. Taking it out of the MCE is another workflow, <InlineCode>remove-server-from-mce</InlineCode>,
+        of the hosted cluster, and stops once its Agent is free: the server stays in the MCE, a free server of its node type in its
+        zone, with its BareMetalHost. Taking it out of the MCE is another workflow, <InlineCode>remove-server-from-mce</InlineCode>,
         which Wingman does not start.
       </p>
       <Callout type="warning" title="A replacement, not a shrink">

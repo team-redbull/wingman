@@ -65,7 +65,7 @@ describe("the names", () => {
   it("refuse a typed name that is not an InfraEnv, is the own one, or is listed", () => {
     expect(nameProblem("ok-1", "a", [])).toBeNull();
     expect(nameProblem("Not OK", "a", [])).toMatch(/lowercase/);
-    expect(nameProblem("a", "a", [])).toMatch(/own InfraEnv/);
+    expect(nameProblem("a", "a", [])).toMatch(/own node type and zone/);
     expect(nameProblem("b", "a", ["b"])).toBe("Already listed");
   });
 });

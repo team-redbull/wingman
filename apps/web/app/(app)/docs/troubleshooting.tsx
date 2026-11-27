@@ -28,7 +28,7 @@ export function TroubleshootingSection() {
               <>
                 Provisioning is asynchronous. The MCE&apos;s ApplicationSet makes an ArgoCD Application for the file,
                 which may need a manual sync; HyperShift then brings up the control plane and the nodepools claim hosts
-                from their InfraEnv. Look at the Application in ArgoCD for sync errors. When live status is on, the
+                of their node type in their zone. Look at the Application in ArgoCD for sync errors. When live status is on, the
                 cluster page shows the HostedCluster and its node pools.
               </>
             ),

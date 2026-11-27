@@ -56,7 +56,7 @@ export function PlacementRule({
           <span className="mt-1 block">
             An MCE must host the version, have{" "}
             {placement ? `at least ${placement.min_free_pods}` : "enough"} free pods on its workers and enough healthy
-            free servers for each nodepool's node type, zone by zone, and answer Wingman.
+            free servers for each nodepool&apos;s node type, zone by zone, and answer Wingman.
           </span>
           <span className="mt-1 block">
             Among those: fewest clusters of this owner, then fewest clusters, then most usable spare servers. The owner

@@ -399,7 +399,7 @@ test.describe("Cluster create form", () => {
     await expect(form.formProblems).not.toContainText("Choose an MCE");
     await expect(form.formProblems).toContainText("Enter a cluster name");
     await expect(form.formProblems).toContainText("Owner Merkaz is required");
-    await expect(form.formProblems).toContainText("Nodepool 1 › Infra Env is required");
+    await expect(form.formProblems).toContainText("Nodepool 1 › Node type is required");
     expect(calls.previews).toHaveLength(0);
   });
 
@@ -601,9 +601,9 @@ test.describe("Searchable pickers", () => {
     await form.selectVersion("4.16.27");
     await expect(form.placementPickName).toHaveText("ocp4-prod-mce-site1-a");
 
-    const infraEnv = page.getByRole("combobox", { name: "Infra Env", exact: true });
+    const infraEnv = page.getByRole("combobox", { name: "Node type", exact: true });
     await infraEnv.click();
-    await page.getByPlaceholder("Search infra envs…").fill("r750");
+    await page.getByPlaceholder("Search node types…").fill("r750");
     await expect(page.getByRole("option")).toHaveText(["dell-r750-site1"]);
     await page.getByRole("option", { name: "dell-r750-site1" }).click();
     await expect(infraEnv).toContainText("dell-r750-site1");

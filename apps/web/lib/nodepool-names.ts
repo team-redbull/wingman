@@ -39,7 +39,7 @@ export function suffixProblem(suffix: string): string | null {
 /** Why a whole name cannot be used; `null` when it can. */
 export function nameProblem(name: string): string | null {
   if (name.length > MAX_NAME) return `At most ${MAX_NAME} characters (this is ${name.length})`;
-  if (!LABEL.test(name)) return "The InfraEnv's name is not lowercase letters, digits and '-'";
+  if (!LABEL.test(name)) return "The node type and zone's name is not lowercase letters, digits and '-'";
   return null;
 }
 

@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { addable, MAX_ADDITIONAL, nameProblem } from "@/lib/infra-envs";
+import { placedLabel } from "@/lib/node-types";
 import { cn } from "@/lib/utils";
 
 const inputCls =
@@ -33,8 +34,8 @@ function TypedName({ own, value, onAdd, label, testId }: { own?: string; value: 
               add();
             }
           }}
-          placeholder="Type an InfraEnv…"
-          aria-label={`${label}: add an InfraEnv`}
+          placeholder="Type a node type and zone, like r760-mtl-az2…"
+          aria-label={`${label}: add a node type and zone`}
           aria-invalid={Boolean(problem)}
           spellCheck={false}
           autoComplete="off"
@@ -105,20 +106,20 @@ export function AlsoDrawsFrom({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-muted-foreground">Only its own InfraEnv.</p>
+        <p className="text-xs text-muted-foreground">Only its own node type and zone.</p>
       )}
       {!readOnly && !full && (options || loading ? (
         <Combobox
           className="w-64"
           size="sm"
-          options={rest.map((name) => ({ value: name, label: name }))}
+          options={rest.map((name) => ({ value: name, label: placedLabel(name) }))}
           value={null}
           onValueChange={(name) => name && onChange([...value, name])}
           disabled={loading || rest.length === 0}
-          placeholder={loading ? "Loading InfraEnvs…" : rest.length === 0 ? "No other InfraEnv on this MCE" : "Add an InfraEnv…"}
-          searchPlaceholder="Search InfraEnvs…"
-          emptyMessage="No InfraEnv matches."
-          aria-label={`${label}: add an InfraEnv`}
+          placeholder={loading ? "Loading node types…" : rest.length === 0 ? "No other node type or zone on this MCE" : "Add a node type and zone…"}
+          searchPlaceholder="Search node types…"
+          emptyMessage="No node type matches."
+          aria-label={`${label}: add a node type and zone`}
           data-testid={`${testId}-add`}
         />
       ) : (

@@ -124,7 +124,7 @@ test.describe("A nodepool's other InfraEnvs on the create form", () => {
 
     // Removed and added back: the chip's button says what it does
     await drawsFrom(page).getByRole("button", { name: `Stop drawing from ${HP}` }).click();
-    await expect(drawsFrom(page)).toContainText("Only its own InfraEnv.");
+    await expect(drawsFrom(page)).toContainText("Only its own node type and zone.");
     await expect.poll(() => calls.needs.at(-1)).toEqual([`${DELL}:2`]);
     await drawsFrom(page).getByTestId("nodepool-0-infra-envs-add").click();
     await form.option(DELL7).click();
@@ -167,10 +167,10 @@ test.describe("A nodepool's other InfraEnvs in the flavor editor", () => {
     await page.getByTestId("nodepool-0").getByRole("button", { name: /Other inputs/ }).click();
 
     const preset = drawsFrom(page);
-    await expect(preset).toContainText("Only its own InfraEnv.");
+    await expect(preset).toContainText("Only its own node type and zone.");
     const typed = preset.getByTestId("nodepool-0-infra-envs-type");
     await typed.fill("Not An InfraEnv");
-    await expect(preset).toContainText("An InfraEnv name is lowercase letters, digits and '-'");
+    await expect(preset).toContainText("A node type and zone is one name of lowercase letters, digits and '-'");
     await typed.fill(HP);
     await typed.press("Enter");
     await expect(preset.getByTestId(`nodepool-0-infra-envs-${HP}`)).toBeVisible();
@@ -248,8 +248,8 @@ test.describe("A nodepool's other InfraEnvs on the cluster page", () => {
     await openCluster(page, true);
     await page.getByRole("button", { name: "Edit" }).click();
     const panel = page.getByTestId("edit-infra-envs");
-    await expect(panel).toContainText("InfraEnvs per nodepool");
-    await expect(panel.getByTestId("edit-nodepool-0")).toContainText("its own InfraEnv: names the NodePool");
+    await expect(panel).toContainText("Node types per nodepool");
+    await expect(panel.getByTestId("edit-nodepool-0")).toContainText("its own node type and zone: names the NodePool");
 
     await panel.getByTestId("edit-nodepool-0-infra-envs-add").click();
     await page.getByRole("option", { name: HP }).click();

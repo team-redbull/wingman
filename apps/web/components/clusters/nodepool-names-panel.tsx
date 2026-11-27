@@ -29,7 +29,7 @@ function ExistingRow({ pool }: { pool: FileName }) {
         {pool.name ? "kept" : "derived by the chart, kept"}: renaming it would replace every node
       </span>
       {older && (
-        <span className="rounded-full border px-1.5 text-[10px] text-muted-foreground" title="Named before the InfraEnv rule (ADR-0071); Wingman never renames it">
+        <span className="rounded-full border px-1.5 text-[10px] text-muted-foreground" title="Named before the node type and zone rule (ADR-0071); Wingman never renames it">
           older name
         </span>
       )}
@@ -39,7 +39,7 @@ function ExistingRow({ pool }: { pool: FileName }) {
 
 /** Why an added nodepool's name is not yet one day1 takes; `null` when it is. */
 function addedProblem(pool: FileName, twice: boolean): string | null {
-  if (pool.infraEnv === null) return null; // draws from no InfraEnv: the file names it
+  if (pool.infraEnv === null) return null; // draws from no node type: the file names it
   if (pool.name === null) return `A new NodePool is named ${pool.infraEnv} or ${pool.infraEnv}-<suffix>: name it`;
   if (!followsRule(pool.name, pool.infraEnv)) return `“${pool.name}” is not ${pool.infraEnv} or ${pool.infraEnv}-<suffix>`;
   return nameProblem(pool.name) ?? (twice ? "Another nodepool has this name: give it another suffix" : null);
@@ -57,7 +57,7 @@ function AddedRow({ pool, twice, onName }: { pool: FileName; twice: boolean; onN
     return (
       <li className="px-3 py-2 text-xs" data-testid={testId}>
         <span className="font-mono">{pool.rendered ?? `nodepool[${pool.index}]`}</span>{" "}
-        <span className="text-muted-foreground">· new; it draws from no InfraEnv, so the file names it</span>
+        <span className="text-muted-foreground">· new; it draws from no node type, so the file names it</span>
       </li>
     );
   }
@@ -133,7 +133,7 @@ export function NodePoolNamesPanel({ text, base, clusterName, onChange }: {
       <p className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 text-xs font-medium">
         <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         NodePool names
-        <span className="font-normal text-muted-foreground">· existing ones keep theirs; a new one is &lt;InfraEnv&gt;[-&lt;suffix&gt;]</span>
+        <span className="font-normal text-muted-foreground">· existing ones keep theirs; a new one is &lt;node type&gt;-&lt;zone&gt;[-&lt;suffix&gt;]</span>
       </p>
       <ul className="divide-y divide-border">
         {names.map((pool) =>

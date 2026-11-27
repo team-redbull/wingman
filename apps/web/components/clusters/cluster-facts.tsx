@@ -9,6 +9,7 @@ import { PoolLiveState, PoolNodesInline, matchPool } from "@/components/clusters
 import { ClusterSegmentsLink } from "@/components/clusters/segments-link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClusterNetwork } from "@/lib/network";
+import { placedLabel } from "@/lib/node-types";
 import { renderedName } from "@/lib/nodepool-names";
 import { useClusterNodes } from "@/lib/nodes";
 import { useIsAdmin } from "@/stores/auth-store";
@@ -309,7 +310,7 @@ export function NodePoolsCard({ values, nodes }: { values: ClusterValues; nodes?
                             )}
                             <div className="min-w-0 space-y-0.5">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <span className="font-mono font-medium text-foreground whitespace-nowrap">{infraEnv ?? "—"}</span>
+                                <span className="font-mono font-medium text-foreground whitespace-nowrap" title={infraEnv ?? undefined}>{infraEnv ? placedLabel(infraEnv) : "—"}</span>
                                 {row.kind === "mce" && (
                                   <span className="whitespace-nowrap rounded-full bg-muted px-2 py-px text-[11px] text-muted-foreground">
                                     from site or MCE values

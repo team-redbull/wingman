@@ -365,7 +365,7 @@ test.describe("Cluster create form", () => {
     await expect(page.getByTestId("placement-pick-name")).toHaveText(MCE);
 
     const hint = page.getByTestId("infraenv-hint");
-    await expect(hint.getByRole("alert")).toContainText(`InfraEnvs could not be listed from ${MCE}; type their names below`);
+    await expect(hint.getByRole("alert")).toContainText(`The node types could not be listed from ${MCE}; type each nodepool's with its zone, like r760-mtl-az1`);
     await expect(hint).toContainText("The MCE hub did not answer");
     await expect(hint).toContainText("request req_e2e0000000000001");
     await expect(page.getByPlaceholder("e.g. dell-r660-site1")).toBeVisible();

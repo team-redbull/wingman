@@ -192,7 +192,7 @@ export function PresetInput({
     : input.name === "openshift_release_version"
       ? "The create form's default; each cluster picks a release its MCE offers."
       : input.name === SUFFIX_INPUT
-        ? "A preset: the NodePool is named <InfraEnv>-<suffix>, the InfraEnv the cluster's (ADR-0071)."
+        ? "A preset: the NodePool is named <node type>-<zone>-<suffix>, the node type and zone the cluster's (ADR-0071)."
         : undefined;
   const own = input.name === SUFFIX_INPUT && typeof value === "string" ? suffixProblem(value) : null;
   return (
