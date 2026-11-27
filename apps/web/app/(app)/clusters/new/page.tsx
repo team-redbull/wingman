@@ -52,13 +52,16 @@ import {
 } from "./flavor-form";
 import { envFromName, nameProblems, siteFromName } from "./naming";
 import { SizedReplicas } from "./sized-replicas";
+import { useNodeTypes, zoneRules } from "./use-node-types";
+import { zoneCreateInput, type ZoneContext } from "@/components/clusters/node-type-input";
+import { infraEnvsOf } from "@/lib/node-types";
+import { withPool, withZoneInfraEnvs, zonedRequest, zoneInfraEnvs, zoneProblems } from "@/lib/zone-form";
+import {
+  chartClusterName, defaultOverrides, formatVariableName, labelForPath, missingRequired, pruneEmpty, setValueAtPath, summarizeValue,
+} from "./form-values";
 
 const inputCls =
   "w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow";
-
-function formatVariableName(name: string) {
-  return name === "infra_env" ? "Node type" : name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 const asOption = (value: string): ComboboxOption => ({ value, label: value });
 
@@ -71,92 +74,6 @@ function joinWords(words: string[]): string {
 const OWNER_MADOR = "owner_mador";
 /** How long the owner must stay as typed before placement is asked again. */
 const OWNER_DEBOUNCE_MS = 400;
-
-// ── Form values ──────────────────────────────────────────────────────────────
-
-function isEmptyValue(value: unknown): boolean {
-  if (value === undefined || value === null || value === "") return true;
-  if (Array.isArray(value)) return value.length === 0;
-  return false;
-}
-
-/**
- * Every required input left empty, at any depth (`nodepools[1].infra_env`).
- * Not a locked value (the flavor's, which the person cannot change) nor a
- * config list's or the image mirrors' entries (`flavorProblems` checks those).
- */
-function missingRequired(
-  schema: TemplateField[], values: Record<string, unknown>, locked: ReadonlyMap<string, unknown>, prefix = ""
-): string[] {
-  const missing: string[] = [];
-  for (const field of schema) {
-    const path = prefix ? `${prefix}.${field.name}` : field.name;
-    const value = values[field.name];
-    if (locked.has(path) || isConfigsPath(path) || isMirrorInput(path)) continue;
-    if (field.type === "list" && field.fields?.length) {
-      const items = Array.isArray(value) ? value : [];
-      if (field.required && items.length === 0) missing.push(path);
-      items.forEach((item, i) => {
-        if (item && typeof item === "object") {
-          missing.push(...missingRequired(field.fields!, item as Record<string, unknown>, locked, `${path}[${i}]`));
-        }
-      });
-    } else if (field.required && isEmptyValue(value)) {
-      missing.push(path);
-    }
-  }
-  return missing;
-}
-
-/** `nodepools[1].configs[0].name` → `Nodepool 2 › Config 1 › Name`. */
-function labelForPath(path: string): string {
-  return path
-    .split(".")
-    .map((part) => {
-      const item = /^(\w+)\[(\d+)\]$/.exec(part);
-      return item
-        ? `${formatVariableName(item[1]).replace(/s$/, "")} ${Number(item[2]) + 1}`
-        : formatVariableName(part);
-    })
-    .join(" › ");
-}
-
-function setValueAtPath(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
-  const [head, ...rest] = path.split(".");
-  if (rest.length === 0) return { ...obj, [head]: value };
-  const child = obj[head];
-  const base = child && typeof child === "object" && !Array.isArray(child) ? (child as Record<string, unknown>) : {};
-  return { ...obj, [head]: setValueAtPath(base, rest.join("."), value) };
-}
-
-/** Drop the leaves a form field left blank, and the maps that leaves empty. */
-function pruneEmpty(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value === "" || value === undefined) continue;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const nested = pruneEmpty(value as Record<string, unknown>);
-      if (Object.keys(nested).length > 0) out[key] = nested;
-    } else {
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
-/** Override defaults the spec declares, as nested Helm values. */
-function defaultOverrides(fields: OverrideableField[]): Record<string, unknown> {
-  let values: Record<string, unknown> = {};
-  for (const field of fields) {
-    if (field.default !== undefined && field.default !== null) values = setValueAtPath(values, field.path, field.default);
-  }
-  return values;
-}
-
-/** The chart's clusterName for the file name of a network config: the default `ocp4-` stripped (ADR-0015). */
-function chartClusterName(name: string): string {
-  return name.replace(/^ocp4-/, "");
-}
 
 /** An owner number (ADR-0028): text, typed on a numeric keypad, sent as the text. */
 function OwnerInput({ field, value, onChange, invalid }: {
@@ -177,12 +94,6 @@ function OwnerInput({ field, value, onChange, invalid }: {
       onChange={(e) => onChange(e.target.value)}
     />
   );
-}
-
-function summarizeValue(value: unknown): string {
-  if (Array.isArray(value)) return `${value.length} item${value.length !== 1 ? "s" : ""}`;
-  if (value && typeof value === "object") return "configured";
-  return value === "" || value === undefined || value === null ? "—" : String(value);
 }
 
 // ── Array item editor ──────────────────────────────────────────────────────────
@@ -673,14 +584,19 @@ export default function NewClusterPage() {
     [nodepoolsField, seed.fixedNodepools, schema, locks, catalog]
   );
 
+  // The node types of the MCE placement picked last (ADR-0072), and how each nodepool's zones are sized
+  const [typesMce, setTypesMce] = useState("");
+  const { data: nodeTypes, isLoading: nodeTypesLoading, error: nodeTypesError } = useNodeTypes(typesMce, step === "vars");
+  const rules = useMemo(() => zoneRules(ratio, size, locks), [ratio, size, locks]);
+
   // The owner placement ranks by: the mador, or the flavor's when it locks one (ADR-0028)
   const mador = placementOwner(locks.values.has(OWNER_MADOR) ? locks.values.get(OWNER_MADOR) : formValues[OWNER_MADOR]);
   const rankOwner = useDebounced(mador, OWNER_DEBOUNCE_MS);
   // The servers the cluster needs: each nodepool's InfraEnv and the replicas the form shows (a ratio's
   // included, a lock's applied), as `need`s; debounced as one string, so a new array is not a new read
   const needsKey = useMemo(
-    () => placementNeeds(requestVariables(formValues, locks)[NODEPOOLS]).join(" "),
-    [formValues, locks]
+    () => placementNeeds(zonedRequest(requestVariables(formValues, locks), nodeTypes, rules)[NODEPOOLS]).join(" "),
+    [formValues, locks, nodeTypes, rules]
   );
   const rankNeedsKey = useDebounced(needsKey, OWNER_DEBOUNCE_MS);
   const rankNeeds = useMemo(() => (rankNeedsKey ? rankNeedsKey.split(" ") : []), [rankNeedsKey]);
@@ -703,6 +619,7 @@ export default function NewClusterPage() {
     mceOverride && placement?.candidates.some((c) => c.mce === mceOverride && c.eligible && !c.picked) ? mceOverride : null;
   const placedMce = overridden ?? pick;
   const mce = placedMce ?? "";
+  if (mce !== typesMce) setTypesMce(mce); // the next render reads this MCE's node types
   const selectedMce = mces.find((m) => m.name === mce);
 
   // A free name from the flavor, the chosen site and the chosen MCE's env, with the next letter (ADR-0040)
@@ -720,21 +637,6 @@ export default function NewClusterPage() {
   const shownName = nameEdited ? clusterName : (suggestedName ?? clusterName);
   const trimmedName = shownName.trim();
 
-  // InfraEnvs on the MCE hub; `null` when live status is off (then the field is free text).
-  const { data: infraEnvs, isLoading: infraEnvsLoading, error: infraEnvsError } = useQuery<string[] | null>({
-    queryKey: day1Keys.fleet.infraEnvs(mce),
-    queryFn: async () => {
-      try {
-        return await day1Api.fleet.infraEnvs(mce);
-      } catch (error) {
-        if (isApiError(error, "FEATURE_DISABLED")) return null;
-        throw error;
-      }
-    },
-    enabled: Boolean(mce) && step === "vars",
-    staleTime: 60_000,
-    retry: false,
-  });
   const chartName = chartClusterName(trimmedName);
 
   // Problems at their fields: day1's (while the field still holds what was sent), and the owners' as typed
@@ -745,8 +647,15 @@ export default function NewClusterPage() {
   const fieldProblems: Record<string, string[]> = {};
   for (const [path, lines] of Object.entries(placed?.byField ?? {})) if (unchanged(path)) fieldProblems[path] = lines;
   for (const [path, problem] of Object.entries(liveOwners)) (fieldProblems[path] ??= []).push(problem);
+  const zoneIssues = zoneProblems(formValues, nodeTypes, rules.fixed);
+  const zones: ZoneContext = {
+    nodeTypes, loading: nodeTypesLoading && Boolean(mce), fixed: rules.why, problems: zoneIssues,
+    setPool: (index, pool) => setDynamicValues(withPool(formValues, index, pool)),
+  };
 
   const renderInput = ({ field, path, value, onChange, locked }: FieldInputContext) => {
+    const zoned = zoneCreateInput({ field, path, value, onChange, locked }, formValues, zones);
+    if (zoned !== undefined) return zoned;
     const sized = sizedIndex(path, ratio);
     if (sized !== null) return <SizedReplicas index={sized} value={value} part={ratio[sized]} size={size} />;
     if (OWNER_INPUTS.includes(path) && !locked) {
@@ -757,7 +666,7 @@ export default function NewClusterPage() {
       return <TuningProfilesPicker names={tuningNames(value)} onChange={onChange} readOnly={locks.tuning !== null || locked} label={`Nodepool ${index + 1} tuning profiles`} testId={`nodepool-${index}-tuning`} />;
     }
     if (isMirrorInput(path)) return mirrorCreateInput({ field, path, value, onChange, locked }, formValues);
-    const ownControl = nodepoolCreateInput({ field, path, value, onChange, locked }, formValues, infraEnvs, infraEnvsLoading);
+    const ownControl = nodepoolCreateInput({ field, path, value, onChange, locked }, formValues, nodeTypes, nodeTypesLoading);
     if (ownControl !== undefined) return ownControl;
     if (!isConfigsPath(path)) return undefined;
     return (
@@ -925,9 +834,10 @@ export default function NewClusterPage() {
     // Without the template's inputs the form can neither show nor check them: never send without them.
     if (schemaError) problems.push("The cluster template's inputs could not be loaded: reload the page to try again");
     else if (!templateSchema) problems.push("The cluster template's inputs are still loading");
-    problems.push(...missingRequired(schema, formValues, locks.values).map((path) => `${labelForPath(path)} is required`));
+    problems.push(...missingRequired(schema, withZoneInfraEnvs(formValues, nodeTypes), locks.values).map((path) => `${labelForPath(path)} is required`));
+    problems.push(...Object.entries(zoneIssues).map(([i, problem]) => `Nodepool ${Number(i) + 1} › Node type: ${problem}`));
     if (hasConfigs && catalogLoading) problems.push("The machine configs are still loading");
-    problems.push(...flavorProblems(formValues, schema, locks, catalog, labelForPath));
+    problems.push(...flavorProblems(formValues, schema, locks, catalog, labelForPath, (pool) => zoneInfraEnvs(pool, nodeTypes)));
     const { overrides, problems: overrideProblems } = collectOverrides();
     problems.push(...overrideProblems);
     if (problems.length > 0) {
@@ -942,7 +852,7 @@ export default function NewClusterPage() {
       spec_name: selectedSpec!.metadata.name,
       spec_version: selectedSpec!.metadata.version,
       // Locked values exactly as the flavor has them; config entries and owners as day1 reads them
-      variables: { ...requestVariables(formValues, locks), openshift_release_version: version },
+      variables: { ...zonedRequest(requestVariables(formValues, locks), nodeTypes, rules), openshift_release_version: version },
       ...(Object.keys(overrides).length > 0 ? { addon_overrides: overrides } : {}),
       // Day1 runs the placement again: the pick shown, so a changed pick is a 409, not a silent move
       placement: { pick, reason: overridden ? reason : null },
@@ -1483,7 +1393,7 @@ export default function NewClusterPage() {
                   </ul>
                 </div>
               )}
-              {mce && infraEnvs === null && (
+              {mce && nodeTypes === null && (
                 <p data-testid="infraenv-off" className="flex items-start gap-1.5 text-xs text-muted-foreground">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-px" aria-hidden />
                   Type each nodepool&apos;s node type and zone as one name, like r760-mtl-az1: this deployment does not read the MCE (live status is off), so it has no list to pick from.
@@ -1525,9 +1435,9 @@ export default function NewClusterPage() {
                   </p>
                 </div>
               )}
-              {infraEnvsError && (
+              {nodeTypesError && (
                 <div data-testid="infraenv-hint">
-                  <ProblemList error={infraEnvsError} title={`The node types could not be listed from ${mce}; type each nodepool's with its zone, like r760-mtl-az1`} />
+                  <ProblemList error={nodeTypesError} title={`The node types could not be listed from ${mce}; type each nodepool's with its zone, like r760-mtl-az1`} />
                 </div>
               )}
               {hasConfigs && Boolean(catalogError) && (
@@ -1548,8 +1458,8 @@ export default function NewClusterPage() {
                 values={formValues}
                 onChange={setDynamicValues}
                 mode="cluster-create"
-                infraEnvOptions={infraEnvs ?? undefined}
-                infraEnvsLoading={infraEnvsLoading && Boolean(mce)}
+                infraEnvOptions={nodeTypes ? infraEnvsOf(nodeTypes) : undefined}
+                infraEnvsLoading={nodeTypesLoading && Boolean(mce)}
                 flavorName={selectedSpec.metadata.name}
                 lockedPaths={lockedPaths}
                 lockLabels={lockLabels}

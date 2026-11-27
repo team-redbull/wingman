@@ -260,6 +260,7 @@ class DriftService:
             values,
             cluster_name=cluster.hosted_cluster.cluster_name,
             catalog=catalog,
+            flavor_nodepools=spec.nodepool_count(),
         )
         expected = [RequestedAddon(a.team, a.name, a.version) for a in spec.spec.day2.addons]
         if not expected:

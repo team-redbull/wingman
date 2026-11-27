@@ -92,7 +92,11 @@ export function FlavorsSection() {
           <InlineCode>nm-conf</InlineCode>, the cluster&apos;s own network config, with a hardware type (under
           the rule, each nodepool picks its own). The type starts at <strong>generic</strong> when the day1 repo has
           the generic template (<InlineCode>nm-conf-template.bu</InlineCode>, for any hardware, written as plain{" "}
-          <InlineCode>nm-conf</InlineCode>). Replicas and node labels are preset or locked per nodepool.
+          <InlineCode>nm-conf</InlineCode>). Each nodepool presets its <strong>Node type</strong>{" "}
+          (<InlineCode>r760-mtl</InlineCode>, never a zone): a cluster gets one NodePool of it in every zone its MCE has,
+          each with the nodepool&apos;s configuration, and sets each zone&apos;s replicas. A nodepool saved with an
+          InfraEnv instead is one NodePool in that zone; <strong>Preset node type</strong> turns it into its node type.
+          Replicas and node labels are preset or locked per nodepool, a lock holding in every zone.
           <strong> Tuning profiles</strong> come from <InlineCode>tuning/</InlineCode> in the day1 repo (see Tuning
           profiles below); locking them locks the same profiles on every nodepool. Where your operator turns it
           on, <strong>Other inputs</strong> has <strong>Also draws from</strong>: node types and zones a nodepool

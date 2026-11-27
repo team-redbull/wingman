@@ -10,6 +10,7 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { fulfillProblem, go, injectAdminAuth, json, mockDashboardApis, placementAnswer } from "../fixtures/api-handlers";
 import type { ClusterDetail, ClusterDrift, ClusterLiveStatus, DestinationCharts, Mce, SpecEntry, TemplateField } from "../../types";
+import { INFRA_ENVS } from "../fixtures/node-types";
 
 const SITE = "site1";
 const MCE = "ocp4-prod-mce-site1-a";
@@ -225,7 +226,7 @@ async function mockCreateForm(page: Page) {
   await page.route("**/api/day2/addons", (r) => json(r, []));
   await page.route("**/api/day1/sites", (r) => json(r, [SITE]));
   await page.route(/\/api\/day1\/mces(\?.*)?$/, (r) => json(r, MCES));
-  await page.route("**/api/day1/mces/*/infraenvs", (r) =>
+  await page.route(INFRA_ENVS, (r) =>
     fulfillProblem(r, 501, "FEATURE_DISABLED", STATUS_OFF)
   );
 }
@@ -355,7 +356,7 @@ test.describe("Cluster create form", () => {
 
   test("infra envs that could not be listed are a problem, and their names are typed", async ({ page }) => {
     await mockCreateForm(page);
-    await page.route("**/api/day1/mces/*/infraenvs", (r) =>
+    await page.route(INFRA_ENVS, (r) =>
       fulfillProblem(r, 503, "DEPENDENCY_UNAVAILABLE", "The MCE hub did not answer")
     );
     await openForm(page);

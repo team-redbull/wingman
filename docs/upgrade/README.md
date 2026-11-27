@@ -122,6 +122,7 @@ already have.
 | 3.66 | 3.67.0: **the clusters list filters by MCE, and each Customer MCE opens its clusters** (ADR-0018's 2026-11-27 amendment): an admin's clusters list has an **MCE** filter (the Site filter's MCEs, each with its count, searchable, every site's grouped by site), and the site and the MCE are kept in the URL (`/clusters?site=<site>&mce=<name>`), as the Upgrades filter is; each Customer MCEs row's cluster count is a link to that list, and the rest of the row still opens Inventory Management | Generic: web only, no new value, Secret, grant or variable |
 | 3.67 | 3.68.0: **the flavor editor's parts and nodepools collapse**: Basics, Nodepools and Add-ons each shrink to one line (the name and version, the nodepools and their replicas, the add-ons) with their problem count, a nodepool's card to its InfraEnv or hardware, replicas and machine configs; **Collapse all** / **Expand all** in the bar; the bar's parts and a problem open what holds them; on an existing flavor the collapsed parts are remembered in the browser. **The add-ons are a transfer list**: an arrow from Available to Selected, both counted, and an added add-on leaves Available and comes back to its place when it is removed from Selected | Generic |
 | 3.68 | 3.69.0: **node types and zones in the customer's words** (ADR-0072): an InfraEnv is a node type in one zone (`r760-mtl-az1` is `r760-mtl` in `az1`; the zone is the InfraEnv's `topology.kubernetes.io/zone` label, else its name's), shown so on the create form, the cluster page, the scale and uninstall views and the docs; `GET /mces/{mce}/node-types` lists an MCE's node types; in `GET /placement` each candidate's `node_types` is renamed `server_pools` | Generic |
+| 3.69 | 3.70.0: **a logical nodepool is a NodePool per zone** (ADR-0072): the create form picks a node type and sets each zone's replicas (0 allowed), and Wingman writes one NodePool per zone with one configuration, no new key in the file; a flavor presets a node type; drift, sync and import read the NodePools of one node type and suffix as the flavor's nodepool; the Node pools card and Edit cluster group them | [3.69-to-3.70.md](3.69-to-3.70.md): check that the specs template writes `replicas: 0` as 0 |
 
 ### Skipping versions
 
@@ -146,7 +147,9 @@ nodepool (3.47) stays off: it is parked (ADR-0064). Going past 3.52, do
 by default wherever `workflows.url` is set. Going past 3.53, do [3.53-to-3.54.md](3.53-to-3.54.md)'s checks: which
 InfraEnvs lack the labels a pool draw needs. Going past 3.65, do
 [3.65-to-3.66.md](3.65-to-3.66.md)'s template check before the upgrade: a
-template that does not write `nodepool_name` refuses every create.
+template that does not write `nodepool_name` refuses every create. Going past
+3.69, do [3.69-to-3.70.md](3.69-to-3.70.md)'s template check: a template that
+drops a zone's `replicas: 0` refuses that create.
 Rows marked Generic add nothing. A guide's checks still apply: run them
 before its upgrade step.
 

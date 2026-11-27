@@ -18,6 +18,7 @@ import type {
   ClusterDetail, ClusterDrift, ClusterPreview, ClusterSpec, CreateClusterRequest, Mce, SpecDetail, SpecEntry, SyncPreview, TemplateField,
   TuningProfiles, ValueDrift,
 } from "../../types";
+import { INFRA_ENVS } from "../fixtures/node-types";
 
 const RULE = "nodepools[*].tuning_config";
 
@@ -368,7 +369,7 @@ async function openCreate(page: Page, spec: string) {
   await base(page);
   await page.route("**/api/day1/specs", (r) => json(r, [TUNED, RETIRED]));
   await page.route("**/api/day1/sites", (r) => json(r, ["site1"]));
-  await page.route("**/api/day1/mces/*/infraenvs", (r) => fulfillProblem(r, 501, "FEATURE_DISABLED", "Live cluster status is disabled"));
+  await page.route(INFRA_ENVS, (r) => fulfillProblem(r, 501, "FEATURE_DISABLED", "Live cluster status is disabled"));
   await page.route("**/api/day1/clusters/preview", (r) => {
     const body: CreateClusterRequest = r.request().postDataJSON();
     previews.push(body);

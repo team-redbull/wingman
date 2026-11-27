@@ -58,6 +58,14 @@ do. Paths are relative to the day1 service (`/api/day1`, `/api/auth`,
 
 ## Clusters (`/clusters`)
 
+9b. **New (2026-11-27, ADR-0072): a logical nodepool in a create.** In
+    `POST /clusters/preview` and `POST /clusters`, a `variables.nodepools[]`
+    entry may give `node_type` and `zones: [{infra_env, replicas}]` (every
+    zone of that node type; `replicas` whole, 0 allowed, one at least in all)
+    instead of `infra_env`: day1 writes one NodePool per zone with the entry's
+    other inputs. A flavor's `spec.day1.values.nodepools[]` may preset
+    `node_type`, never `zones`.
+
 10. **List items** (`ClusterStatus`): `spec_name`/`spec_version` are `null`
     for clusters not linked to a spec (was the sentinel
     `"(not linked to a cluster spec)"`; `hasSpec()` already treats null as

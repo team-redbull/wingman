@@ -13,7 +13,8 @@ silently, a create checks the rendered file: the values-file contract
 - the deployment's ``excluded_agent_labels`` as every agent nodepool's
   ``excludeAgentLabels`` (ADR-0065), which :func:`with_agent_labels` sets;
 - each agent nodepool's name, ``<InfraEnv>[-<suffix>]``, as its ``name``
-  (ADR-0071), which :func:`render_new_file` composes into ``nodepool_name``.
+  (ADR-0071), which :func:`render_new_file` composes into ``nodepool_name``;
+- each nodepool's ``replicas`` as given, a zone's 0 included (ADR-0072).
 
 A flavor that gives one of the newer inputs is also refused at its save
 while the template does not read it (``specs.rule_problems``). The newer
@@ -31,6 +32,7 @@ from wingman_day1.domain import (
     nodepool_infra_envs,
     nodepool_names,
     scale_down_policy,
+    zone_inputs,
 )
 from wingman_day1.domain.cluster_file import (
     WorkflowKeys,
@@ -66,6 +68,7 @@ def rendered_problems(inputs: Mapping[str, object], rendered: str) -> list[str]:
         *scale_down_policy.rendered_problems(inputs, written),
         *excluded_agent_labels.rendered_problems(inputs, written),
         *nodepool_names.rendered_problems(inputs, written),
+        *zone_inputs.rendered_problems(inputs, written),
     ]
 
 
@@ -75,9 +78,11 @@ def input_problems(inputs: Mapping[str, object], owned: WorkflowKeys) -> list[st
     Other InfraEnvs need ``DAY1_MULTI_INFRAENV_NODEPOOLS`` (ADR-0064); a policy
     needs no setting (ADR-0062); the excluded Agent labels are the
     deployment's, never sent otherwise (ADR-0065); a NodePool's name is its
-    InfraEnv and an optional suffix, unique in the cluster (ADR-0071).
+    InfraEnv and an optional suffix, unique in the cluster (ADR-0071); a
+    logical nodepool's zones are one node type's (ADR-0072).
     """
     return [
+        *zone_inputs.input_problems(inputs),
         *nodepool_infra_envs.input_problems(inputs, enabled=owned.infra_envs),
         *scale_down_policy.input_problems(inputs),
         *excluded_agent_labels.input_problems(inputs, owned.excluded_agent_labels),
@@ -106,8 +111,9 @@ def render_new_file(
     owners, the image mirrors, the machine configs for the chart's
     ``cluster_name``, the tuning profiles and the newer nodepool inputs. The
     network config is expanded, the deployment's excluded Agent labels added
-    (ADR-0065), each nodepool's name composed (ADR-0071), and the rendered
-    text must keep the values-file contract and hold every input as given.
+    (ADR-0065), each logical nodepool spread over its zones (ADR-0072), each
+    nodepool's name composed (ADR-0071), and the rendered text must keep the
+    values-file contract and hold every input as given.
     """
     found = [*problems, *owner_problems(inputs), *mirror_problems(inputs)]
     found += cluster_config_problems(inputs, catalog, cluster_name=cluster_name)
@@ -115,7 +121,8 @@ def render_new_file(
     found += input_problems(inputs, owned)
     if found:
         raise InvalidInputError("the cluster's inputs are not acceptable", found)
-    ready = render_inputs(expand_network_configs(inputs, cluster_name=cluster_name))
+    ready = zone_inputs.spread(inputs)  # one physical nodepool per zone (ADR-0072)
+    ready = render_inputs(expand_network_configs(ready, cluster_name=cluster_name))
     ready = with_agent_labels(ready, owned)  # the deployment's (ADR-0065)
     ready = nodepool_names.with_names(ready)  # <InfraEnv>[-<suffix>] (ADR-0071)
     if not template.strip():

@@ -22,6 +22,12 @@ own form:
   ``imageContentSources`` entries merged by source and sorted (no key is no
   entries), and ``disableIdmsMerge`` by Go's truth (no key keeps the MCE's).
 
+A flavor's position (``nodepools[1]``) is the file's logical nodepool there
+(``logical_pools``, ADR-0072): its lock holds on each of that nodepool's
+NodePools, one per zone, so a cluster spread over zones has no false drift
+and a sync sets every zone alike. A cluster made before logical nodepools
+keeps one entry per position.
+
 Presets are never compared: overriding them is allowed. Each difference is
 a :class:`ValueDrift` with the flavor's value and the file's, and for
 configs the names a sync would add and remove.
@@ -47,6 +53,7 @@ from wingman_day1.domain.locks import (
     lookup,
     same_value,
 )
+from wingman_day1.domain.logical_pools import flavor_positions
 from wingman_day1.domain.machine_configs import MachineConfigCatalog, network_config_name
 from wingman_day1.domain.nodepool_names import rendered_name
 from wingman_day1.domain.tuning_profiles import TUNING_FILE_KEY, file_value, tuning_names
@@ -176,6 +183,8 @@ class _Context:
     cluster_name: str
     catalog: MachineConfigCatalog
     hardware: Mapping[int, str]
+    positions: Mapping[int, tuple[int, ...]]
+    """The file entries each flavor position means (``logical_pools.flavor_positions``)."""
 
 
 def network_configs(names: Sequence[str], catalog: MachineConfigCatalog) -> list[str]:
@@ -265,17 +274,30 @@ def _no_nodepool(lock: Lock, file_key: InputPath, index: int, why: str) -> Value
     )
 
 
-def _nodepool_drift(lock: Lock, file_key: InputPath, context: _Context) -> ValueDrift | None:
-    index = cast("int", lock.path.segments[1])
-    pools = file_nodepools(context.values)
-    if index >= len(pools):
-        return _no_nodepool(
-            lock,
-            file_key,
-            index,
-            "the cluster has no nodepool[{index}]; sync does not add nodepools",
-        )
-    pool = pools[index]
+def _nodepool_drifts(lock: Lock, file_key: InputPath, context: _Context) -> list[ValueDrift]:
+    """A position's lock on every file entry of its logical nodepool (ADR-0072)."""
+    position = cast("int", lock.path.segments[1])
+    indexes = context.positions.get(position, ())
+    if not indexes:
+        return [
+            _no_nodepool(
+                lock,
+                file_key,
+                position,
+                "the cluster has no nodepool[{index}]; sync does not add nodepools",
+            )
+        ]
+    found = (
+        _nodepool_drift(lock, InputPath(("nodepool", i, *file_key.segments[2:])), i, context)
+        for i in indexes
+    )
+    return [drift for drift in found if drift is not None]
+
+
+def _nodepool_drift(
+    lock: Lock, file_key: InputPath, index: int, context: _Context
+) -> ValueDrift | None:
+    pool = file_nodepools(context.values)[index]
     if not isinstance(pool, Mapping):
         return _no_nodepool(lock, file_key, index, "nodepool[{index}] is not a mapping")
     found = cast("Mapping[str, object]", pool)
@@ -344,14 +366,18 @@ def value_drift(
     cluster_name: str,
     catalog: MachineConfigCatalog,
     hardware: Mapping[int, str] | None = None,
+    flavor_nodepools: int | None = None,
 ) -> tuple[ValueDrift, ...]:
     """Every locked value ``values`` (a parsed cluster file) does not hold, in lock order.
 
     ``cluster_name`` is the chart's (an explicit ``clusterName`` key wins);
     ``hardware`` is a person's choice of network hardware per nodepool
-    index, for nodepools whose own cannot be read.
+    index, for nodepools whose own cannot be read. ``flavor_nodepools`` is how
+    many nodepools the flavor has: a position's lock then holds every NodePool
+    of the file's logical nodepool there (ADR-0072); unknown, one entry each.
     """
-    context = _Context(values, cluster_name, catalog, hardware or {})
+    positions = flavor_positions(file_nodepools(values), flavor_nodepools)
+    context = _Context(values, cluster_name, catalog, hardware or {}, positions)
     found: list[ValueDrift] = []
     for lock in locks:
         if lock.path == TUNING_RULE:
@@ -378,9 +404,7 @@ def value_drift(
             continue
         file_key = shape.file_path(lock.path)
         if file_key.segments[0] == "nodepool":
-            drift = _nodepool_drift(lock, file_key, context)
-        else:
-            drift = _top_level_drift(lock, file_key, context)
-        if drift is not None:
+            found += _nodepool_drifts(lock, file_key, context)
+        elif (drift := _top_level_drift(lock, file_key, context)) is not None:
             found.append(drift)
     return tuple(found)

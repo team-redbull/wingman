@@ -9,12 +9,13 @@ import { PoolLiveState, PoolNodesInline, matchPool } from "@/components/clusters
 import { ClusterSegmentsLink } from "@/components/clusters/segments-link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClusterNetwork } from "@/lib/network";
+import { groupLabel, logicalPools, type LogicalPool } from "@/lib/logical-pools";
 import { placedLabel } from "@/lib/node-types";
 import { renderedName } from "@/lib/nodepool-names";
 import { useClusterNodes } from "@/lib/nodes";
 import { useIsAdmin } from "@/stores/auth-store";
 import { showTuning as tuningText, tuningNames } from "@/lib/tuning-profiles";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, plural } from "@/lib/utils";
 import type { ClusterDetail, ClusterNetworkRead, ClusterValues, NodePoolNodes } from "@/types";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -206,6 +207,22 @@ function AlsoDrawsFromLine({ names, testId }: { names: string[] | undefined; tes
   );
 }
 
+/** A logical nodepool's heading (ADR-0072): its node type and suffix, and each zone's replicas. */
+function GroupRow({ group, columns }: { group: LogicalPool<ClusterValues["nodepools"][number]>; columns: number }) {
+  const total = group.members.reduce((sum, m) => sum + (m.entry.replicas ?? 0), 0);
+  return (
+    <tr className="bg-muted/10" data-testid={`nodepool-group-${group.members[0].index}`}>
+      <td colSpan={columns} className="px-3 pt-2.5 pb-1">
+        <span className="font-mono font-medium text-foreground">{groupLabel(group)}</span>
+        <span className="ml-2 text-muted-foreground">
+          {plural(group.members.length, "zone")}, {plural(total, "node")}:{" "}
+          {group.members.map((m) => `${m.zone ?? "?"} ${m.entry.replicas ?? "—"}`).join(" · ")}, one configuration
+        </span>
+      </td>
+    </tr>
+  );
+}
+
 /**
  * The cluster's nodepools: those its file lists, and those the MCE reports
  * that the file does not (they come from the site or MCE values the platform
@@ -241,6 +258,10 @@ export function NodePoolsCard({ values, nodes }: { values: ClusterValues; nodes?
   const showTuning = values.nodepools.some((np) => tuningNames(np.tuning_config).length > 0);
   const columns = 3 + (nodes ? 1 : 0) + (showTuning ? 1 : 0);
   const liveKnown = Boolean(read && !read.off);
+  // A logical nodepool's NodePools, one per zone (ADR-0072): a heading row above its first
+  const groups = logicalPools(values.nodepools, (np) => ({ name: np.name, infraEnv: np.infra_env_name })).filter((g) => g.members.length > 1);
+  const heads = new Map(groups.map((g) => [g.members[0].index, g]));
+  const grouped = new Set(groups.flatMap((g) => g.members.map((m) => m.index)));
 
   return (
     <Card>
@@ -278,6 +299,7 @@ export function NodePoolsCard({ values, nodes }: { values: ClusterValues; nodes?
                   const testId = row.kind === "file" ? `nodepool-row-${row.index}` : `nodepool-row-mce-${row.pool.name}`;
                   return (
                     <Fragment key={row.key}>
+                      {row.kind === "file" && heads.has(row.index) && <GroupRow group={heads.get(row.index)!} columns={columns} />}
                       <tr
                         data-testid={testId}
                         // The whole row opens the nodes; the chevron button is the keyboard and screen-reader path
@@ -288,7 +310,7 @@ export function NodePoolsCard({ values, nodes }: { values: ClusterValues; nodes?
                           isOpen && "bg-muted/20"
                         )}
                       >
-                        <td className="px-3 py-2.5">
+                        <td className={cn("px-3 py-2.5", row.kind === "file" && grouped.has(row.index) && "pl-7")}>
                           <div className="flex items-start gap-1.5">
                             {nodes && (
                               <button

@@ -21,9 +21,8 @@ from collections.abc import Sequence
 from typing import Final
 
 from wingman_day1.domain.cluster_file import NodePoolValues
+from wingman_day1.domain.node_types import ZONE_LABEL  # create-vm reads it on a KV cluster's nodes
 
-ZONE_LABEL: Final = "topology.kubernetes.io/zone"
-"""The node label a KV cluster's NodePools stamp on its hypervisors; create-vm reads it."""
 MAX_KV_WORKERS: Final = 40
 """The capacity policy's ``maxNodes``: the hard size of a KV cluster (AD31)."""
 

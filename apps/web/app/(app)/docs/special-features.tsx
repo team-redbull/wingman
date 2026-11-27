@@ -179,7 +179,10 @@ maxConcurrentControlPlanes: 1`}
             naming convention an InfraEnv is a node type in one zone (<InlineCode>r760-mtl-az1</InlineCode> is{" "}
             <InlineCode>r760-mtl</InlineCode> in <InlineCode>az1</InlineCode>); the zone is the InfraEnv&apos;s{" "}
             <InlineCode>topology.kubernetes.io/zone</InlineCode> label, else its name&apos;s, and a name off the
-            convention is a node type of its own. The pick decides which bare-metal hosts the nodepool gets:
+            convention is a node type of its own. A node type in several zones gives the nodepool one NodePool per
+            zone, every one with the same configuration and its own replicas (0 allowed); in one zone it is one
+            NodePool on that InfraEnv. The pick decides which bare-metal hosts the nodepool gets; the template sees
+            one nodepool per zone, as Wingman spreads them:
           </p>
           <CodeBlock language="cluster-template.j2 snippet">
 {`nodepool:

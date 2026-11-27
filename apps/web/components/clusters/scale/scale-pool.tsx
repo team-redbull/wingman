@@ -1,6 +1,7 @@
 "use client";
 
 import { Lock } from "lucide-react";
+import { placedLabel } from "@/lib/node-types";
 import { needsRestore, nodepoolBlock } from "@/lib/scale-model";
 import { cn } from "@/lib/utils";
 import type { ScaleNodePool } from "@/types";
@@ -143,7 +144,7 @@ export function SizeRow({ tab, pool }: { tab: ScaleTabValue; pool: ScaleNodePool
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-56 space-y-0.5">
           <p className="font-mono text-sm font-medium break-all">{pool.name ?? `nodepool[${pool.index}]`}</p>
-          {pool.infra_env && <p className="font-mono text-xs text-muted-foreground break-all">{pool.infra_env}</p>}
+          {pool.infra_env && <p className="font-mono text-xs text-muted-foreground break-all" title={pool.infra_env}>{placedLabel(pool.infra_env)}</p>}
           <Held tab={tab} pool={pool} />
         </div>
         <PoolSize tab={tab} pool={pool} />

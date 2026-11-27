@@ -30,8 +30,9 @@ from dataclasses import dataclass
 from typing import Final
 
 from wingman_day1.domain.infra_env_pools import InfraEnvObservation
-from wingman_day1.domain.kv_clusters import ZONE_LABEL
 
+ZONE_LABEL: Final = "topology.kubernetes.io/zone"
+"""An InfraEnv's zone among its agentLabels; a KV cluster's NodePools stamp it on their nodes."""
 BARE_METAL: Final = "mtl"
 """The size of a bare-metal InfraEnv; a KubeVirt one's is ``kv<cpu>``."""
 _CONVENTION = re.compile(r"^(?P<flavor>[a-z0-9]+)-(?P<size>mtl|kv[0-9]+)-(?P<zone>[a-z0-9]+)$")

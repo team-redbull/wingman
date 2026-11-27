@@ -85,8 +85,8 @@ async def test_a_flavor_that_locks_by_position_warns_about_imported_files(
     preview = await context.imports.preview("agent-dell", [LARK])
     assert preview.warnings == (
         "nodepools[0].configs locks one nodepool by position: on a cluster the flavor did not "
-        "create it compares the file's nodepool[0], whichever that is; nodepools[*].configs "
-        "compares every nodepool",
+        "create it compares the file's nodepool[0] and the NodePools of its node type and "
+        "suffix (ADR-0072), whichever that is; nodepools[*].configs compares every nodepool",
     )
 
 

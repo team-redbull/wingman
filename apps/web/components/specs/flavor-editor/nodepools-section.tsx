@@ -16,6 +16,7 @@ import { ConfigsModeChoice } from "./configs-mode-choice";
 import { EveryNodepoolPanel } from "./every-nodepool-panel";
 import { NodeLabelsEditor, PresetInput } from "./inputs";
 import { InfraEnvsPreset } from "./infra-envs-preset";
+import { NodeTypeField } from "./node-type-field";
 import { INFRA_ENVS_INPUT } from "@/lib/infra-envs";
 import { NodepoolFrame } from "./nodepool-frame";
 import { PolicyField } from "./policy-field";
@@ -269,6 +270,7 @@ function NodepoolCard({
   return (
     <NodepoolFrame index={index} draft={draft} canRemove={canRemove} onRemove={() => update((d) => removeNodepool(d, index))}>
       <div className="space-y-6 p-4">
+        <NodeTypeField index={index} draft={draft} update={update} problems={problems} />
         <ValueField
           path={replicasPath}
           label="Replicas"

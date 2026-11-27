@@ -9,6 +9,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 import { injectAdminAuth, mockDashboardApis } from "../fixtures/api-handlers";
 import { ClusterNewPage } from "../pages/cluster-new.page";
 import type { ClusterPreview, CreateClusterRequest, Mce, NameSuggestion, SpecEntry, TemplateField } from "../../types";
+import { INFRA_ENVS } from "../fixtures/node-types";
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ async function setup(page: Page): Promise<Calls> {
   await page.route("**/api/day1/specs/template/schema", (r) => json(r, SCHEMA));
   await page.route("**/api/day1/sites", (r) => json(r, ["site1"]));
   await page.route(/\/api\/day1\/mces(\?.*)?$/, (r) => json(r, MCES));
-  await page.route("**/api/day1/mces/*/infraenvs", (r) =>
+  await page.route(INFRA_ENVS, (r) =>
     json(
       r,
       {

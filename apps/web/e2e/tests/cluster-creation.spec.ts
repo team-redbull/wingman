@@ -13,6 +13,7 @@ import { ClusterNewPage } from "../pages/cluster-new.page";
 import type {
   ClusterPreview, CreateClusterRequest, Mce, Problem, ProvisionRun, SpecEntry, TemplateField,
 } from "../../types";
+import { INFRA_ENVS, infraEnvsBody } from "../fixtures/node-types";
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
@@ -168,7 +169,7 @@ async function setup(
     calls.mceSites.push(site);
     return json(r, site ? (MCES[site] ?? []) : Object.values(MCES).flat());
   });
-  await page.route("**/api/day1/mces/*/infraenvs", (r) =>
+  await page.route(INFRA_ENVS, (r) =>
     json(r, problem(501, "FEATURE_DISABLED", "Live cluster status is disabled in this deployment."), 501)
   );
   await page.route("**/api/day1/clusters", (r) => {
@@ -593,7 +594,7 @@ test.describe("Searchable pickers", () => {
 
   test("infra envs the MCE hub lists are picked from a searchable list, and sent", async ({ page }) => {
     const calls = await setup(page);
-    await page.route("**/api/day1/mces/*/infraenvs", (r) => json(r, ["dell-r660-site1", "dell-r750-site1", "hpe-dl380-site1"]));
+    await page.route(INFRA_ENVS, (r) => json(r, infraEnvsBody(r, ["dell-r660-site1", "dell-r750-site1", "hpe-dl380-site1"])));
     const form = new ClusterNewPage(page);
     await form.goto();
     await form.chooseSpec("agent-standard");

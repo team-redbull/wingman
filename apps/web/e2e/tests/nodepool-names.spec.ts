@@ -14,6 +14,7 @@ import { test, expect, type Page, type Route, type Request } from "@playwright/t
 import { go, injectAdminAuth, mockDashboardApis, mockMachineConfigs, mockMR, placementAnswer } from "../fixtures/api-handlers";
 import { ClusterNewPage } from "../pages/cluster-new.page";
 import type { ClusterDetail, ClusterPreview, CreateClusterRequest, Mce, SpecEntry, TemplateField } from "../../types";
+import { INFRA_ENVS, infraEnvsBody } from "../fixtures/node-types";
 
 const DELL = "dell-r660-site1-128c-1024gb-5tb";
 const SITE = "site1";
@@ -72,7 +73,7 @@ async function base(page: Page) {
   await injectAdminAuth(page);
   await mockDashboardApis(page);
   await page.route("**/api/day1/specs/template/schema**", (r) => json(r, SCHEMA));
-  await page.route("**/api/day1/mces/*/infraenvs", (r) => json(r, [DELL]));
+  await page.route(INFRA_ENVS, (r) => json(r, infraEnvsBody(r, [DELL])));
   await page.route("**/api/day1/machine-configs", (r) => json(r, mockMachineConfigs));
   await page.route(/\/api\/day1\/mces(\?.*)?$/, (r) => json(r, MCES));
   await page.route("**/api/day2/addons", (r) => json(r, []));

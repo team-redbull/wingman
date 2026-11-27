@@ -51,8 +51,12 @@ export function followsRule(name: string, infraEnv: string): boolean {
 
 // ── The create form ──────────────────────────────────────────────────────────
 
-/** Each form nodepool's name problem, by index: its suffix, its length, a name another one has. */
-export function formNameProblems(pools: unknown): Record<number, string> {
+/**
+ * Each form nodepool's name problem, by index: its suffix, its length, a name
+ * another one has. `zonesOf` gives a logical nodepool's zones' InfraEnvs
+ * (ADR-0072): it has a NodePool in each, named with its one suffix.
+ */
+export function formNameProblems(pools: unknown, zonesOf?: (pool: Record<string, unknown>) => string[] | null): Record<number, string> {
   const found: Record<number, string> = {};
   if (!Array.isArray(pools)) return found;
   const seen = new Map<string, number>();
@@ -63,13 +67,14 @@ export function formNameProblems(pools: unknown): Record<number, string> {
     const suffix = text(entry[SUFFIX_INPUT]);
     const own = suffixProblem(suffix);
     if (own) found[index] = own;
-    if (!infraEnv) return;
-    const name = composeName(infraEnv, suffix);
-    const problem = own ?? nameProblem(name);
-    if (problem) found[index] = problem;
-    const first = seen.get(name);
-    if (first === undefined) seen.set(name, index);
-    else if (!problem) found[index] = `Nodepool ${first + 1} is named ${name} already: give one of them another suffix`;
+    const infraEnvs = zonesOf?.(entry) ?? (infraEnv ? [infraEnv] : []);
+    for (const name of infraEnvs.map((env) => composeName(env, suffix))) {
+      const problem = own ?? nameProblem(name);
+      const first = seen.get(name);
+      if (problem) found[index] ??= problem;
+      else if (first !== undefined && first !== index) found[index] ??= `Nodepool ${first + 1} is named ${name} already: give one of them another suffix`;
+      if (first === undefined) seen.set(name, index);
+    }
   });
   return found;
 }
